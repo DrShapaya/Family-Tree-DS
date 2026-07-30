@@ -1,0 +1,5 @@
+# Copy this file to github.properties for a custom OAuth App build.
+# Client ID is public. A native Android APK cannot keep Client Secret truly
+# secret; keep this local file out of Git and always combine web login with PKCE.
+clientId=Ov23liExampleOnly
+clientSecret=exampleOnlyDoNotCommit

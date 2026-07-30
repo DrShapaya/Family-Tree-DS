@@ -215,7 +215,7 @@ final class MainActivityEditor {
         tintDrawables(loadPhoto, Color.rgb(8, 122, 115));
         photoButtons.addView(loadPhoto, new LinearLayout.LayoutParams(0, dp(46), 1));
         Button removePhoto = actionButton("Убрать", v -> {
-            if (activity.editLocked
+            if (activity.editingBlocked()
                 || (person.photoMediaId == null || person.photoMediaId.isEmpty())
                 && (person.photo == null || person.photo.isEmpty())) return;
             recordUndo("Удалено фото", person.name);
@@ -336,7 +336,7 @@ final class MainActivityEditor {
         LinearLayout memoryActions = new LinearLayout(activity);
         memoryActions.setOrientation(LinearLayout.HORIZONTAL);
         Button memoryFile = actionButton("Файл", v -> {
-            if (activity.editLocked) return;
+            if (activity.editingBlocked()) return;
             activity.pendingMemoryPersonId = person.id;
             openMemoryFilePicker();
         });
@@ -345,7 +345,7 @@ final class MainActivityEditor {
         tintDrawables(memoryFile, Color.rgb(8, 122, 115));
         memoryActions.addView(memoryFile, new LinearLayout.LayoutParams(0, dp(48), 0.72f));
         Button addMemory = actionButton("Сохранить запись", v -> {
-            if (activity.editLocked
+            if (activity.editingBlocked()
                 || (text(memoryTitle).isEmpty()
                     && text(memoryText).isEmpty()
                     && currentMemoryDraftAttachments.isEmpty())) return;
@@ -398,7 +398,7 @@ final class MainActivityEditor {
 
         final boolean[] colorUndoRecorded = {false};
         cardColorSlider.setListener((color, fromUser) -> {
-            if (activity.editLocked || !fromUser) return;
+            if (activity.editingBlocked() || !fromUser) return;
             if (!colorUndoRecorded[0]) {
                 recordUndo("Изменён цвет карточки", person.name);
                 colorUndoRecorded[0] = true;
@@ -413,7 +413,7 @@ final class MainActivityEditor {
         });
 
         Button automaticColor = actionButton("Вернуть цвет по ФИО", v -> {
-            if (activity.editLocked) return;
+            if (activity.editingBlocked()) return;
             recordUndo("Восстановлен цвет по ФИО", person.name);
             person.colorMode = "auto-name";
             person.color = TreeState.displayColor(person, activity.state.people.size());
@@ -496,7 +496,7 @@ final class MainActivityEditor {
         TextWatcher watcher = new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if (activity.editLocked) return;
+                if (activity.editingBlocked()) return;
                 if (!undoRecorded[0]) {
                     recordUndo("Изменена карточка", person.name.isEmpty() ? "Без имени" : person.name);
                     undoRecorded[0] = true;
@@ -542,7 +542,7 @@ final class MainActivityEditor {
         place.addTextChangedListener(watcher);
         notes.addTextChangedListener(watcher);
         pinned.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (activity.editLocked || person.pinned == isChecked) return;
+            if (activity.editingBlocked() || person.pinned == isChecked) return;
             recordUndo(isChecked ? "Закреплена карточка: " + person.name : "Откреплена карточка: " + person.name);
             person.pinned = isChecked;
             saveOnly();
@@ -779,7 +779,7 @@ final class MainActivityEditor {
     }
 
     private void chooseGender(Person person, TextView chip) {
-        if (person == null || activity.editLocked) return;
+        if (person == null || activity.editingBlocked()) return;
         Dialog picker = new Dialog(activity);
         picker.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -1249,7 +1249,7 @@ final class MainActivityEditor {
     }
 
     private void savePersonEditor(Person person, String name, String bornDay, String bornMonth, String bornYear, String diedDay, String diedMonth, String diedYear, String place, String notes, String manualColor, boolean pinned, String memoryTitle, String memoryText) {
-        if (person == null || activity.editLocked) return;
+        if (person == null || activity.editingBlocked()) return;
         recordUndo("Изменена карточка", person.name.isEmpty() ? "Без имени" : person.name);
         person.name = name.trim().isEmpty() ? "Без имени" : name.trim();
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
@@ -1639,7 +1639,7 @@ final class MainActivityEditor {
     }
 
     private void confirmRemoveMemory(String personId, String memoryId) {
-        if (activity.editLocked) return;
+        if (activity.editingBlocked()) return;
         Person person = activity.state.people.get(personId);
         Memory memory = null;
         if (person != null) {
@@ -1679,7 +1679,7 @@ final class MainActivityEditor {
         String attachmentId,
         Runnable afterRemoval
     ) {
-        if (activity.editLocked) return;
+        if (activity.editingBlocked()) return;
         Person person = activity.state.people.get(personId);
         MemoryAttachment target = null;
         if (person != null) {

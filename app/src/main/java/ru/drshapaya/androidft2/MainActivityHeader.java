@@ -71,6 +71,18 @@ final class MainActivityHeader {
         activity.badge.setIncludeFontPadding(false);
         activity.badge.setPadding(activity.dp(8), activity.dp(3), activity.dp(8), activity.dp(3));
         activity.badge.setBackground(activity.panelBg(Color.argb(120, 255, 255, 255), activity.dp(999), Color.argb(60, 24, 169, 153)));
+        final int[] versionTaps = {0};
+        final long[] lastVersionTap = {0L};
+        activity.badge.setOnClickListener(view -> {
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastVersionTap[0] > 1800L) versionTaps[0] = 0;
+            lastVersionTap[0] = now;
+            versionTaps[0]++;
+            if (versionTaps[0] >= 5) {
+                versionTaps[0] = 0;
+                activity.openOnlineMenu();
+            }
+        });
         texts.addView(activity.badge, new LinearLayout.LayoutParams(-2, -2));
 
         LinearLayout row = new LinearLayout(activity);

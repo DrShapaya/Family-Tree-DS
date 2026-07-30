@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="androidft-online-secret-values.xml" />
+    <exclude domain="sharedpref" path="androidft-online-v1.xml" />
+    <exclude domain="file" path="androidft-online-base.json" />
+    <exclude domain="file" path="androidft-online-base.json.bak" />
+    <exclude domain="file" path="androidft-online-pending.json" />
+    <exclude domain="file" path="androidft-online-pending.json.bak" />
+</full-backup-content>

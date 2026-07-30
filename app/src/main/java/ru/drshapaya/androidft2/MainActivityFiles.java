@@ -729,7 +729,7 @@ final class MainActivityFiles {
     void importPhotoFromUri(Uri uri) {
         Person person = activity.state.people.get(activity.pendingPhotoPersonId);
         activity.pendingPhotoPersonId = "";
-        if (person == null || activity.editLocked) return;
+        if (person == null || activity.editingBlocked()) return;
         try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
             if (input == null) throw new IllegalStateException("Фото не открыто");
             String mime = activity.getContentResolver().getType(uri);
@@ -760,7 +760,10 @@ final class MainActivityFiles {
         activity.pendingMemoryPersonId = "";
         activity.pendingMemoryTitle = "";
         activity.pendingMemoryText = "";
-        if (person == null || activity.editLocked || uris == null || uris.isEmpty()) return;
+        if (person == null
+            || activity.editingBlocked()
+            || uris == null
+            || uris.isEmpty()) return;
         List<MemoryAttachment> attachments = new ArrayList<>();
         int failed = 0;
         for (Uri uri : uris) {

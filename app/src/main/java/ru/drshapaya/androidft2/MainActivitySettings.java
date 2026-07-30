@@ -24,6 +24,10 @@ final class MainActivitySettings {
     }
 
     void toggleLock() {
+        if (activity.onlineReadOnly) {
+            activity.toast("Глава дерева включил режим просмотра");
+            return;
+        }
         if (!activity.editLocked) activity.resetTransientCanvasModes(false);
         activity.editLocked = !activity.editLocked;
         activity.viewMode = false;
@@ -35,10 +39,14 @@ final class MainActivitySettings {
     }
 
     void toggleViewMode() {
+        if (activity.onlineReadOnly) {
+            activity.toast("Режим просмотра управляется главой дерева");
+            return;
+        }
         if (!activity.viewMode) activity.resetTransientCanvasModes(false);
         activity.viewMode = !activity.viewMode;
         activity.editLocked = activity.viewMode;
-        activity.treeView.setEditLocked(activity.editLocked);
+        activity.treeView.setEditLocked(activity.editingBlocked());
         refreshSettingsIfVisible();
         activity.saveOnly();
         activity.toast(activity.viewMode ? "Режим просмотра включён" : "Режим просмотра выключен");
@@ -102,7 +110,7 @@ final class MainActivitySettings {
     }
 
     void startTraining() {
-        if (activity.editLocked) {
+        if (activity.editingBlocked()) {
             activity.toast("Сначала отключите защиту правок");
             return;
         }

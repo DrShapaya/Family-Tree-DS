@@ -1,10 +1,44 @@
 apply plugin: 'com.android.application'
 
-def keystorePropertiesFile = rootProject.file("keystore.properties")
+def localKeystorePropertiesFile = rootProject.file("keystore.properties")
+def legacyKeystorePropertiesFile =
+    rootProject.file("../legacy/capacitor-app/android/keystore.properties")
+def keystorePropertiesFile = localKeystorePropertiesFile.exists()
+    ? localKeystorePropertiesFile
+    : legacyKeystorePropertiesFile
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+def releaseStoreValue = keystoreProperties.getProperty("storeFile", "")
+def releaseStoreFile = releaseStoreValue.isEmpty()
+    ? null
+    : new File(releaseStoreValue)
+if (releaseStoreFile != null && !releaseStoreFile.isAbsolute()) {
+    releaseStoreFile = new File(keystorePropertiesFile.parentFile, releaseStoreValue)
+}
+def releaseSigningAvailable = keystorePropertiesFile.exists()
+    && releaseStoreFile != null
+    && releaseStoreFile.isFile()
+
+def githubPropertiesFile = rootProject.file("github.properties")
+def githubProperties = new Properties()
+if (githubPropertiesFile.exists()) {
+    githubProperties.load(new FileInputStream(githubPropertiesFile))
+}
+// OAuth Client IDs identify an application and are intentionally public.
+// Forks can override this value without changing source-controlled files.
+def bundledGithubClientId = "Ov23lim5kJlPF7yEFTGm"
+def githubClientId = githubProperties.getProperty(
+    "clientId",
+    providers.gradleProperty("ANDROIDFT_GITHUB_CLIENT_ID")
+        .orElse(bundledGithubClientId)
+        .get())
+def githubClientSecret = githubProperties.getProperty(
+    "clientSecret",
+    providers.gradleProperty("ANDROIDFT_GITHUB_CLIENT_SECRET")
+        .orElse("")
+        .get())
 
 android {
     namespace 'ru.drshapaya.androidft2'
@@ -14,8 +48,14 @@ android {
         applicationId 'ru.drshapaya.familytree'
         minSdk 24
         targetSdk 36
-        versionCode 268
-        versionName '2.5.1'
+        versionCode 278
+        versionName '2.6.0'
+        buildConfigField "String", "GITHUB_CLIENT_ID", "\"${githubClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "GITHUB_CLIENT_SECRET", "\"${githubClientSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {
@@ -23,10 +63,10 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    if (keystorePropertiesFile.exists()) {
+    if (releaseSigningAvailable) {
         signingConfigs {
             release {
-                storeFile file(keystoreProperties["storeFile"])
+                storeFile releaseStoreFile
                 storePassword keystoreProperties["storePassword"]
                 keyAlias keystoreProperties["keyAlias"]
                 keyPassword keystoreProperties["keyPassword"]
@@ -36,7 +76,7 @@ android {
 
     buildTypes {
         release {
-            if (keystorePropertiesFile.exists()) {
+            if (releaseSigningAvailable) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled false
@@ -51,4 +91,5 @@ android {
 
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20260719'
 }

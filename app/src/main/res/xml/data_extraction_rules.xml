@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="androidft-online-secret-values.xml" />
+        <exclude domain="sharedpref" path="androidft-online-v1.xml" />
+        <exclude domain="file" path="androidft-online-base.json" />
+        <exclude domain="file" path="androidft-online-base.json.bak" />
+        <exclude domain="file" path="androidft-online-pending.json" />
+        <exclude domain="file" path="androidft-online-pending.json.bak" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="androidft-online-secret-values.xml" />
+        <exclude domain="sharedpref" path="androidft-online-v1.xml" />
+        <exclude domain="file" path="androidft-online-base.json" />
+        <exclude domain="file" path="androidft-online-base.json.bak" />
+        <exclude domain="file" path="androidft-online-pending.json" />
+        <exclude domain="file" path="androidft-online-pending.json.bak" />
+    </device-transfer>
+</data-extraction-rules>

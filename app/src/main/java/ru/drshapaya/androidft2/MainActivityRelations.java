@@ -22,7 +22,7 @@ final class MainActivityRelations {
         if (activity.pendingLinkType.isEmpty() || person == null) return false;
         boolean kinshipMode = "kinship".equals(activity.pendingLinkType);
         if (activity.pendingLinkFrom.isEmpty()) {
-            if (activity.editLocked && !kinshipMode) {
+            if (activity.editingBlocked() && !kinshipMode) {
                 cancelLinkMode();
                 return true;
             }
@@ -55,7 +55,7 @@ final class MainActivityRelations {
             activity.showKinshipResult(first, person, result);
             return true;
         }
-        if (activity.editLocked) {
+        if (activity.editingBlocked()) {
             cancelLinkMode();
             return true;
         }

@@ -18,7 +18,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
-import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Base64;
 import android.view.Gravity;
@@ -60,7 +59,7 @@ public final class MainActivity extends Activity {
     static final int REQ_EXPORT_FTREE = 27;
     static final int REQ_EXPORT_PDF = 28;
     static final int REQ_EXPORT_TILES = 29;
-    static final String VERSION_NAME = "2.5.1";
+    static final String VERSION_NAME = "2.6.0";
     static final String VERSION_BADGE = "AndroidFT " + VERSION_NAME;
     static final String[][] TRAINING_STEPS = new String[][]{
         {"add-person", "Создайте карточку", "Нажмите подсвеченную кнопку +. На дереве появится новый человек, которого можно сразу заполнить."},
@@ -134,6 +133,7 @@ public final class MainActivity extends Activity {
     String branchMode = "all";
     String branchAnchorId = "";
     boolean editLocked = false;
+    boolean onlineReadOnly = false;
     boolean viewMode = false;
     boolean generationLines = true;
     boolean hideCardDetails = false;
@@ -160,6 +160,9 @@ public final class MainActivity extends Activity {
     private MainActivityPanels panelsModule;
     private MainActivityRelations relationsModule;
     private MainActivityEditor editorModule;
+    private MainActivityQuickStart quickStartModule;
+    private MainActivityOnline onlineModule;
+    private OnlineTreeManager onlineManager;
     private TreeSaveCoordinator saveCoordinator;
     private final Handler toastHandler = new Handler(Looper.getMainLooper());
     private Toast currentToast;
@@ -181,15 +184,53 @@ public final class MainActivity extends Activity {
         panelsModule = new MainActivityPanels(this);
         relationsModule = new MainActivityRelations(this);
         editorModule = new MainActivityEditor(this);
+        quickStartModule = new MainActivityQuickStart(this);
+        onlineManager = new OnlineTreeManager(this, store, new OnlineTreeManager.Listener() {
+            @Override public void onRemoteTree(TreeState remote, String message) {
+                applyOnlineTree(remote, message);
+            }
+
+            @Override public void onMediaChanged() {
+                if (treeView != null) treeView.invalidate();
+                if (onlineModule != null) onlineModule.refreshOpenDashboard();
+            }
+
+            @Override public void onEditingPermissionChanged(boolean canEdit) {
+                onlineReadOnly = !canEdit;
+                resetTransientCanvasModes(false);
+                if (treeView != null) treeView.setEditLocked(editingBlocked());
+                if (settingsModule != null) settingsModule.refreshSettingsIfVisible();
+                updateCanvasModePanel();
+            }
+
+            @Override public void onStatusChanged() {
+                if (onlineModule != null) onlineModule.refreshOpenDashboard();
+            }
+
+            @Override public void onMessage(String message) {
+                toast(message);
+            }
+        });
+        onlineReadOnly = !onlineManager.canEdit();
+        onlineModule = new MainActivityOnline(this, onlineManager);
         saveCoordinator = new TreeSaveCoordinator(
             store,
             () -> state,
             () -> historyModule.commitPendingUndo(),
-            () -> toast("Не удалось сохранить дерево"));
+            new TreeSaveCoordinator.Listener() {
+                @Override public void onSaveError() {
+                    toast("Не удалось сохранить дерево");
+                }
+
+                @Override public void onSaved(TreeState snapshot) {
+                    if (onlineManager != null) onlineManager.onLocalTreeSaved(snapshot);
+                }
+            });
         applyStateSettings();
         TreeLayoutEngine.ensurePositions(state);
         buildUi();
         bindState();
+        onlineManager.reconcileLocalTree(state);
         String recoveryNotice = store.consumeRecoveryNotice();
         if (!recoveryNotice.isEmpty()) toast(recoveryNotice);
         handleIncomingIntent(getIntent());
@@ -202,6 +243,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setIntent(intent);
         handleIncomingIntent(intent);
     }
 
@@ -209,12 +251,20 @@ public final class MainActivity extends Activity {
     protected void onStop() {
         DiagnosticsLogger.breadcrumb(this, "activity.stop");
         if (saveCoordinator != null) saveCoordinator.flush();
+        if (onlineManager != null) onlineManager.stopForegroundChecks();
         super.onStop();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if (onlineManager != null) onlineManager.startForegroundChecks();
     }
 
     @Override
     protected void onDestroy() {
         if (saveCoordinator != null) saveCoordinator.close();
+        if (onlineManager != null) onlineManager.close();
         super.onDestroy();
     }
 
@@ -970,7 +1020,15 @@ public final class MainActivity extends Activity {
             v -> startTraining()));
         panel.addView(settingSwitchRow(R.drawable.ic_editor_archive, "История действий", state == null || !state.historyHidden, "Показывает или скрывает панель последних действий на поле дерева.", v -> toggleHistoryPanel()));
         panel.addView(themeRow());
-        panel.addView(settingSwitchRow(editLocked ? R.drawable.ic_menu_lock : R.drawable.ic_menu_unlock, "Защита правок", editLocked, "Блокирует или разрешает редактирование, чтобы не изменить дерево случайно.", v -> toggleLock()));
+        boolean editingBlocked = editingBlocked();
+        panel.addView(settingSwitchRow(
+            editingBlocked ? R.drawable.ic_menu_lock : R.drawable.ic_menu_unlock,
+            onlineReadOnly ? "Только просмотр" : "Защита правок",
+            editingBlocked,
+            onlineReadOnly
+                ? "Глава дерева временно отключил редактирование для вашего аккаунта."
+                : "Блокирует или разрешает редактирование, чтобы не изменить дерево случайно.",
+            v -> toggleLock()));
         panel.addView(settingSwitchRow(generationLines ? R.drawable.ic_menu_grid_lines : R.drawable.ic_menu_grid_off, "Линии поколений", generationLines, "Показывает или скрывает горизонтальные линии поколений.", v -> toggleGenerationLines()));
         panel.addView(settingSwitchRow(
             R.drawable.ic_menu_straight_links,
@@ -992,7 +1050,7 @@ public final class MainActivity extends Activity {
     void bindState() {
         syncSettingsToState();
         treeView.setState(state);
-        treeView.setEditLocked(editLocked);
+        treeView.setEditLocked(editingBlocked());
         treeView.setGenerationLines(generationLines);
         treeView.setHideDetails(hideCardDetails);
         treeView.setCompactCards(compactCards);
@@ -1007,6 +1065,38 @@ public final class MainActivity extends Activity {
         updateHistoryPanel();
         updateBranchStatusPanel();
         updateSelectionToolbar();
+    }
+
+    private void applyOnlineTree(TreeState remote, String message) {
+        if (remote == null || isFinishing() || isDestroyed()) return;
+        TreeState local = state;
+        if (local != null) {
+            remote.theme = local.theme;
+            remote.printScale = local.printScale;
+            remote.editLocked = local.editLocked;
+            remote.historyHidden = local.historyHidden;
+            remote.inspectorHidden = local.inspectorHidden;
+            remote.adminCollapsed = local.adminCollapsed;
+            remote.guidesVisible = local.guidesVisible;
+            remote.hideCardDetails = local.hideCardDetails;
+            remote.compactCards = local.compactCards;
+            remote.focusTree = local.focusTree;
+            remote.parentLineMode = local.parentLineMode;
+            if (remote.people.containsKey(local.selectedId)) remote.selectedId = local.selectedId;
+        }
+        state = remote;
+        undoStack.clear();
+        redoStack.clear();
+        resetTransientCanvasModes(false);
+        applyStateSettings();
+        TreeLayoutEngine.ensurePositions(state);
+        bindState();
+        if (saveCoordinator != null) saveCoordinator.requestImmediate();
+        if (message != null && !message.isEmpty()) toast(message);
+    }
+
+    void openOnlineMenu() {
+        if (onlineModule != null) onlineModule.openDashboard();
     }
 
     private String personInitials(String name) {
@@ -1048,6 +1138,10 @@ public final class MainActivity extends Activity {
         editorModule.bindEditor(person);
     }
 
+    boolean editingBlocked() {
+        return editLocked || onlineReadOnly;
+    }
+
     void openPersonEditor() {
         editorModule.openPersonEditor();
     }
@@ -1069,7 +1163,7 @@ public final class MainActivity extends Activity {
     }
 
     private void addLoosePerson() {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         recordUndo("Добавлена пустая карточка");
         hideKeyboard();
         PointF center = treeView.viewportCenterWorld();
@@ -1242,7 +1336,7 @@ public final class MainActivity extends Activity {
     }
 
     private void togglePersonPin(Person person) {
-        if (person == null || editLocked) return;
+        if (person == null || editingBlocked()) return;
         recordUndo(person.pinned ? "Откреплена карточка: " + person.name : "Закреплена карточка: " + person.name);
         person.pinned = !person.pinned;
         saveToast(person.pinned ? "Карточка закреплена" : "Карточка откреплена");
@@ -1250,7 +1344,7 @@ public final class MainActivity extends Activity {
     }
 
     void addRelationAction(String action) {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
         recordUndo();
@@ -1331,7 +1425,7 @@ public final class MainActivity extends Activity {
     }
 
     private void addRelative(String kind) {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
         recordUndo();
@@ -1374,7 +1468,7 @@ public final class MainActivity extends Activity {
     }
 
     private void duplicateSelected() {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
         recordUndo("Дублирована карточка: " + (current.name.isEmpty() ? "Без имени" : current.name));
@@ -1426,7 +1520,7 @@ public final class MainActivity extends Activity {
     }
 
     void confirmDelete() {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         Person person = state.selectedPerson();
         if (person == null) return;
         showStyledConfirmation(
@@ -1448,7 +1542,7 @@ public final class MainActivity extends Activity {
     }
 
     private void confirmDeleteWholeTree() {
-        if (editLocked) {
+        if (editingBlocked()) {
             toast("Сначала выключите защиту правок");
             return;
         }
@@ -1621,7 +1715,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startSelectionMode(String mode) {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         resetTransientCanvasModes(false);
         lastSelectionMode = "lasso".equals(mode) ? "lasso" : "rect";
         treeView.setSelectionMode(mode);
@@ -1631,7 +1725,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startGuideMode(String mode) {
-        if (editLocked) return;
+        if (editingBlocked()) return;
         String nextMode = "h".equals(mode) || "v".equals(mode) || "erase".equals(mode) ? mode : "";
         if (!nextMode.isEmpty() && nextMode.equals(activeGuideMode)) {
             cancelGuideMode();
@@ -1670,7 +1764,7 @@ public final class MainActivity extends Activity {
     }
 
     private void clearGuides() {
-        if (state == null || state.guides.isEmpty() || editLocked) {
+        if (state == null || state.guides.isEmpty() || editingBlocked()) {
             toast("Направляющих нет");
             return;
         }
@@ -2007,14 +2101,18 @@ public final class MainActivity extends Activity {
             cancelLinkMode();
             return;
         }
-        if (editLocked) toggleLock();
+        if (onlineReadOnly) {
+            toast("Глава дерева включил режим просмотра");
+        } else if (editLocked) {
+            toggleLock();
+        }
     }
 
     void updateCanvasModePanel() {
         if (canvasModePanel == null || canvasModeTitle == null || canvasModeDetail == null || canvasModeAction == null) return;
         boolean guideActive = !activeGuideMode.isEmpty();
         boolean linkActive = !pendingLinkType.isEmpty();
-        boolean lockActive = editLocked;
+        boolean lockActive = editingBlocked();
         boolean visible = (guideActive || linkActive || lockActive) && activePanel.isEmpty();
         canvasModePanel.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) return;
@@ -2255,6 +2353,7 @@ public final class MainActivity extends Activity {
 
     boolean saveOnly() {
         syncSettingsToState();
+        if (onlineManager != null) onlineManager.markLocalTreeChanged();
         if (saveCoordinator != null) saveCoordinator.requestDebounced();
         updateStats();
         return true;
@@ -2266,6 +2365,7 @@ public final class MainActivity extends Activity {
 
     void saveToast(String message) {
         syncSettingsToState();
+        if (onlineManager != null) onlineManager.markLocalTreeChanged();
         if (saveCoordinator != null) saveCoordinator.requestImmediate();
         updateStats();
         toast(message);
@@ -2292,6 +2392,28 @@ public final class MainActivity extends Activity {
     }
 
     void handleIncomingIntent(Intent intent) {
+        Uri uri = intent == null ? null : intent.getData();
+        if (uri != null
+            && "androidft".equalsIgnoreCase(uri.getScheme())
+            && "oauth".equalsIgnoreCase(uri.getHost())
+            && "/github".equals(uri.getPath())) {
+            intent.setData(null);
+            if (onlineModule != null) onlineModule.handleOAuthCallback(uri);
+            return;
+        }
+        boolean customJoin = uri != null
+            && "androidft".equalsIgnoreCase(uri.getScheme())
+            && "join".equalsIgnoreCase(uri.getHost());
+        boolean webJoin = uri != null
+            && "https".equalsIgnoreCase(uri.getScheme())
+            && "drshapaya.ru".equalsIgnoreCase(uri.getHost())
+            && "/androidft/join".equals(uri.getPath());
+        if (customJoin || webJoin) {
+            String key = uri.getQueryParameter("key");
+            intent.setData(null);
+            if (onlineModule != null) onlineModule.handleInvitationLink(key);
+            return;
+        }
         filesModule.handleIncomingIntent(intent);
     }
 
@@ -2649,414 +2771,8 @@ public final class MainActivity extends Activity {
     }
 
     private void quickStart() {
-        if (editLocked) return;
-        if (state != null && !state.people.isEmpty()) {
-            showStyledConfirmation(
-                R.drawable.ic_menu_sparkles,
-                "Создать новое дерево?",
-                "Текущее дерево будет удалено. Продолжить?",
-                "Продолжить",
-                false,
-                this::openQuickStart);
-            return;
-        }
-        openQuickStart();
+        quickStartModule.open();
     }
-
-    private void openQuickStart() {
-        if (editLocked) return;
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(dp(18), dp(12), dp(18), dp(18));
-        shell.setBackground(panelBg(Color.rgb(250, 252, 253), dp(20), Color.argb(44, 63, 82, 94)));
-
-        View handle = new View(this);
-        handle.setBackground(panelBg(Color.rgb(194, 207, 214), dp(999), Color.TRANSPARENT));
-        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(44), dp(4));
-        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
-        handleParams.setMargins(0, 0, 0, dp(10));
-        shell.addView(handle, handleParams);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.VERTICAL);
-        TextView eyebrow = quickCaption("НОВОЕ СЕМЕЙНОЕ ДЕРЕВО");
-        TextView title = new TextView(this);
-        title.setText("Быстрый старт");
-        title.setTextColor(Color.rgb(28, 34, 38));
-        title.setTextSize(24);
-        title.setTypeface(uiBold());
-        title.setIncludeFontPadding(false);
-        heading.addView(eyebrow, new LinearLayout.LayoutParams(-1, dp(18)));
-        heading.addView(title, new LinearLayout.LayoutParams(-1, dp(34)));
-        header.addView(heading, new LinearLayout.LayoutParams(0, dp(54), 1));
-        header.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(42), dp(42)));
-        shell.addView(header);
-
-        LinearLayout progress = new LinearLayout(this);
-        progress.setOrientation(LinearLayout.HORIZONTAL);
-        progress.setGravity(Gravity.CENTER_VERTICAL);
-        TextView personStep = quickStep("1", "Вы");
-        TextView familyStep = quickStep("2", "Семья");
-        View progressLine = new View(this);
-        progress.addView(personStep, new LinearLayout.LayoutParams(0, dp(44), 1));
-        LinearLayout.LayoutParams lineParams = new LinearLayout.LayoutParams(dp(34), dp(2));
-        lineParams.setMargins(dp(8), 0, dp(8), 0);
-        progress.addView(progressLine, lineParams);
-        progress.addView(familyStep, new LinearLayout.LayoutParams(0, dp(44), 1));
-        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(-1, dp(54));
-        progressParams.setMargins(0, dp(8), 0, dp(10));
-        shell.addView(progress, progressParams);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        LinearLayout formHost = new LinearLayout(this);
-        formHost.setOrientation(LinearLayout.VERTICAL);
-        formHost.setPadding(0, dp(2), 0, dp(6));
-        scroll.addView(formHost);
-        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-
-        EditText selfName = field("Например, Иван Иванов");
-        selfName.setSingleLine(true);
-        EditText selfYear = field("Например, 1987");
-        selfYear.setSingleLine(true);
-        selfYear.setInputType(InputType.TYPE_CLASS_NUMBER);
-        EditText selfPlace = field("Город или место, необязательно");
-        selfPlace.setSingleLine(true);
-        EditText fatherName = field("Имя папы, необязательно");
-        fatherName.setSingleLine(true);
-        EditText motherName = field("Имя мамы, необязательно");
-        motherName.setSingleLine(true);
-        EditText story = field("Что важно сохранить для семьи?");
-        story.setMinLines(4);
-        story.setGravity(Gravity.CENTER_VERTICAL);
-        story.setPadding(dp(12), dp(10), dp(12), dp(10));
-
-        LinearLayout personPage = new LinearLayout(this);
-        personPage.setOrientation(LinearLayout.VERTICAL);
-        personPage.addView(quickIntro(
-            R.drawable.ic_nav_card,
-            "Начнём с вашей карточки",
-            "Она станет центром дерева. Остальные сведения можно добавить позже."),
-            quickSectionParams());
-        LinearLayout selfCard = quickSection("Основные сведения", "Обязательное поле только одно — имя");
-        selfCard.addView(quickField("Имя", selfName, R.drawable.ic_field_person), formFieldParams());
-        LinearLayout selfDetails = new LinearLayout(this);
-        selfDetails.setOrientation(LinearLayout.HORIZONTAL);
-        selfDetails.addView(quickField("Год рождения", selfYear, R.drawable.ic_field_calendar), new LinearLayout.LayoutParams(0, -2, 0.8f));
-        selfDetails.addView(quickField("Место", selfPlace, R.drawable.ic_field_location), spacedInputParams());
-        selfCard.addView(selfDetails, formFieldParams());
-        personPage.addView(selfCard, quickSectionParams());
-
-        TextView personHint = quickNote(state != null && state.people.size() > 1
-            ? "Будет создано новое дерево. Текущее можно вернуть командой «Отменить» в истории действий."
-            : "После создания откроется обычное дерево: карточки можно дополнять, перемещать и связывать.");
-        personPage.addView(personHint, quickSectionParams());
-
-        LinearLayout familyPage = new LinearLayout(this);
-        familyPage.setOrientation(LinearLayout.VERTICAL);
-        familyPage.setVisibility(View.GONE);
-        familyPage.addView(quickIntro(
-            R.drawable.ic_menu_people,
-            "Добавьте ближайшую семью",
-            "Оставьте поле пустым, если пока не хотите создавать эту карточку."),
-            quickSectionParams());
-        LinearLayout parentsCard = quickSection("Родители", "Папа будет слева, мама — справа");
-        parentsCard.addView(quickField("Папа", fatherName, R.drawable.ic_field_person), formFieldParams());
-        parentsCard.addView(quickField("Мама", motherName, R.drawable.ic_field_person), formFieldParams());
-        familyPage.addView(parentsCard, quickSectionParams());
-        LinearLayout storyCard = quickSection("Первая история", "Необязательно — сохранится в вашей карточке");
-        storyCard.addView(quickField("Семейная заметка", story, R.drawable.ic_field_note), formFieldParams());
-        familyPage.addView(storyCard, quickSectionParams());
-
-        TextView preview = new TextView(this);
-        preview.setTextColor(Color.rgb(8, 122, 115));
-        preview.setTextSize(11);
-        preview.setTypeface(uiBold());
-        preview.setGravity(Gravity.CENTER_VERTICAL);
-        preview.setPadding(dp(12), dp(8), dp(12), dp(8));
-        preview.setBackground(panelBg(Color.rgb(232, 248, 246), dp(10), Color.argb(72, 24, 169, 153)));
-        familyPage.addView(preview, quickSectionParams());
-
-        formHost.addView(personPage, new LinearLayout.LayoutParams(-1, -2));
-        formHost.addView(familyPage, new LinearLayout.LayoutParams(-1, -2));
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setPadding(0, dp(12), 0, 0);
-        final int[] step = new int[]{0};
-        Button back = actionButton("Отмена", null);
-        back.setTextSize(14);
-        Button primary = actionButton("Продолжить", null);
-        primary.setTextSize(14);
-        primary.setTextColor(Color.WHITE);
-        primary.setBackground(tealGradientBg(dp(11)));
-        actions.addView(back, new LinearLayout.LayoutParams(0, dp(56), 0.82f));
-        LinearLayout.LayoutParams primaryParams = new LinearLayout.LayoutParams(0, dp(56), 1.18f);
-        primaryParams.setMargins(dp(10), 0, 0, 0);
-        actions.addView(primary, primaryParams);
-        shell.addView(actions);
-
-        final Runnable[] renderStep = new Runnable[1];
-        renderStep[0] = () -> {
-            boolean family = step[0] == 1;
-            personPage.setVisibility(family ? View.GONE : View.VISIBLE);
-            familyPage.setVisibility(family ? View.VISIBLE : View.GONE);
-            personStep.setBackground(quickStepBg(!family));
-            familyStep.setBackground(quickStepBg(family));
-            personStep.setTextColor(Color.rgb(8, 122, 115));
-            familyStep.setTextColor(Color.rgb(8, 122, 115));
-            progressLine.setBackgroundColor(family ? Color.rgb(24, 169, 153) : Color.rgb(217, 224, 229));
-            back.setText(family ? "Назад" : "Отмена");
-            primary.setText(family ? "Создать дерево" : "Продолжить");
-            primary.setCompoundDrawablesWithIntrinsicBounds(
-                0,
-                0,
-                family ? R.drawable.ic_menu_check : 0,
-                0);
-            tintDrawables(primary, Color.WHITE);
-            preview.setText(quickPreview(
-                text(selfName),
-                text(fatherName),
-                text(motherName),
-                text(story)));
-            scroll.scrollTo(0, 0);
-        };
-        back.setOnClickListener(v -> {
-            if (step[0] == 0) dialog.dismiss();
-            else {
-                step[0] = 0;
-                renderStep[0].run();
-            }
-        });
-        primary.setOnClickListener(v -> {
-            if (step[0] == 0) {
-                String name = text(selfName).trim();
-                if (name.isEmpty()) {
-                    selfName.setError("Введите имя");
-                    selfName.requestFocus();
-                    return;
-                }
-                step[0] = 1;
-                renderStep[0].run();
-                return;
-            }
-            dialog.dismiss();
-            createQuickStartTree(
-                text(selfName),
-                text(selfYear),
-                text(selfPlace),
-                text(fatherName),
-                text(motherName),
-                text(story));
-        });
-        TextWatcher previewWatcher = new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                preview.setText(quickPreview(
-                    text(selfName),
-                    text(fatherName),
-                    text(motherName),
-                    text(story)));
-            }
-            @Override public void afterTextChanged(Editable s) {}
-        };
-        selfName.addTextChangedListener(previewWatcher);
-        fatherName.addTextChangedListener(previewWatcher);
-        motherName.addTextChangedListener(previewWatcher);
-        story.addTextChangedListener(previewWatcher);
-        renderStep[0].run();
-
-        dialog.setContentView(shell);
-        dialog.setCanceledOnTouchOutside(true);
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.setGravity(Gravity.BOTTOM);
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = WindowManager.LayoutParams.MATCH_PARENT;
-            attrs.height = Math.min(Math.round(getResources().getDisplayMetrics().heightPixels * 0.92f), dp(900));
-            attrs.dimAmount = 0.28f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
-    }
-
-    private LinearLayout quickSection(String title, String subtitle) {
-        LinearLayout section = new LinearLayout(this);
-        section.setOrientation(LinearLayout.VERTICAL);
-        section.setPadding(dp(14), dp(14), dp(14), dp(12));
-        section.setBackground(panelBg(Color.WHITE, dp(14), Color.rgb(217, 224, 229)));
-        section.setElevation(dp(1));
-        TextView heading = new TextView(this);
-        heading.setText(title.toUpperCase(Locale.ROOT));
-        heading.setTextColor(Color.rgb(28, 34, 38));
-        heading.setTextSize(11);
-        heading.setTypeface(uiBold());
-        heading.setIncludeFontPadding(false);
-        section.addView(heading, new LinearLayout.LayoutParams(-1, dp(23)));
-        if (subtitle != null && !subtitle.isEmpty()) {
-            TextView detail = new TextView(this);
-            detail.setText(subtitle);
-            detail.setTextColor(Color.rgb(101, 113, 122));
-            detail.setTextSize(10);
-            detail.setIncludeFontPadding(false);
-            LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, dp(24));
-            detailParams.setMargins(0, 0, 0, dp(6));
-            section.addView(detail, detailParams);
-        }
-        return section;
-    }
-
-    private LinearLayout quickField(String label, EditText edit, int iconRes) {
-        LinearLayout block = new LinearLayout(this);
-        block.setOrientation(LinearLayout.VERTICAL);
-        block.addView(quickCaption(label), new LinearLayout.LayoutParams(-1, dp(22)));
-        styleQuickField(edit, iconRes);
-        block.addView(edit, new LinearLayout.LayoutParams(-1, -2));
-        return block;
-    }
-
-    private void styleQuickField(EditText edit, int iconRes) {
-        edit.setMinHeight(dp(52));
-        edit.setTextSize(14);
-        edit.setPadding(dp(14), edit.getMinLines() > 1 ? dp(12) : 0, dp(14), edit.getMinLines() > 1 ? dp(12) : 0);
-        edit.setBackground(panelBg(Color.WHITE, dp(10), Color.rgb(217, 224, 229)));
-        if (iconRes != 0) {
-            edit.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
-            edit.setCompoundDrawablePadding(dp(10));
-            tintDrawables(edit, Color.rgb(24, 169, 153));
-        }
-    }
-
-    private TextView quickCaption(String value) {
-        TextView caption = new TextView(this);
-        caption.setText(value);
-        caption.setTextColor(Color.rgb(76, 83, 88));
-        caption.setTextSize(11);
-        caption.setTypeface(uiBold());
-        caption.setGravity(Gravity.CENTER_VERTICAL);
-        caption.setIncludeFontPadding(false);
-        return caption;
-    }
-
-    private TextView quickStep(String number, String label) {
-        TextView step = new TextView(this);
-        step.setText(number + "  " + label);
-        step.setTextSize(12);
-        step.setTypeface(uiBold());
-        step.setGravity(Gravity.CENTER);
-        step.setIncludeFontPadding(false);
-        return step;
-    }
-
-    private GradientDrawable quickStepBg(boolean active) {
-        return active
-            ? panelBg(Color.WHITE, dp(999), Color.rgb(24, 169, 153))
-            : panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT);
-    }
-
-    private View quickIntro(int iconRes, String title, String detail) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        card.setBackground(panelBg(Color.rgb(232, 248, 246), dp(14), Color.argb(62, 24, 169, 153)));
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
-        card.addView(icon, new LinearLayout.LayoutParams(dp(36), dp(36)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(12), 0, 0, 0);
-        TextView introTitle = cardActionTitle(title, false);
-        introTitle.setTextSize(14);
-        copy.addView(introTitle, new LinearLayout.LayoutParams(-1, dp(25)));
-        TextView sub = new TextView(this);
-        sub.setText(detail);
-        sub.setTextColor(Color.rgb(76, 87, 96));
-        sub.setTextSize(11);
-        sub.setMaxLines(2);
-        sub.setIncludeFontPadding(false);
-        copy.addView(sub, new LinearLayout.LayoutParams(-1, dp(34)));
-        card.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
-        return card;
-    }
-
-    private TextView quickNote(String value) {
-        TextView note = new TextView(this);
-        note.setText(value);
-        note.setTextColor(Color.rgb(76, 87, 96));
-        note.setTextSize(11);
-        note.setGravity(Gravity.CENTER_VERTICAL);
-        note.setPadding(dp(14), dp(12), dp(14), dp(12));
-        note.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_file, 0, 0, 0);
-        note.setCompoundDrawablePadding(dp(10));
-        tintDrawables(note, Color.rgb(105, 100, 184));
-        note.setBackground(panelBg(Color.rgb(247, 249, 252), dp(12), Color.rgb(217, 224, 229)));
-        return note;
-    }
-
-    private String quickPreview(String self, String father, String mother, String story) {
-        int cards = 1;
-        if (father != null && !father.trim().isEmpty()) cards++;
-        if (mother != null && !mother.trim().isEmpty()) cards++;
-        int links = Math.max(0, cards - 1);
-        if (cards == 3) links++;
-        String name = self == null || self.trim().isEmpty() ? "ваша карточка" : self.trim();
-        return "Будет создано: " + name + " · карточек: " + cards + " · связей: " + links
-            + (story == null || story.trim().isEmpty() ? "" : " · 1 история");
-    }
-
-    private LinearLayout.LayoutParams quickSectionParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(0, 0, 0, dp(14));
-        return params;
-    }
-
-    private void createQuickStartTree(String selfName, String selfYear, String selfPlace, String parentOne, String parentTwo, String story) {
-        recordUndo("Создано дерево через быстрый старт");
-        state.people.clear();
-        state.links.clear();
-        state.guides.clear();
-        Person child = state.addPerson(selfName.trim().isEmpty() ? "Новый человек" : selfName.trim(), 4000, 3000);
-        child.bornYear = selfYear.trim();
-        child.place = selfPlace.trim();
-        if (!story.trim().isEmpty()) {
-            Memory memory = new Memory();
-            memory.id = "m_" + java.util.UUID.randomUUID().toString().replace("-", "");
-            memory.title = "Первая история";
-            memory.text = story.trim();
-            memory.at = String.valueOf(System.currentTimeMillis());
-            child.memories.add(memory);
-        }
-        Person father = null;
-        Person mother = null;
-        if (!parentOne.trim().isEmpty()) {
-            father = state.addPerson(parentOne.trim(), 3740, 2780);
-            state.addRelation("parent", father.id, child.id);
-        }
-        if (!parentTwo.trim().isEmpty()) {
-            mother = state.addPerson(parentTwo.trim(), 4260, 2780);
-            state.addRelation("parent", mother.id, child.id);
-        }
-        if (father != null && mother != null) {
-            state.addRelation("partner", father.id, mother.id, "right");
-        }
-        state.rootId = child.id;
-        state.selectedId = child.id;
-        TreeLayoutEngine.layout(state);
-        saveToast("Быстрый старт создан");
-        bindState();
-        treeView.invalidate();
-    }
-
     private void recolorSelected() {
         java.util.Set<String> ids = treeView.selectedIds();
         Person person = state.selectedPerson();
@@ -3096,7 +2812,7 @@ public final class MainActivity extends Activity {
         return panel;
     }
 
-    private TextView closeButton(View.OnClickListener listener) {
+    TextView closeButton(View.OnClickListener listener) {
         TextView button = new TextView(this);
         button.setGravity(Gravity.CENTER);
         button.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));

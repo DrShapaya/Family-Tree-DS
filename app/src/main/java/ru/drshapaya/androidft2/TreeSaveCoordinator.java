@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 final class TreeSaveCoordinator {
     interface Listener {
         void onSaveError();
+        default void onSaved(TreeState snapshot) {}
     }
 
     private static final long DEBOUNCE_MILLIS = 500L;
@@ -85,7 +86,9 @@ final class TreeSaveCoordinator {
         dispatchedRevision = revision;
         writer.execute(() -> {
             boolean saved = store.save(snapshot);
-            if (!saved && listener != null) main.post(listener::onSaveError);
+            if (listener == null) return;
+            if (!saved) main.post(listener::onSaveError);
+            else listener.onSaved(snapshot);
         });
     }
 }
