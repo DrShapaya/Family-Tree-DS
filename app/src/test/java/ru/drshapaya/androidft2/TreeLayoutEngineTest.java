@@ -107,6 +107,58 @@ public final class TreeLayoutEngineTest {
     }
 
     @Test
+    public void paternalAndMaternalSideFamiliesStayOnTheirOwnSides() {
+        TreeState state = new TreeState();
+        person(state, "father", "Алексей Иванов", "1970");
+        person(state, "mother", "Анна Иванова", "1972");
+        person(state, "child", "Иван Иванов", "1995");
+        person(state, "paternalGrandfather", "Пётр Иванов", "1940");
+        person(state, "paternalGrandmother", "Ольга Иванова", "1942");
+        person(state, "paternalUncle", "Борис Иванов", "1968");
+        person(state, "paternalUnclePartner", "Елена Иванова", "1970");
+        person(state, "maternalGrandfather", "Сергей Петров", "1941");
+        person(state, "maternalGrandmother", "Мария Петрова", "1944");
+        person(state, "maternalAunt", "Татьяна Петрова", "1975");
+        person(state, "maternalAuntPartner", "Андрей Сидоров", "1973");
+
+        link(state, "partner", "father", "mother");
+        link(state, "parent", "father", "child");
+        link(state, "parent", "mother", "child");
+        link(state, "partner", "paternalGrandfather", "paternalGrandmother");
+        link(state, "parent", "paternalGrandfather", "father");
+        link(state, "parent", "paternalGrandmother", "father");
+        link(state, "parent", "paternalGrandfather", "paternalUncle");
+        link(state, "parent", "paternalGrandmother", "paternalUncle");
+        link(state, "partner", "paternalUncle", "paternalUnclePartner");
+        link(state, "partner", "maternalGrandfather", "maternalGrandmother");
+        link(state, "parent", "maternalGrandfather", "mother");
+        link(state, "parent", "maternalGrandmother", "mother");
+        link(state, "parent", "maternalGrandfather", "maternalAunt");
+        link(state, "parent", "maternalGrandmother", "maternalAunt");
+        link(state, "partner", "maternalAuntPartner", "maternalAunt");
+        state.rootId = "child";
+
+        TreeLayoutEngine.layout(state);
+
+        float paternalAncestorRight = maxRight(
+            state,
+            "paternalGrandfather",
+            "paternalGrandmother");
+        float maternalAncestorLeft = minX(
+            state,
+            "maternalGrandfather",
+            "maternalGrandmother");
+        assertTrue(paternalAncestorRight + TreeLayoutEngine.GRID * 5f <= maternalAncestorLeft);
+
+        float paternalSideRight = maxRight(state, "paternalUncle", "paternalUnclePartner");
+        float rootFamilyLeft = minX(state, "father", "mother");
+        float rootFamilyRight = maxRight(state, "father", "mother");
+        float maternalSideLeft = minX(state, "maternalAunt", "maternalAuntPartner");
+        assertTrue(paternalSideRight + TreeLayoutEngine.GRID * 2f <= rootFamilyLeft);
+        assertTrue(rootFamilyRight + TreeLayoutEngine.GRID * 2f <= maternalSideLeft);
+    }
+
+    @Test
     public void disconnectedFamiliesUseFiveCellBoundaryGap() {
         TreeState state = parentsAndTwoChildren();
         person(state, "otherFather", "Борис Сидоров", "1960");
@@ -145,6 +197,88 @@ public final class TreeLayoutEngineTest {
         assertEquals(father.y, mother.y, EPSILON);
         assertEquals(TreeLayoutEngine.GRID, mother.x - father.x - TreeLayoutEngine.CARD_W, EPSILON);
         assertEquals(TreeLayoutEngine.LEVEL_GAP, child.y - father.y, EPSILON);
+    }
+
+    @Test
+    public void fourRowCardEndsOnTheNextGenerationGridLine() {
+        TreeState state = new TreeState();
+        person(state, "person", "Иван Иванов", "1980");
+        state.rootId = "person";
+        Guide guide = new Guide();
+        guide.id = "guide";
+        guide.axis = "h";
+        guide.position = TreeLayoutEngine.GRID * 10f;
+        state.guides.add(guide);
+
+        TreeLayoutEngine.layout(state);
+
+        Person person = state.people.get("person");
+        assertEquals(
+            guide.position + TreeLayoutEngine.LEVEL_GAP,
+            person.y + TreeLayoutEngine.CARD_H,
+            EPSILON);
+    }
+
+    @Test
+    public void openingTreeRejectsOneSavedRowWhenItContradictsParentLinks() {
+        TreeState state = parentsAndTwoChildren();
+        String[] ids = {"father", "mother", "childA", "childB"};
+        for (int i = 0; i < ids.length; i++) {
+            Person person = state.people.get(ids[i]);
+            person.x = 400f + i * (TreeLayoutEngine.CARD_W + TreeLayoutEngine.GRID);
+            person.y = 1000f;
+        }
+
+        TreeLayoutEngine.ensurePositions(state);
+
+        Person father = state.people.get("father");
+        Person mother = state.people.get("mother");
+        Person first = state.people.get("childA");
+        Person second = state.people.get("childB");
+        assertEquals(father.y, mother.y, EPSILON);
+        assertEquals(TreeLayoutEngine.LEVEL_GAP, first.y - father.y, EPSILON);
+        assertEquals(first.y, second.y, EPSILON);
+        assertNoOverlaps(state);
+    }
+
+    @Test
+    public void overlappingHeapDoesNotBecomeFakeGenerations() {
+        TreeState state = parentsAndTwoChildren();
+        String[] ids = {"father", "mother", "childA", "childB"};
+        for (int i = 0; i < ids.length; i++) {
+            Person person = state.people.get(ids[i]);
+            person.x = 1000f + i * 80f;
+            person.y = 1000f + i * 120f;
+        }
+
+        TreeLayoutEngine.layout(state);
+
+        Person father = state.people.get("father");
+        Person first = state.people.get("childA");
+        Person second = state.people.get("childB");
+        assertEquals(TreeLayoutEngine.LEVEL_GAP, first.y - father.y, EPSILON);
+        assertEquals(first.y, second.y, EPSILON);
+        assertNoOverlaps(state);
+    }
+
+    @Test
+    public void wideGenerationExpandsWorkspaceInsteadOfClampingCardsTogether() {
+        TreeState state = new TreeState();
+        state.workspaceWidth = TreeLayoutEngine.MIN_SURFACE_W;
+        person(state, "person0", "Человек 0", "1980");
+        state.rootId = "person0";
+        for (int i = 1; i < 20; i++) {
+            String id = "person" + i;
+            person(state, id, "Человек " + i, Integer.toString(1980 + i));
+            link(state, "sibling", "person0", id);
+        }
+
+        TreeLayoutEngine.layout(state);
+
+        assertTrue(state.workspaceWidth > TreeLayoutEngine.MIN_SURFACE_W);
+        float right = maxRight(state, state.people.keySet().toArray(new String[0]));
+        assertTrue(right + TreeLayoutEngine.GRID * 4f <= state.workspaceWidth);
+        assertNoOverlaps(state);
     }
 
     private static TreeState parentsAndTwoChildren() {
@@ -194,6 +328,21 @@ public final class TreeLayoutEngineTest {
         for (Person person : people) {
             assertEquals(0f, person.x % TreeLayoutEngine.GRID, EPSILON);
             assertEquals(0f, person.y % TreeLayoutEngine.GRID, EPSILON);
+        }
+    }
+
+    private static void assertNoOverlaps(TreeState state) {
+        List<Person> people = new ArrayList<>(state.people.values());
+        for (int i = 0; i < people.size(); i++) {
+            Person first = people.get(i);
+            for (int j = i + 1; j < people.size(); j++) {
+                Person second = people.get(j);
+                boolean horizontalOverlap = Math.abs(first.x - second.x) < TreeLayoutEngine.CARD_W;
+                boolean verticalOverlap = Math.abs(first.y - second.y) < TreeLayoutEngine.CARD_H;
+                assertTrue(
+                    "карточки не должны пересекаться: " + first.id + " и " + second.id,
+                    !horizontalOverlap || !verticalOverlap);
+            }
         }
     }
 }

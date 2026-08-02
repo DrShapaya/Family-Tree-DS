@@ -418,7 +418,7 @@ final class TreeStore {
         root.put("version", 1);
         root.put("exportedAt", isoNow());
         root.put("mode", "view".equals(mode) ? "view" : "copy");
-        root.put("title", "Семейное древо");
+        root.put("title", AppLanguage.text(appContext, "Семейное древо"));
         root.put("state", toJson(state));
         return root.toString(2);
     }
@@ -623,6 +623,16 @@ final class TreeStore {
         state.hideCardDetails = settings.optBoolean("hideCardDetails", state.hideCardDetails);
         state.compactCards = settings.optBoolean("compactCards", state.compactCards);
         state.focusTree = settings.optBoolean("focusTree", state.focusTree);
+        state.workspaceBoundsVisible = !settings.has("workspaceBoundsVisible")
+            || settings.optBoolean("workspaceBoundsVisible", true);
+        String boundsStyle = settings.optString("workspaceBoundsStyle", state.workspaceBoundsStyle);
+        state.workspaceBoundsStyle = "contrast".equals(boundsStyle) || "outline".equals(boundsStyle)
+            ? boundsStyle
+            : "soft";
+        state.workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(
+            settings.optInt("workspaceWidth", state.workspaceWidth));
+        state.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(
+            settings.optInt("workspaceHeight", state.workspaceHeight));
         state.parentLineMode = "orthogonal".equals(settings.optString("parentLineMode", "smart")) ? "orthogonal" : "smart";
     }
 
@@ -641,6 +651,10 @@ final class TreeStore {
             .put("hideCardDetails", state.hideCardDetails)
             .put("compactCards", state.compactCards)
             .put("focusTree", state.focusTree)
+            .put("workspaceBoundsVisible", state.workspaceBoundsVisible)
+            .put("workspaceBoundsStyle", state.workspaceBoundsStyle)
+            .put("workspaceWidth", TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth))
+            .put("workspaceHeight", TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight))
             .put("parentLineMode", "orthogonal".equals(state.parentLineMode) ? "orthogonal" : "smart");
     }
 
@@ -951,32 +965,6 @@ final class TreeStore {
         String year = born ? person.bornYear : person.diedYear;
         if (!day.isEmpty() && !month.isEmpty() && !year.isEmpty()) return day + "." + month + "." + year;
         return year;
-    }
-
-    static TreeState demoState() {
-        TreeState state = new TreeState();
-        Person root = state.addPerson("Алексей Иванов", 4000, 3000);
-        root.bornYear = "1978";
-        root.place = "Красноярск";
-        state.rootId = root.id;
-        state.selectedId = root.id;
-
-        String[] surnames = {"Иванов", "Петров", "Сидоров", "Кузнецов", "Смирнов", "Федоров"};
-        String[] names = {"Мария", "Нина", "Виктор", "Анна", "Павел", "Елена", "Сергей", "Ирина", "Дмитрий", "Ольга"};
-        for (int i = 0; i < 119; i++) {
-            Person person = state.addPerson(names[i % names.length] + " " + surnames[i % surnames.length], 0, 0);
-            person.bornYear = String.valueOf(1930 + (i * 7) % 85);
-            person.place = i % 3 == 0 ? "Красноярский край" : "";
-        }
-        TreeLayoutEngine.layout(state);
-        String[] ids = state.people.keySet().toArray(new String[0]);
-        for (int i = 1; i < ids.length; i++) {
-            int parent = Math.max(0, (i - 1) / 2);
-            state.addRelation("parent", ids[parent], ids[i]);
-            if (i % 9 == 0 && i + 1 < ids.length) state.addRelation("partner", ids[i], ids[i + 1]);
-            if (i % 11 == 0 && i + 2 < ids.length) state.addRelation("sibling", ids[i], ids[i + 2]);
-        }
-        return state;
     }
 
     private static final class DateParts {

@@ -1,0 +1,14 @@
+<!-- AndroidFT off-state composite selected by the user: rounded three lines with a bold slash. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,5h16M4,12h16M4,19h16M3,3l18,18"
+        android:strokeColor="#087A73"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.6" />
+</vector>

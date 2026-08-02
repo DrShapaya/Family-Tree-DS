@@ -66,7 +66,7 @@ final class MainActivityQuickStart {
         LinearLayout heading = new LinearLayout(activity);
         heading.setOrientation(LinearLayout.VERTICAL);
         TextView eyebrow = caption("НОВОЕ СЕМЕЙНОЕ ДЕРЕВО");
-        TextView title = new TextView(activity);
+        TextView title = new LocalizedTextView(activity);
         title.setText("Быстрый старт");
         title.setTextColor(Color.rgb(28, 34, 38));
         title.setTextSize(24);
@@ -154,7 +154,7 @@ final class MainActivityQuickStart {
         storyCard.addView(field("Семейная заметка", story, R.drawable.ic_field_note), activity.formFieldParams());
         familyPage.addView(storyCard, sectionParams());
 
-        TextView preview = new TextView(activity);
+        TextView preview = new LocalizedTextView(activity);
         preview.setTextColor(Color.rgb(8, 122, 115));
         preview.setTextSize(11);
         preview.setTypeface(activity.uiBold());
@@ -191,7 +191,9 @@ final class MainActivityQuickStart {
             familyStep.setBackground(stepBackground(family));
             personStep.setTextColor(Color.rgb(8, 122, 115));
             familyStep.setTextColor(Color.rgb(8, 122, 115));
-            progressLine.setBackgroundColor(family ? Color.rgb(24, 169, 153) : Color.rgb(217, 224, 229));
+            progressLine.setBackgroundColor(family
+                ? Color.rgb(24, 169, 153)
+                : AppThemePalette.stroke(Color.rgb(217, 224, 229)));
             back.setText(family ? "Назад" : "Отмена");
             primary.setText(family ? "Создать дерево" : "Продолжить");
             primary.setCompoundDrawablesWithIntrinsicBounds(
@@ -278,7 +280,7 @@ final class MainActivityQuickStart {
         section.setPadding(dp(14), dp(14), dp(14), dp(12));
         section.setBackground(activity.panelBg(Color.WHITE, dp(14), Color.rgb(217, 224, 229)));
         section.setElevation(dp(1));
-        TextView heading = new TextView(activity);
+        TextView heading = new LocalizedTextView(activity);
         heading.setText(title.toUpperCase(Locale.ROOT));
         heading.setTextColor(Color.rgb(28, 34, 38));
         heading.setTextSize(11);
@@ -286,7 +288,7 @@ final class MainActivityQuickStart {
         heading.setIncludeFontPadding(false);
         section.addView(heading, new LinearLayout.LayoutParams(-1, dp(23)));
         if (subtitle != null && !subtitle.isEmpty()) {
-            TextView detail = new TextView(activity);
+            TextView detail = new LocalizedTextView(activity);
             detail.setText(subtitle);
             detail.setTextColor(Color.rgb(101, 113, 122));
             detail.setTextSize(10);
@@ -324,7 +326,7 @@ final class MainActivityQuickStart {
     }
 
     private TextView caption(String value) {
-        TextView caption = new TextView(activity);
+        TextView caption = new LocalizedTextView(activity);
         caption.setText(value);
         caption.setTextColor(Color.rgb(76, 83, 88));
         caption.setTextSize(11);
@@ -335,7 +337,7 @@ final class MainActivityQuickStart {
     }
 
     private TextView step(String number, String label) {
-        TextView step = new TextView(activity);
+        TextView step = new LocalizedTextView(activity);
         step.setText(number + "  " + label);
         step.setTextSize(12);
         step.setTypeface(activity.uiBold());
@@ -358,7 +360,7 @@ final class MainActivityQuickStart {
         card.setBackground(activity.panelBg(Color.rgb(232, 248, 246), dp(14), Color.argb(62, 24, 169, 153)));
         ImageView icon = new ImageView(activity);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
         card.addView(icon, new LinearLayout.LayoutParams(dp(36), dp(36)));
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(LinearLayout.VERTICAL);
@@ -366,7 +368,7 @@ final class MainActivityQuickStart {
         TextView introTitle = title(title);
         introTitle.setTextSize(14);
         copy.addView(introTitle, new LinearLayout.LayoutParams(-1, dp(25)));
-        TextView sub = new TextView(activity);
+        TextView sub = new LocalizedTextView(activity);
         sub.setText(detail);
         sub.setTextColor(Color.rgb(76, 87, 96));
         sub.setTextSize(11);
@@ -378,7 +380,7 @@ final class MainActivityQuickStart {
     }
 
     private TextView title(String value) {
-        TextView text = new TextView(activity);
+        TextView text = new LocalizedTextView(activity);
         text.setText(value);
         text.setTextColor(Color.rgb(28, 34, 38));
         text.setTextSize(13);
@@ -390,7 +392,7 @@ final class MainActivityQuickStart {
     }
 
     private TextView note(String value) {
-        TextView note = new TextView(activity);
+        TextView note = new LocalizedTextView(activity);
         note.setText(value);
         note.setTextColor(Color.rgb(76, 87, 96));
         note.setTextSize(11);
@@ -439,7 +441,9 @@ final class MainActivityQuickStart {
         activity.state.links.clear();
         activity.state.guides.clear();
         Person child = activity.state.addPerson(
-            selfName.trim().isEmpty() ? "Новый человек" : selfName.trim(),
+            selfName.trim().isEmpty()
+                ? activity.tr("Новый человек")
+                : selfName.trim(),
             4000,
             3000);
         child.bornYear = selfYear.trim();
@@ -468,6 +472,8 @@ final class MainActivityQuickStart {
         activity.state.rootId = child.id;
         activity.state.selectedId = child.id;
         TreeLayoutEngine.layout(activity.state);
+        activity.workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(activity.state.workspaceWidth);
+        activity.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(activity.state.workspaceHeight);
         activity.saveToast("Быстрый старт создан");
         activity.bindState();
         activity.treeView.invalidate();

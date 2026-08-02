@@ -67,6 +67,7 @@ final class TreeCanvasView extends View {
     private float siblingDashScale = -1f;
     private final LruCache<String, Bitmap> photoCache;
     private final LruCache<String, String[]> nameLinesCache = new LruCache<>(640);
+    private final LruCache<String, String> nameEllipsisCache = new LruCache<>(960);
     private final LruCache<String, CardMeta> cardMetaCache = new LruCache<>(1200);
     private final Map<Long, List<Person>> spatialGrid = new HashMap<>();
     private final List<Person> visiblePeopleScratch = new ArrayList<>();
@@ -109,6 +110,10 @@ final class TreeCanvasView extends View {
     private boolean generationLines = true;
     private boolean hideDetails = false;
     private boolean compactCards = false;
+    private boolean workspaceBoundsVisible = true;
+    private String workspaceBoundsStyle = "soft";
+    private float workspaceWidth = TreeLayoutEngine.SURFACE_W;
+    private float workspaceHeight = TreeLayoutEngine.SURFACE_H;
     private boolean appendSelection = false;
     private float scale = 0.55f;
     private float offsetX = 80f;
@@ -128,6 +133,10 @@ final class TreeCanvasView extends View {
     private final List<String> dragPersonIds = new ArrayList<>();
     private String focusHighlightId = "";
     private long focusHighlightUntil = 0L;
+    private final Map<String, TreeQualityAnalyzer.PersonReport> qualityReports = new HashMap<>();
+    private final Set<String> highlightedPathIds = new HashSet<>();
+    private final Set<String> highlightedPathEdges = new HashSet<>();
+    private long highlightedPathUntil = 0L;
     TreeCanvasView(Context context) {
         super(context);
         setFocusable(true);
@@ -169,6 +178,7 @@ final class TreeCanvasView extends View {
         if (this.state != state) {
             photoCache.evictAll();
             nameLinesCache.evictAll();
+            nameEllipsisCache.evictAll();
             cardMetaCache.evictAll();
             linkGeometryCache.clear();
             failedPhotoLoads.clear();
@@ -191,6 +201,7 @@ final class TreeCanvasView extends View {
         if (level >= 80) {
             photoCache.evictAll();
             nameLinesCache.evictAll();
+            nameEllipsisCache.evictAll();
             cardMetaCache.evictAll();
         } else if (level >= 10 && level < 20) {
             photoCache.trimToSize(Math.max(1, photoCache.maxSize() / 2));
@@ -231,6 +242,27 @@ final class TreeCanvasView extends View {
         invalidate();
     }
 
+    void setQualityReports(Map<String, TreeQualityAnalyzer.PersonReport> reports) {
+        qualityReports.clear();
+        if (reports != null) qualityReports.putAll(reports);
+        invalidate();
+    }
+
+    void highlightKinshipPath(List<String> personIds) {
+        highlightedPathIds.clear();
+        highlightedPathEdges.clear();
+        if (personIds != null) {
+            highlightedPathIds.addAll(personIds);
+            for (int index = 1; index < personIds.size(); index++) {
+                highlightedPathEdges.add(edgeKey(personIds.get(index - 1), personIds.get(index)));
+            }
+        }
+        highlightedPathUntil = highlightedPathIds.isEmpty()
+            ? 0L
+            : SystemClock.uptimeMillis() + 6000L;
+        invalidate();
+    }
+
     void setHideDetails(boolean enabled) {
         hideDetails = enabled;
         invalidate();
@@ -263,8 +295,12 @@ final class TreeCanvasView extends View {
     }
 
     String selectionModeLabel() {
-        if ("lasso".equals(selectionMode)) return "Лассо";
-        if ("rect".equals(selectionMode)) return "Рамка";
+        if ("lasso".equals(selectionMode)) {
+            return AppLanguage.text(getContext(), "Лассо");
+        }
+        if ("rect".equals(selectionMode)) {
+            return AppLanguage.text(getContext(), "Рамка");
+        }
         return "";
     }
 
@@ -312,6 +348,16 @@ final class TreeCanvasView extends View {
 
     void setTheme(String value) {
         theme = "print".equals(value) ? "clean" : "dark".equals(value) || "clean".equals(value) ? value : "light";
+        invalidate();
+    }
+
+    void setWorkspaceBounds(boolean visible, String style, int width, int height) {
+        workspaceBoundsVisible = visible;
+        workspaceBoundsStyle = "contrast".equals(style) || "outline".equals(style)
+            ? style
+            : "soft";
+        workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(width);
+        workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(height);
         invalidate();
     }
 
@@ -435,6 +481,7 @@ final class TreeCanvasView extends View {
     private void drawScene(Canvas canvas, int width, int height, boolean exportMode) {
         canvas.drawColor(canvasBackground());
         if (!exportMode && !"clean".equals(theme)) drawGrid(canvas, width, height);
+        if (!exportMode) drawWorkspaceBounds(canvas, width, height);
         if (state == null) return;
         refreshToday();
         prepareBranchCache();
@@ -461,6 +508,45 @@ final class TreeCanvasView extends View {
         for (float y = startY; y < height; y += grid) canvas.drawLine(0, y, width, y, paint);
     }
 
+    private void drawWorkspaceBounds(Canvas canvas, int width, int height) {
+        if (!workspaceBoundsVisible) return;
+        float left = sx(0f);
+        float top = sy(0f);
+        float right = sx(workspaceWidth);
+        float bottom = sy(workspaceHeight);
+
+        // Slightly shade only the part outside the editable surface. This keeps the
+        // boundary understandable even when just one of its sides is on screen.
+        paint.setStyle(Paint.Style.FILL);
+        paint.setPathEffect(null);
+        boolean outlineOnly = "outline".equals(workspaceBoundsStyle);
+        boolean contrast = "contrast".equals(workspaceBoundsStyle);
+        paint.setColor("dark".equals(theme)
+            ? Color.argb(contrast ? 96 : 64, 0, 0, 0)
+            : Color.argb(contrast ? 54 : 28, 46, 64, 72));
+        if (!outlineOnly) {
+            if (left > 0f) canvas.drawRect(0f, 0f, Math.min(width, left), height, paint);
+            if (right < width) canvas.drawRect(Math.max(0f, right), 0f, width, height, paint);
+            float innerLeft = Math.max(0f, left);
+            float innerRight = Math.min(width, right);
+            if (innerRight > innerLeft) {
+                if (top > 0f) canvas.drawRect(innerLeft, 0f, innerRight, Math.min(height, top), paint);
+                if (bottom < height) canvas.drawRect(innerLeft, Math.max(0f, bottom), innerRight, height, paint);
+            }
+        }
+
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(contrast ? 3.2f : outlineOnly ? 1.6f : 2.2f);
+        paint.setColor("dark".equals(theme)
+            ? Color.argb(contrast ? 245 : 210, 83, 211, 197)
+            : Color.argb(contrast ? 240 : 190, 8, 122, 115));
+        paint.setPathEffect(outlineOnly ? null : new DashPathEffect(
+            contrast ? new float[] {18f, 7f} : new float[] {14f, 9f},
+            0f));
+        canvas.drawRect(left, top, right, bottom, paint);
+        paint.setPathEffect(null);
+    }
+
     private int canvasBackground() {
         if ("dark".equals(theme)) return Color.rgb(22, 24, 22);
         if ("clean".equals(theme)) return Color.WHITE;
@@ -468,6 +554,11 @@ final class TreeCanvasView extends View {
     }
 
     private void drawLinks(Canvas canvas, RectF visible) {
+        boolean pathActive = highlightedPathUntil > SystemClock.uptimeMillis();
+        if (!pathActive && !highlightedPathIds.isEmpty()) {
+            highlightedPathIds.clear();
+            highlightedPathEdges.clear();
+        }
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeWidth(Math.max(2.4f, 3.6f * scale));
@@ -482,13 +573,23 @@ final class TreeCanvasView extends View {
                 Math.max(from.y, to.y) + cardHeightWorld() + 280f);
             if (!RectF.intersects(visible, linkBoundsScratch)) continue;
             boolean selected = link.id != null && link.id.equals(selectedLinkId);
-            paint.setColor(selected ? Color.rgb(197, 83, 75) : "parent".equals(link.type) ? Color.rgb(47, 125, 117) : Color.argb(190, 83, 94, 88));
-            paint.setStrokeWidth(selected ? Math.max(3.4f, 5f * scale) : Math.max(2.4f, 3.6f * scale));
-            paint.setPathEffect("sibling".equals(link.type) ? siblingDashEffect() : null);
+            boolean onPath = pathActive && highlightedPathEdges.contains(edgeKey(link.from, link.to));
+            paint.setColor(onPath
+                ? Color.rgb(47, 140, 255)
+                : selected
+                    ? Color.rgb(197, 83, 75)
+                    : "parent".equals(link.type)
+                        ? Color.rgb(47, 125, 117)
+                        : Color.argb(190, 83, 94, 88));
+            paint.setStrokeWidth(onPath
+                ? Math.max(5f, 8f * scale)
+                : selected ? Math.max(3.4f, 5f * scale) : Math.max(2.4f, 3.6f * scale));
+            paint.setPathEffect(onPath ? null : "sibling".equals(link.type) ? siblingDashEffect() : null);
             Path path = linkPath(link, from, to);
             canvas.drawPath(path, paint);
         }
         paint.setPathEffect(null);
+        if (pathActive) postInvalidateOnAnimation();
     }
 
     private void drawGenerationLines(Canvas canvas, RectF visible, int width, int height) {
@@ -524,12 +625,24 @@ final class TreeCanvasView extends View {
                 if (guide.position < visible.left || guide.position > visible.right) continue;
                 float x = sx(guide.position);
                 canvas.drawLine(x, sy(visible.top), x, sy(visible.bottom), paint);
-                if (!guide.label.isEmpty()) canvas.drawText(guide.label, x + 8f, Math.max(18f, sy(visible.top) + 22f), textPaint);
+                if (!guide.label.isEmpty()) {
+                    canvas.drawText(
+                        AppLanguage.text(getContext(), guide.label),
+                        x + 8f,
+                        Math.max(18f, sy(visible.top) + 22f),
+                        textPaint);
+                }
             } else {
                 if (guide.position < visible.top || guide.position > visible.bottom) continue;
                 float y = sy(guide.position);
                 canvas.drawLine(sx(visible.left), y, sx(visible.right), y, paint);
-                if (!guide.label.isEmpty()) canvas.drawText(guide.label, Math.max(8f, sx(visible.left) + 12f), y - 8f, textPaint);
+                if (!guide.label.isEmpty()) {
+                    canvas.drawText(
+                        AppLanguage.text(getContext(), guide.label),
+                        Math.max(8f, sx(visible.left) + 12f),
+                        y - 8f,
+                        textPaint);
+                }
             }
         }
         paint.setPathEffect(null);
@@ -573,6 +686,37 @@ final class TreeCanvasView extends View {
         boolean selected = person.id.equals(state.selectedId);
         boolean multiSelected = selectedIds.contains(person.id);
         boolean lineStart = person.id.equals(pendingLineFromId);
+        boolean onHighlightedPath = highlightedPathUntil > SystemClock.uptimeMillis()
+            && highlightedPathIds.contains(person.id);
+        if (onHighlightedPath) {
+            float pathHalo = Math.max(4f, 7f * scale);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(3.2f, 6.5f * scale));
+            paint.setColor(Color.argb(225, 47, 140, 255));
+            canvas.drawRoundRect(
+                left - pathHalo,
+                top - pathHalo,
+                left + width + pathHalo,
+                top + height + pathHalo,
+                radius + pathHalo,
+                radius + pathHalo,
+                paint);
+            postInvalidateOnAnimation();
+        }
+        if (selected && !multiSelected) {
+            float halo = Math.max(2.5f, 4.5f * scale);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(2.4f, 5f * scale));
+            paint.setColor(Color.argb(215, 24, 169, 153));
+            canvas.drawRoundRect(
+                left - halo,
+                top - halo,
+                left + width + halo,
+                top + height + halo,
+                radius + halo,
+                radius + halo,
+                paint);
+        }
         if (multiSelected) {
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(3.6f, 7.5f * scale));
@@ -580,7 +724,9 @@ final class TreeCanvasView extends View {
             canvas.drawRoundRect(left - 4f * scale, top - 4f * scale, left + width + 4f * scale, top + height + 4f * scale, radius + 5f * scale, radius + 5f * scale, paint);
         }
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth((lineStart || selected || multiSelected || person.pinned ? 3.2f : 2f) * scale);
+        paint.setStrokeWidth(selected || multiSelected
+            ? Math.max(2.6f, 3.8f * scale)
+            : (lineStart || person.pinned ? 3.2f : 2f) * scale);
         paint.setColor(lineStart ? Color.rgb(197, 83, 75) : multiSelected ? Color.rgb(27, 117, 255) : selected ? Color.rgb(8, 122, 115) : person.pinned ? Color.rgb(31, 94, 89) : Color.argb(180, 255, 255, 255));
         canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
         if (person.id.equals(focusHighlightId)) {
@@ -628,8 +774,8 @@ final class TreeCanvasView extends View {
 
         float textScale = cardTextScale();
 
-        if (scale > 0.11f) {
-            float avatar = (compactCards ? 48f : 64f) * scale;
+        {
+            float avatar = (compactCards ? 56f : 80f) * scale;
             float cx = left + pad + avatar / 2f;
             float cy = top + pad + avatar / 2f;
             paint.setStyle(Paint.Style.FILL);
@@ -666,67 +812,161 @@ final class TreeCanvasView extends View {
                     textPaint);
             }
             textPaint.setTextAlign(Paint.Align.LEFT);
-            textLeft = left + pad + avatar + (compactCards ? 10f : 12f) * scale;
-            textMaxWidth = Math.max(1f, width - (textLeft - left) - pad - (compactCards ? 24f : 30f) * scale);
+            textLeft = left + pad + avatar + (compactCards ? 9f : 12f) * scale;
+            textMaxWidth = Math.max(1f, width - (textLeft - left) - pad);
 
-            float menu = (compactCards ? 23f : 28f) * scale;
-            float menuLeft = left + width - 7f * scale - menu;
-            float menuTop = top + 7f * scale;
-            paint.setColor(Color.argb(76, 255, 255, 255));
-            canvas.drawRoundRect(menuLeft, menuTop, menuLeft + menu, menuTop + menu, 5f * scale, 5f * scale, paint);
-            textPaint.setTextAlign(Paint.Align.CENTER);
-            textPaint.setColor(Color.rgb(83, 94, 88));
-            textPaint.setTextSize(17f * textScale);
-            fm = textPaint.getFontMetrics();
-            canvas.drawText("⋮", menuLeft + menu / 2f, menuTop + menu / 2f - (fm.ascent + fm.descent) / 2f, textPaint);
-            textPaint.setTextAlign(Paint.Align.LEFT);
+            if (scale > 0.11f) {
+                float menu = (compactCards ? 23f : 28f) * scale;
+                float menuLeft = left + width - 7f * scale - menu;
+                float menuTop = top + 7f * scale;
+                paint.setColor(Color.argb(76, 255, 255, 255));
+                canvas.drawRoundRect(menuLeft, menuTop, menuLeft + menu, menuTop + menu, 5f * scale, 5f * scale, paint);
+                textPaint.setTextAlign(Paint.Align.CENTER);
+                textPaint.setColor(Color.rgb(83, 94, 88));
+                textPaint.setTextSize(17f * textScale);
+                fm = textPaint.getFontMetrics();
+                canvas.drawText("⋮", menuLeft + menu / 2f, menuTop + menu / 2f - (fm.ascent + fm.descent) / 2f, textPaint);
+                textPaint.setTextAlign(Paint.Align.LEFT);
+            }
         }
 
         textPaint.setColor(Color.rgb(34, 37, 39));
         textPaint.setFakeBoldText(true);
         textPaint.setTypeface(uiBold);
-        textPaint.setTextSize(17f * textScale);
-        drawNameLines(canvas, person.name.isEmpty() ? "Без имени" : person.name, textLeft, top + pad + textPaint.getTextSize(), textMaxWidth, textScale);
+        textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * textScale);
+        drawNameLines(
+            canvas,
+            person.name.isEmpty()
+                ? AppLanguage.text(getContext(), "Без имени")
+                : person.name,
+            textLeft,
+            top + pad + textPaint.getTextSize(),
+            textMaxWidth,
+            textScale);
 
         if (!hideDetails && scale > 0.18f) {
             textPaint.setFakeBoldText(false);
             textPaint.setTypeface(uiRegular);
             textPaint.setColor(Color.argb(184, 34, 37, 39));
-            textPaint.setTextSize(12f * textScale);
+            textPaint.setTextSize((compactCards ? 13f : 15f) * textScale);
             CardMeta meta = cardMeta(person);
             String date = meta.date;
             String place = meta.place;
             float metaLeft = left + pad;
-            float metaWidth = Math.max(1f, width - pad * 2f);
+            float qualityReserve = qualityReports.containsKey(person.id)
+                ? 28f * scale
+                : 0f;
+            float metaWidth = Math.max(1f, width - pad * 2f - qualityReserve);
             float bottomBaseline = top + height - pad - 2f;
-            if (!compactCards && !date.isEmpty() && !place.isEmpty()) {
-                drawFittedSingleLine(
-                    canvas,
-                    date,
-                    metaLeft,
-                    bottomBaseline - 15f * textScale,
-                    metaWidth);
-                drawFittedSingleLine(canvas, place, metaLeft, bottomBaseline, metaWidth);
-            } else {
-                String displayMeta = date.isEmpty()
-                    ? place
-                    : place.isEmpty() ? date : date + " · " + place;
-                if (!displayMeta.isEmpty()) {
-                    drawFittedSingleLine(
-                        canvas,
-                        displayMeta,
-                        metaLeft,
-                        bottomBaseline,
-                        metaWidth);
-                }
+            float iconSize = (compactCards ? 10.5f : 12.5f) * textScale;
+            float iconGap = 5f * textScale;
+            float metaTextLeft = metaLeft + iconSize + iconGap;
+            float metaTextWidth = Math.max(1f, metaWidth - iconSize - iconGap);
+            if (!date.isEmpty() && !place.isEmpty()) {
+                float dateBaseline = bottomBaseline - 19f * textScale;
+                drawCalendarMetaIcon(canvas, metaLeft, dateBaseline, iconSize);
+                drawFittedSingleLine(canvas, date, metaTextLeft, dateBaseline, metaTextWidth);
+                drawLocationMetaIcon(canvas, metaLeft, bottomBaseline, iconSize);
+                drawFittedSingleLine(canvas, place, metaTextLeft, bottomBaseline, metaTextWidth);
+            } else if (!date.isEmpty()) {
+                drawCalendarMetaIcon(canvas, metaLeft, bottomBaseline, iconSize);
+                drawFittedSingleLine(canvas, date, metaTextLeft, bottomBaseline, metaTextWidth);
+            } else if (!place.isEmpty()) {
+                drawLocationMetaIcon(canvas, metaLeft, bottomBaseline, iconSize);
+                drawFittedSingleLine(canvas, place, metaTextLeft, bottomBaseline, metaTextWidth);
             }
         }
+        if (!exportMode) drawQualityIndicator(canvas, person, left, top, width, height);
+    }
+
+    private void drawQualityIndicator(
+        Canvas canvas,
+        Person person,
+        float left,
+        float top,
+        float width,
+        float height
+    ) {
+        TreeQualityAnalyzer.PersonReport report = qualityReports.get(person.id);
+        if (report == null) return;
+        int severity = report.topSeverity();
+        int color = severity == TreeQualityAnalyzer.ERROR
+            ? Color.rgb(211, 73, 67)
+            : severity == TreeQualityAnalyzer.WARNING
+                ? Color.rgb(224, 162, 38)
+                : severity == TreeQualityAnalyzer.RECOMMENDATION
+                    ? Color.rgb(126, 137, 145)
+                    : Color.rgb(24, 169, 153);
+        // Keep the badge proportional to the card. A screen-fixed badge overwhelms
+        // small cards when the complete tree is fitted on screen.
+        float diameter = Math.max(1f, 22f * scale);
+        float inset = 10f * scale;
+        float cx = left + width - inset - diameter / 2f;
+        float cy = top + height - inset - diameter / 2f;
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.argb(232, 255, 255, 255));
+        canvas.drawCircle(cx, cy, diameter / 2f + Math.max(0.35f, 1.8f * scale), paint);
+        paint.setColor(color);
+        canvas.drawCircle(cx, cy, diameter / 2f, paint);
+        if (diameter < 7f) return;
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTypeface(uiBold);
+        textPaint.setFakeBoldText(true);
+        textPaint.setTextSize(diameter * 0.62f);
+        textPaint.setColor(Color.WHITE);
+        Paint.FontMetrics metrics = textPaint.getFontMetrics();
+        String marker = severity == 0 ? "✓" : severity == TreeQualityAnalyzer.RECOMMENDATION ? "i" : "!";
+        canvas.drawText(marker, cx, cy - (metrics.ascent + metrics.descent) / 2f, textPaint);
+        textPaint.setTextAlign(Paint.Align.LEFT);
+    }
+
+    private static String edgeKey(String first, String second) {
+        String a = first == null ? "" : first;
+        String b = second == null ? "" : second;
+        return a.compareTo(b) <= 0 ? a + "\u0000" + b : b + "\u0000" + a;
+    }
+
+    private void drawCalendarMetaIcon(Canvas canvas, float left, float baseline, float size) {
+        float top = baseline - size * 0.86f;
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(1f, size * 0.12f));
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setColor(textPaint.getColor());
+        RectF body = new RectF(left, top + size * 0.16f, left + size, top + size);
+        canvas.drawRoundRect(body, size * 0.15f, size * 0.15f, paint);
+        canvas.drawLine(left + size * 0.24f, top, left + size * 0.24f, top + size * 0.34f, paint);
+        canvas.drawLine(left + size * 0.76f, top, left + size * 0.76f, top + size * 0.34f, paint);
+        canvas.drawLine(left, top + size * 0.43f, left + size, top + size * 0.43f, paint);
+        paint.setStrokeCap(Paint.Cap.BUTT);
+    }
+
+    private void drawLocationMetaIcon(Canvas canvas, float left, float baseline, float size) {
+        float cx = left + size / 2f;
+        float top = baseline - size * 0.96f;
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(1f, size * 0.12f));
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setColor(textPaint.getColor());
+        linkPathScratch.reset();
+        linkPathScratch.moveTo(cx, top + size);
+        linkPathScratch.cubicTo(
+            left + size * 0.12f, top + size * 0.58f,
+            left + size * 0.16f, top + size * 0.08f,
+            cx, top + size * 0.08f);
+        linkPathScratch.cubicTo(
+            left + size * 0.84f, top + size * 0.08f,
+            left + size * 0.88f, top + size * 0.58f,
+            cx, top + size);
+        canvas.drawPath(linkPathScratch, paint);
+        canvas.drawCircle(cx, top + size * 0.39f, size * 0.13f, paint);
+        paint.setStrokeCap(Paint.Cap.BUTT);
     }
 
     private int adjustForSelection(Person person) {
         if (selectedIds.contains(person.id)) return blend(person.color, Color.rgb(27, 117, 255), 0.16f);
         if (!person.id.equals(state.selectedId)) return person.color;
-        return blend(person.color, Color.WHITE, 0.18f);
+        return blend(blend(person.color, Color.WHITE, 0.16f), Color.rgb(24, 169, 153), 0.18f);
     }
 
     private String dateMeta(Person person) {
@@ -735,8 +975,13 @@ final class TreeCanvasView extends View {
         int age = age(person);
         String ageText = age < 0 ? "" : " (" + ageLabel(age) + ")";
         if (!born.isEmpty() && !died.isEmpty()) return born + " - " + died + ageText;
-        if (!born.isEmpty()) return "Род. " + born + ageText;
-        if (!died.isEmpty()) return "Ум. " + died;
+        if (!born.isEmpty()) {
+            return (AppLanguage.isEnglish(getContext()) ? "Born " : "Род. ")
+                + born + ageText;
+        }
+        if (!died.isEmpty()) {
+            return (AppLanguage.isEnglish(getContext()) ? "Died " : "Ум. ") + died;
+        }
         return "";
     }
 
@@ -769,6 +1014,9 @@ final class TreeCanvasView extends View {
     }
 
     private String ageLabel(int age) {
+        if (AppLanguage.isEnglish(getContext())) {
+            return age + (age == 1 ? " year" : " years");
+        }
         int mod100 = age % 100;
         int mod10 = age % 10;
         if (mod100 >= 11 && mod100 <= 14) return age + " лет";
@@ -945,8 +1193,46 @@ final class TreeCanvasView extends View {
         String[] lines = nameLines(value, maxWidth);
         float lineHeight = Math.max(13f * textScale, textPaint.getTextSize() * 1.14f);
         for (int i = 0; i < lines.length; i++) {
-            drawSingleLine(canvas, lines[i], x, baseline + i * lineHeight, maxWidth);
+            drawSingleLine(
+                canvas,
+                ellipsizeName(lines[i], maxWidth),
+                x,
+                baseline + i * lineHeight,
+                maxWidth);
         }
+    }
+
+    private String ellipsize(String value, float maxWidth) {
+        String text = value == null ? "" : value.trim();
+        if (text.isEmpty() || maxWidth <= 0f || textPaint.measureText(text) <= maxWidth) return text;
+        String suffix = "…";
+        float suffixWidth = textPaint.measureText(suffix);
+        if (suffixWidth >= maxWidth) return suffix;
+        int low = 0;
+        int high = text.length();
+        while (low < high) {
+            int middle = (low + high + 1) / 2;
+            if (textPaint.measureText(text, 0, middle) + suffixWidth <= maxWidth) low = middle;
+            else high = middle - 1;
+        }
+        while (low > 0 && Character.isHighSurrogate(text.charAt(low - 1))) low--;
+        return text.substring(0, low).trim() + suffix;
+    }
+
+    private String ellipsizeName(String value, float maxWidth) {
+        String text = value == null ? "" : value.trim();
+        if (text.isEmpty()) return text;
+        float stableScale = Math.max(0.001f, scale);
+        int widthKey = Math.round(maxWidth / stableScale);
+        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + text + '\u0000' + widthKey;
+        String cached = nameEllipsisCache.get(cacheKey);
+        if (cached != null) return cached;
+        float originalTextSize = textPaint.getTextSize();
+        textPaint.setTextSize(compactCards ? 15.5f : 18.5f);
+        String result = ellipsize(text, maxWidth / stableScale);
+        textPaint.setTextSize(originalTextSize);
+        nameEllipsisCache.put(cacheKey, result);
+        return result;
     }
 
     private void drawFittedSingleLine(Canvas canvas, String text, float x, float baseline, float maxWidth) {
@@ -962,37 +1248,68 @@ final class TreeCanvasView extends View {
     }
 
     private float cardTextScale() {
-        return Math.max(0.08f, scale);
+        return scale;
     }
 
     private String[] nameLines(String value, float maxWidth) {
         int widthKey = Math.round(maxWidth / Math.max(0.001f, scale));
-        String cacheKey = value + '\u0000' + widthKey;
+        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + value + '\u0000' + widthKey;
         String[] cached = nameLinesCache.get(cacheKey);
         if (cached != null) return cached;
         float originalTextSize = textPaint.getTextSize();
-        textPaint.setTextSize(17f);
+        textPaint.setTextSize(compactCards ? 15.5f : 18.5f);
         float stableMaxWidth = maxWidth / Math.max(0.001f, scale);
-        String[] words = value.trim().split("\\s+");
         List<String> lines = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        for (int i = 0; i < words.length; i++) {
-            String candidate = current.length() == 0 ? words[i] : current + " " + words[i];
-            if (current.length() == 0 || textPaint.measureText(candidate) <= stableMaxWidth || lines.size() >= 2) {
-                if (current.length() > 0) current.append(' ');
-                current.append(words[i]);
-            } else {
-                lines.add(current.toString());
-                current.setLength(0);
-                current.append(words[i]);
+        if (!compactCards) {
+            lines.addAll(nameParts(value));
+        } else {
+            String[] words = value.trim().split("\\s+");
+            StringBuilder current = new StringBuilder();
+            for (String word : words) {
+                String candidate = current.length() == 0 ? word : current + " " + word;
+                if (current.length() == 0 || textPaint.measureText(candidate) <= stableMaxWidth || lines.size() >= 2) {
+                    if (current.length() > 0) current.append(' ');
+                    current.append(word);
+                } else {
+                    lines.add(current.toString());
+                    current.setLength(0);
+                    current.append(word);
+                }
             }
+            if (current.length() > 0) lines.add(current.toString());
         }
-        if (current.length() > 0) lines.add(current.toString());
         if (lines.isEmpty()) lines.add(value);
         textPaint.setTextSize(originalTextSize);
-        String[] result = lines.subList(0, Math.min(3, lines.size())).toArray(new String[0]);
+        int limit = compactCards ? 3 : 4;
+        String[] result = lines.subList(0, Math.min(limit, lines.size())).toArray(new String[0]);
         nameLinesCache.put(cacheKey, result);
         return result;
+    }
+
+    private List<String> nameParts(String value) {
+        List<String> parts = new ArrayList<>();
+        String[] words = value.trim().split("\\s+");
+        StringBuilder current = new StringBuilder();
+        int parenthesesDepth = 0;
+        for (String word : words) {
+            boolean startsParentheses = word.indexOf('(') >= 0;
+            if (current.length() == 0) {
+                current.append(word);
+            } else if (parenthesesDepth > 0 || startsParentheses) {
+                current.append(' ').append(word);
+            } else {
+                parts.add(current.toString());
+                current.setLength(0);
+                current.append(word);
+            }
+            for (int index = 0; index < word.length(); index++) {
+                char character = word.charAt(index);
+                if (character == '(') parenthesesDepth++;
+                else if (character == ')' && parenthesesDepth > 0) parenthesesDepth--;
+            }
+        }
+        if (current.length() > 0) parts.add(current.toString());
+        return parts;
     }
 
     private String joinWords(String[] words, int from, int to) {
@@ -1200,7 +1517,10 @@ final class TreeCanvasView extends View {
         float y = wy(screenY);
         PointF start = selectionPoints.isEmpty() ? new PointF(x, y) : selectionPoints.get(0);
         if ("lasso".equals(selectionMode)) {
-            selectionRect.union(x, y);
+            selectionRect.left = Math.min(selectionRect.left, x);
+            selectionRect.top = Math.min(selectionRect.top, y);
+            selectionRect.right = Math.max(selectionRect.right, x);
+            selectionRect.bottom = Math.max(selectionRect.bottom, y);
             selectionPoints.add(new PointF(x, y));
         } else {
             selectionRect.set(Math.min(start.x, x), Math.min(start.y, y), Math.max(start.x, x), Math.max(start.y, y));
@@ -1378,7 +1698,11 @@ final class TreeCanvasView extends View {
         for (int i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
             PointF pi = polygon.get(i);
             PointF pj = polygon.get(j);
-            boolean intersects = ((pi.y > y) != (pj.y > y)) && (x < (pj.x - pi.x) * (y - pi.y) / Math.max(0.0001f, pj.y - pi.y) + pi.x);
+            // The crossing condition guarantees a non-zero denominator. Keeping its
+            // sign is essential: replacing a negative delta with a positive epsilon
+            // makes descending lasso edges classify most enclosed cards as outside.
+            boolean intersects = ((pi.y > y) != (pj.y > y))
+                && (x < (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y) + pi.x);
             if (intersects) inside = !inside;
         }
         return inside;
@@ -1485,8 +1809,8 @@ final class TreeCanvasView extends View {
             PointF start = dragStartPositions.get(id);
             Person person = state.people.get(id);
             if (start == null || person == null || person.pinned) continue;
-            person.x = clamp(start.x + dx, 0f, TreeLayoutEngine.SURFACE_W - cardWidthWorld());
-            person.y = clamp(start.y + dy, 0f, TreeLayoutEngine.SURFACE_H - cardHeightWorld());
+            person.x = clamp(start.x + dx, 0f, workspaceWidth - cardWidthWorld());
+            person.y = clamp(start.y + dy, 0f, workspaceHeight - cardHeightWorld());
         }
     }
 
@@ -1513,7 +1837,9 @@ final class TreeCanvasView extends View {
             if (commit && moved && listener != null && !after.isEmpty()) {
                 Person primary = state.people.get(dragPersonId);
                 String detail = primary == null || primary.name == null || primary.name.isEmpty()
-                    ? (after.size() == 1 ? "Без имени" : after.size() + " карточек")
+                    ? (after.size() == 1
+                        ? AppLanguage.text(getContext(), "Без имени")
+                        : after.size() + " " + AppLanguage.text(getContext(), "карточек"))
                     : primary.name;
                 listener.onPeopleMoved(new HashMap<>(dragStartPositions), after, detail);
                 listener.onTreeChanged();
@@ -1668,25 +1994,25 @@ final class TreeCanvasView extends View {
     }
 
     private float cardWidthWorld() {
-        return compactCards ? TreeLayoutEngine.GRID * 6f : TreeLayoutEngine.CARD_W;
+        return compactCards ? TreeLayoutEngine.GRID * 5f : TreeLayoutEngine.CARD_W;
     }
 
     private float cardHeightWorld() {
-        return compactCards ? TreeLayoutEngine.GRID * 2.5f : TreeLayoutEngine.CARD_H;
+        return compactCards ? TreeLayoutEngine.GRID * 3f : TreeLayoutEngine.CARD_H;
     }
 
     private float snapPersonX(float value) {
         return clamp(
             TreeLayoutEngine.snap(value),
             0f,
-            TreeLayoutEngine.SURFACE_W - cardWidthWorld());
+            workspaceWidth - cardWidthWorld());
     }
 
     private float snapPersonY(float value) {
         return clamp(
             TreeLayoutEngine.snap(value),
             0f,
-            TreeLayoutEngine.SURFACE_H - cardHeightWorld());
+            workspaceHeight - cardHeightWorld());
     }
 
     private static int blend(int a, int b, float amount) {

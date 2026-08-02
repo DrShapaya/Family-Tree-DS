@@ -1,9 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#087A73"
-        android:pathData="m12 5.83 2.46 2.46a.996.996 0 1 0 1.41-1.41L12.7 3.7a.996.996 0 0 0-1.41 0L8.12 6.88a.996.996 0 1 0 1.41 1.41L12 5.83zm0 12.34-2.46-2.46a.996.996 0 1 0-1.41 1.41l3.17 3.18c.39.39 1.02.39 1.41 0l3.17-3.17a.996.996 0 1 0-1.41-1.41L12 18.17z" />
+<!-- Lucide: expand (ISC). Exact official geometry. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@android:color/transparent" android:pathData="M15,15L21,21M15,9L21,3M21,16V21H16M21,8V3H16M3,16V21H8M3,21L9,15M3,8V3H8M9,9L3,3" android:strokeColor="#087A73" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2" />
 </vector>

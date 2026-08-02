@@ -3,6 +3,7 @@ package ru.drshapaya.androidft2;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ClipData;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.database.Cursor;
@@ -14,6 +15,7 @@ import android.graphics.pdf.PdfDocument;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.provider.OpenableColumns;
+import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -624,7 +626,7 @@ final class MainActivityFiles {
     }
 
     private TextView versionText(String value, int size, int color, boolean bold) {
-        TextView text = new TextView(activity);
+        TextView text = new LocalizedTextView(activity);
         text.setText(value);
         text.setTextSize(size);
         text.setTextColor(color);
@@ -639,7 +641,8 @@ final class MainActivityFiles {
 
     void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null) return;
-        if (requestCode == MainActivity.REQ_MEMORY_FILE) {
+        if (requestCode == MainActivity.REQ_MEMORY_FILE
+            || requestCode == MainActivity.REQ_MEMORY_PHOTO) {
             List<Uri> uris = new ArrayList<>();
             ClipData clipData = data.getClipData();
             if (clipData != null) {
@@ -712,10 +715,101 @@ final class MainActivityFiles {
     }
 
     void openPhotoPicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("image/*");
+        Intent intent;
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            intent = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            intent.setType("image/*");
+        } else {
+            intent = new Intent(
+                Intent.ACTION_PICK,
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            intent.setType("image/*");
+        }
         activity.startActivityForResult(intent, MainActivity.REQ_PHOTO);
+    }
+
+    void savePreviewPhotoToGallery() {
+        String mediaId = activity.pendingPreviewPhotoMediaId;
+        String dataUrl = activity.pendingPreviewPhotoDataUrl;
+        activity.pendingPreviewPhotoMediaId = "";
+        activity.pendingPreviewPhotoDataUrl = "";
+        if (mediaId.isEmpty() && dataUrl.isEmpty()) return;
+        String extension = photoExtension(mediaId, dataUrl);
+        String mime = "png".equals(extension)
+            ? "image/png"
+            : "webp".equals(extension) ? "image/webp" : "image/jpeg";
+        String filename = "AndroidFT_photo_" + dateStamp() + "." + extension;
+        new Thread(() -> {
+            Uri destination = null;
+            try {
+                ContentValues values = new ContentValues();
+                values.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename);
+                values.put(android.provider.MediaStore.Images.Media.MIME_TYPE, mime);
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    values.put(
+                        android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                        android.os.Environment.DIRECTORY_PICTURES + "/AndroidFT");
+                    values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 1);
+                } else {
+                    File directory = new File(
+                        android.os.Environment.getExternalStoragePublicDirectory(
+                            android.os.Environment.DIRECTORY_PICTURES),
+                        "AndroidFT");
+                    if (!directory.isDirectory() && !directory.mkdirs()) {
+                        throw new IOException("Не удалось создать папку AndroidFT");
+                    }
+                    values.put(
+                        android.provider.MediaStore.Images.Media.DATA,
+                        new File(directory, filename).getAbsolutePath());
+                }
+                destination = activity.getContentResolver().insert(
+                    android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    values);
+                if (destination == null) throw new IOException("Галерея недоступна");
+                try (OutputStream output = activity.getContentResolver().openOutputStream(destination)) {
+                    if (output == null) throw new IOException("Не удалось открыть фото");
+                    if (!mediaId.isEmpty()) {
+                        activity.store.mediaStore().copyTo(mediaId, output);
+                    } else {
+                        int comma = dataUrl.indexOf(',');
+                        if (comma < 0 || comma + 1 >= dataUrl.length()) throw new IOException("Фото повреждено");
+                        byte[] bytes = Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT);
+                        output.write(bytes);
+                    }
+                    output.flush();
+                }
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    ContentValues ready = new ContentValues();
+                    ready.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0);
+                    activity.getContentResolver().update(destination, ready, null, null);
+                }
+                activity.runOnUiThread(() -> activity.toast("Фото сохранено в галерею без потери качества"));
+            } catch (Exception error) {
+                if (destination != null) {
+                    try {
+                        activity.getContentResolver().delete(destination, null, null);
+                    } catch (RuntimeException ignored) {}
+                }
+                DiagnosticsLogger.handled(activity, "photo.gallery", error);
+                activity.runOnUiThread(() -> activity.toast("Фото не сохранено: " + error.getMessage()));
+            }
+        }, "photo-gallery-export").start();
+    }
+
+    private static String photoExtension(String mediaId, String dataUrl) {
+        String source = mediaId == null ? "" : mediaId.trim().toLowerCase(Locale.ROOT);
+        int dot = source.lastIndexOf('.');
+        if (dot >= 0 && dot + 1 < source.length()) {
+            String candidate = source.substring(dot + 1);
+            if ("png".equals(candidate) || "webp".equals(candidate)
+                || "jpg".equals(candidate) || "jpeg".equals(candidate)) {
+                return "jpeg".equals(candidate) ? "jpg" : candidate;
+            }
+        }
+        String legacy = dataUrl == null ? "" : dataUrl.trim().toLowerCase(Locale.ROOT);
+        if (legacy.startsWith("data:image/png")) return "png";
+        if (legacy.startsWith("data:image/webp")) return "webp";
+        return "jpg";
     }
 
     void openMemoryFilePicker() {
@@ -724,6 +818,20 @@ final class MainActivityFiles {
         intent.setType("*/*");
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         activity.startActivityForResult(intent, MainActivity.REQ_MEMORY_FILE);
+    }
+
+    void openMemoryPhotoPicker() {
+        Intent intent;
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            intent = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES);
+            intent.setType("image/*");
+        } else {
+            intent = new Intent(
+                Intent.ACTION_PICK,
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            intent.setType("image/*");
+        }
+        activity.startActivityForResult(intent, MainActivity.REQ_MEMORY_PHOTO);
     }
 
     void importPhotoFromUri(Uri uri) {
@@ -953,6 +1061,7 @@ final class MainActivityFiles {
         float pageWorldHeight = contentHeight / renderScale;
 
         TreeDocumentRenderer renderer = new TreeDocumentRenderer(
+            activity,
             exportState,
             activity.store.mediaStore());
         RectF bounds = renderer.bounds();
@@ -991,7 +1100,9 @@ final class MainActivityFiles {
                     renderer.render(page.getCanvas(), world, target, renderScale, monochrome);
                     String caption = "AndroidFT " + MainActivity.VERSION_NAME
                         + " · " + number + "/" + pageCount
-                        + " · ряд " + (row + 1) + ", колонка " + (column + 1);
+                        + (AppLanguage.isEnglish(activity)
+                            ? " · row " + (row + 1) + ", column " + (column + 1)
+                            : " · ряд " + (row + 1) + ", колонка " + (column + 1));
                     page.getCanvas().drawText(
                         caption,
                         margin,
@@ -1043,6 +1154,7 @@ final class MainActivityFiles {
         int safeTileSize = tileSize >= 3072 ? 3072 : 2048;
         float tileWorld = safeTileSize / renderScale;
         TreeDocumentRenderer renderer = new TreeDocumentRenderer(
+            activity,
             exportState,
             activity.store.mediaStore());
         RectF bounds = renderer.bounds();
@@ -1207,12 +1319,14 @@ final class MainActivityFiles {
             Uri uri = TreeShareProvider.uriFor(filename);
             Intent send = new Intent(Intent.ACTION_SEND);
             send.setType("application/json");
-            send.putExtra(Intent.EXTRA_SUBJECT, "Семейное древо (JSON)");
+            send.putExtra(Intent.EXTRA_SUBJECT, activity.tr("Семейное древо (JSON)"));
             send.putExtra(Intent.EXTRA_TITLE, filename);
             send.putExtra(Intent.EXTRA_STREAM, uri);
             send.setClipData(ClipData.newRawUri(filename, uri));
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            activity.startActivity(Intent.createChooser(send, "Поделиться деревом (JSON)"));
+            activity.startActivity(Intent.createChooser(
+                send,
+                activity.tr("Поделиться деревом (JSON)")));
         } catch (Exception error) {
             activity.toast("Не удалось поделиться: " + error.getMessage());
         }
@@ -1241,12 +1355,16 @@ final class MainActivityFiles {
                     Uri uri = TreeShareProvider.uriFor(filename);
                     Intent send = new Intent(Intent.ACTION_SEND);
                     send.setType(TreePackageIO.MIME_TYPE);
-                    send.putExtra(Intent.EXTRA_SUBJECT, "Семейное древо FamilyTree");
+                    send.putExtra(
+                        Intent.EXTRA_SUBJECT,
+                        activity.tr("Семейное древо FamilyTree"));
                     send.putExtra(Intent.EXTRA_TITLE, filename);
                     send.putExtra(Intent.EXTRA_STREAM, uri);
                     send.setClipData(ClipData.newRawUri(filename, uri));
                     send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    activity.startActivity(Intent.createChooser(send, "Поделиться деревом"));
+                    activity.startActivity(Intent.createChooser(
+                        send,
+                        activity.tr("Поделиться деревом")));
                 });
             } catch (Exception error) {
                 activity.runOnUiThread(() ->

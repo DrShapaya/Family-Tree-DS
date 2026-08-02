@@ -17,9 +17,12 @@ final class MainActivityPanels {
         }
         if (activity.treeView != null) activity.treeView.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
         if (activity.zoomRail != null) activity.zoomRail.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
-        if (activity.addPersonButton != null) activity.addPersonButton.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
+        activity.updateAddPersonButtonVisibility();
         if (activity.treeHint != null) {
-            activity.treeHint.setVisibility(settingsTab || activity.focusTree ? View.GONE : View.VISIBLE);
+            activity.treeHint.setVisibility(
+                settingsTab || activity.focusTree || activity.treeHintDismissed
+                    ? View.GONE
+                    : View.VISIBLE);
         }
         if ("guides".equals(activity.activePanel)) activity.refreshGuidePanelIfVisible();
         if (activity.cardPanel != null) activity.cardPanel.setVisibility("card".equals(activity.activePanel) ? View.VISIBLE : View.GONE);

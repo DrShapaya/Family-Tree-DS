@@ -3,7 +3,12 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- Lucide Folder Open, ISC License. Official path. -->
     <path
-        android:fillColor="#087A73"
-        android:pathData="M10.59 4.59C10.21 4.21 9.7 4 9.17 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-1.41-1.41z" />
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,14 L7.5,11.1A2,2 0,0 1,9.24 10H20A2,2 0,0 1,21.94 12.5L20.4,18.5A2,2 0,0 1,18.45 20H4A2,2 0,0 1,2 18V5A2,2 0,0 1,4 3H7.9A2,2 0,0 1,9.59 3.9L10.4,5.1A2,2 0,0 0,12.07 6H18A2,2 0,0 1,20 8V10"
+        android:strokeColor="#087A73"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
 </vector>

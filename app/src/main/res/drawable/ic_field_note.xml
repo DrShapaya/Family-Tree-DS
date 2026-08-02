@@ -1,9 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="22dp"
-    android:height="22dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#087A73"
-        android:pathData="M14,2H6c-1.1,0 -2,0.9 -2,2v16c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V8l-6,-6zM13,9V3.5L18.5,9H13zM8,13h8v2H8v-2zM8,17h6v2H8v-2z" />
+<!-- Lucide: notebook-pen (ISC). Exact official geometry. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@android:color/transparent" android:pathData="M13.4,2H6A2,2 0,0 0,4 4V20A2,2 0,0 0,6 22H18A2,2 0,0 0,20 20V12.6M2,6H6M2,10H6M2,14H6M2,18H6M21.378,5.626a1,1 0,1 0,-3.004,-3.004l-5.01,5.012a2,2 0,0 0,-0.506,0.854l-0.837,2.87a0.5,0.5 0,0 0,0.62 0.62l2.87,-0.837a2,2 0,0 0,0.854,-0.506z" android:strokeColor="#087A73" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2" />
 </vector>

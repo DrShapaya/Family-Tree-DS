@@ -261,7 +261,7 @@ final class MainActivityEditor {
 
         EditText name = field("");
         name.setSingleLine(true);
-        name.setText(person.name);
+        LocalizedViews.setRaw(name, person.name);
         styleEditorField(name, R.drawable.ic_field_person);
         profileForm.addView(labeledEditor("Имя", name), editorBlockParams());
 
@@ -291,7 +291,7 @@ final class MainActivityEditor {
 
         EditText place = field("город, страна");
         place.setSingleLine(true);
-        place.setText(person.place);
+        LocalizedViews.setRaw(place, person.place);
         styleEditorField(place, R.drawable.ic_field_location);
         profileForm.addView(labeledEditor("Место", place), editorBlockParams());
 
@@ -300,7 +300,7 @@ final class MainActivityEditor {
         notes.setGravity(Gravity.TOP);
         styleEditorField(notes, R.drawable.ic_field_note);
         notes.setPadding(dp(14), dp(12), dp(14), dp(12));
-        notes.setText(person.notes);
+        LocalizedViews.setRaw(notes, person.notes);
         profileForm.addView(labeledEditor("Заметки", notes), editorBlockParams());
 
         memoryForm.addView(editorSectionHeading(
@@ -343,8 +343,28 @@ final class MainActivityEditor {
         memoryFile.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_upload, 0, 0, 0);
         memoryFile.setCompoundDrawablePadding(dp(7));
         tintDrawables(memoryFile, Color.rgb(8, 122, 115));
-        memoryActions.addView(memoryFile, new LinearLayout.LayoutParams(0, dp(48), 0.72f));
-        Button addMemory = actionButton("Сохранить запись", v -> {
+        memoryFile.setSingleLine(true);
+        memoryFile.setTextSize(11);
+        memoryActions.addView(memoryFile, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        Button memoryPhoto = actionButton("Фото", v -> {
+            if (activity.editingBlocked()) return;
+            activity.pendingMemoryPersonId = person.id;
+            activity.openMemoryPhotoPicker();
+        });
+        memoryPhoto.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_image, 0, 0, 0);
+        memoryPhoto.setCompoundDrawablePadding(dp(6));
+        memoryPhoto.setSingleLine(true);
+        memoryPhoto.setTextSize(11);
+        memoryPhoto.setTextColor(Color.rgb(8, 122, 115));
+        memoryPhoto.setBackground(panelBg(
+            Color.rgb(232, 248, 246),
+            dp(10),
+            Color.argb(92, 24, 169, 153)));
+        tintDrawables(memoryPhoto, Color.rgb(8, 122, 115));
+        LinearLayout.LayoutParams memoryPhotoParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        memoryPhotoParams.setMargins(dp(8), 0, 0, 0);
+        memoryActions.addView(memoryPhoto, memoryPhotoParams);
+        Button addMemory = actionButton("Сохранить", v -> {
             if (activity.editingBlocked()
                 || (text(memoryTitle).isEmpty()
                     && text(memoryText).isEmpty()
@@ -352,7 +372,9 @@ final class MainActivityEditor {
             recordUndo("Сохранена запись памяти", person.name);
             Memory memory = new Memory();
             memory.id = "m_" + java.util.UUID.randomUUID().toString().replace("-", "");
-            memory.title = text(memoryTitle).isEmpty() ? "Воспоминание" : text(memoryTitle);
+            memory.title = text(memoryTitle).isEmpty()
+                ? activity.tr("Воспоминание")
+                : text(memoryTitle);
             memory.text = text(memoryText);
             memory.at = String.valueOf(System.currentTimeMillis());
             memory.attachments.addAll(currentMemoryDraftAttachments);
@@ -366,8 +388,9 @@ final class MainActivityEditor {
         addMemory.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_note_add, 0, 0, 0);
         addMemory.setCompoundDrawablePadding(dp(7));
         addMemory.setTextSize(11);
+        addMemory.setSingleLine(true);
         tintDrawables(addMemory, Color.rgb(8, 122, 115));
-        LinearLayout.LayoutParams addMemoryParams = new LinearLayout.LayoutParams(0, dp(48), 1.28f);
+        LinearLayout.LayoutParams addMemoryParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
         addMemoryParams.setMargins(dp(8), 0, 0, 0);
         memoryActions.addView(addMemory, addMemoryParams);
         memoryPanel.addView(memoryActions, formFieldParams());
@@ -387,9 +410,9 @@ final class MainActivityEditor {
         colorControl.setGravity(Gravity.CENTER_VERTICAL);
         HueSliderView cardColorSlider = new HueSliderView(activity);
         cardColorSlider.setColor(TreeState.displayColor(person, activity.state.people.size()));
-        TextView cardColorPreview = new TextView(activity);
-        cardColorPreview.setContentDescription("Выбранный цвет карточки");
-        cardColorPreview.setBackground(panelBg(cardColorSlider.color(), dp(999), Color.argb(72, 28, 34, 38)));
+        TextView cardColorPreview = new LocalizedTextView(activity);
+        cardColorPreview.setContentDescription(activity.tr("Выбранный цвет карточки"));
+        cardColorPreview.setBackground(colorSwatchBg(cardColorSlider.color(), dp(999)));
         colorControl.addView(cardColorSlider, new LinearLayout.LayoutParams(0, dp(48), 1));
         LinearLayout.LayoutParams colorPreviewParams = new LinearLayout.LayoutParams(dp(38), dp(38));
         colorPreviewParams.setMargins(dp(8), 0, 0, 0);
@@ -406,7 +429,7 @@ final class MainActivityEditor {
             person.colorMode = "manual";
             person.manualColor = TreeState.colorString(color);
             person.color = color;
-            cardColorPreview.setBackground(panelBg(color, dp(999), Color.argb(72, 28, 34, 38)));
+            cardColorPreview.setBackground(colorSwatchBg(color, dp(999)));
             avatar.setBackground(ovalBg(color, Color.WHITE, 3));
             saveOnly();
             activity.treeView.invalidate();
@@ -418,21 +441,40 @@ final class MainActivityEditor {
             person.colorMode = "auto-name";
             person.color = TreeState.displayColor(person, activity.state.people.size());
             cardColorSlider.setColor(person.color);
-            cardColorPreview.setBackground(panelBg(person.color, dp(999), Color.argb(72, 28, 34, 38)));
+            cardColorPreview.setBackground(colorSwatchBg(person.color, dp(999)));
             avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
             saveOnly();
             activity.treeView.invalidate();
         });
         colorPanel.addView(automaticColor, formFieldParams());
+
+        Button surnameColor = actionButton("Вернуть цвет по фамилии", v -> {
+            if (activity.editingBlocked()) return;
+            recordUndo("Восстановлен цвет по фамилии", person.name);
+            person.colorMode = "auto-surname";
+            person.color = TreeState.displayColor(person, activity.state.people.size());
+            cardColorSlider.setColor(person.color);
+            cardColorPreview.setBackground(colorSwatchBg(person.color, dp(999)));
+            avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
+            saveOnly();
+            activity.treeView.invalidate();
+        });
+        surnameColor.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_family_color, 0, 0, 0);
+        surnameColor.setCompoundDrawablePadding(dp(8));
+        tintDrawables(surnameColor, Color.rgb(8, 122, 115));
+        colorPanel.addView(surnameColor, formFieldParams());
         profileForm.addView(colorPanel, editorBlockParams());
 
-        CheckBox pinned = new CheckBox(activity);
+        CheckBox pinned = new LocalizedCheckBox(activity);
         pinned.setText("Закрепить карточку");
         pinned.setTextSize(13);
         pinned.setTypeface(uiBold());
         pinned.setTextColor(Color.rgb(28, 34, 38));
         pinned.setChecked(person.pinned);
         pinned.setPadding(dp(10), 0, dp(10), 0);
+        pinned.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_pin, 0, 0, 0);
+        pinned.setCompoundDrawablePadding(dp(9));
+        tintDrawables(pinned, Color.rgb(8, 122, 115));
         pinned.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
         profileForm.addView(pinned, editorSwitchParams());
 
@@ -477,7 +519,27 @@ final class MainActivityEditor {
         relationsForm.addView(kinshipPanel, editorBlockParams());
 
         LinearLayout validationPanel = editorSectionPanel("ЧТО МОЖНО ДОПОЛНИТЬ");
-        addPersonValidation(validationPanel, person);
+        TextView validationHint = editorText(
+            "Небольшие шаги, которые сделают семейную карточку полнее",
+            11,
+            Color.rgb(83, 94, 103),
+            false);
+        validationHint.setSingleLine(false);
+        validationHint.setMaxLines(2);
+        validationHint.setPadding(0, 0, 0, dp(8));
+        validationPanel.addView(validationHint, new LinearLayout.LayoutParams(-1, -2));
+        addPersonValidation(
+            validationPanel,
+            person,
+            dialog,
+            pages,
+            tabViews,
+            profileScroll,
+            memoryScroll,
+            avatar,
+            bornYear,
+            place,
+            memoryTitle);
         relationsForm.addView(validationPanel, editorBlockParams());
 
         Button delete = actionButton("Удалить человека", v -> {
@@ -519,16 +581,21 @@ final class MainActivityEditor {
                 person.color = TreeState.displayColor(person, activity.state.people.size());
                 if (!"manual".equals(person.colorMode)) {
                     cardColorSlider.setColor(person.color);
-                    cardColorPreview.setBackground(panelBg(person.color, dp(999), Color.argb(72, 28, 34, 38)));
+                    cardColorPreview.setBackground(colorSwatchBg(person.color, dp(999)));
                 }
-                title.setText(person.name.isEmpty() ? "Без имени" : person.name);
-                initials.setText(initials(person.name));
+                if (person.name.isEmpty()) {
+                    title.setText("Без имени");
+                } else {
+                    LocalizedViews.setRaw(title, person.name);
+                }
+                LocalizedViews.setRaw(initials, initials(person.name));
                 avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
                 ageValue.setText(editorAgeLabel(person));
                 birthdayValue.setText(editorBirthdayLabel(person));
                 saveOnly();
                 activity.treeView.invalidate();
                 updateStats();
+                activity.refreshTreeQuality();
             }
             @Override public void afterTextChanged(Editable s) {}
         };
@@ -647,7 +714,7 @@ final class MainActivityEditor {
             pill.addView(name, new LinearLayout.LayoutParams(0, -1, 1));
 
             TextView close = attachmentCloseButton();
-            close.setContentDescription("Убрать файл из черновика");
+            close.setContentDescription(activity.tr("Убрать файл из черновика"));
             close.setOnClickListener(v -> {
                 currentMemoryDraftAttachments.remove(attachment);
                 renderMemoryDraft();
@@ -749,7 +816,7 @@ final class MainActivityEditor {
         iconPlate.setBackground(panelBg(Color.rgb(232, 248, 246), dp(10), Color.argb(62, 24, 169, 153)));
         ImageView icon = new ImageView(activity);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
         FrameLayout.LayoutParams iconParams = new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER);
         iconPlate.addView(icon, iconParams);
         heading.addView(iconPlate, new LinearLayout.LayoutParams(dp(46), dp(46)));
@@ -775,7 +842,8 @@ final class MainActivityEditor {
     private void updateGenderChip(TextView chip, Person person) {
         if (chip == null) return;
         chip.setText("Пол: " + PersonGender.shortLabel(person));
-        chip.setContentDescription("Пол: " + PersonGender.shortLabel(person) + ". Нажмите, чтобы изменить");
+        chip.setContentDescription(activity.tr(
+            "Пол: " + PersonGender.shortLabel(person) + ". Нажмите, чтобы изменить"));
     }
 
     private void chooseGender(Person person, TextView chip) {
@@ -929,7 +997,7 @@ final class MainActivityEditor {
         tile.setBackground(panelBg(Color.rgb(232, 248, 246), dp(9), Color.argb(72, 24, 169, 153)));
         ImageView icon = new ImageView(activity);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
         tile.addView(icon, new LinearLayout.LayoutParams(dp(27), dp(27)));
         TextView text = editorText(label, 12, Color.rgb(28, 34, 38), true);
         text.setPadding(dp(9), 0, 0, 0);
@@ -943,7 +1011,7 @@ final class MainActivityEditor {
     }
 
     private TextView editorText(String value, int sizeSp, int color, boolean bold) {
-        TextView text = new TextView(activity);
+        TextView text = new LocalizedTextView(activity);
         text.setText(value);
         text.setTextSize(sizeSp);
         text.setTextColor(color);
@@ -1008,7 +1076,7 @@ final class MainActivityEditor {
         iconPlate.setBackground(ovalBg(Color.rgb(232, 248, 246), Color.TRANSPARENT, 0));
         ImageView icon = new ImageView(activity);
         icon.setImageResource("ВОЗРАСТ".equals(caption) ? R.drawable.ic_field_person : R.drawable.ic_field_calendar);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
         iconPlate.addView(icon, new FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER));
         metric.addView(iconPlate, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
@@ -1025,7 +1093,7 @@ final class MainActivityEditor {
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(14), dp(12), dp(14), dp(12));
-        panel.setElevation(dp(1));
+        panel.setElevation(0f);
         panel.setBackground(panelBg(Color.WHITE, dp(12), Color.rgb(217, 224, 229)));
         panel.addView(editorText(title, 12, Color.rgb(28, 34, 38), true), new LinearLayout.LayoutParams(-1, dp(28)));
         return panel;
@@ -1047,7 +1115,7 @@ final class MainActivityEditor {
         empty.setBackground(panelBg(Color.rgb(235, 249, 247), dp(12), Color.argb(52, 24, 169, 153)));
         ImageView icon = new ImageView(activity);
         icon.setImageResource(R.drawable.ic_menu_add_memory);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
         empty.addView(icon, new LinearLayout.LayoutParams(dp(30), dp(30)));
         TextView text = editorText(value, 12, Color.rgb(76, 87, 96), false);
         text.setPadding(dp(14), 0, 0, 0);
@@ -1228,30 +1296,128 @@ final class MainActivityEditor {
         return row;
     }
 
-    private void addPersonValidation(LinearLayout panel, Person person) {
+    private void addPersonValidation(
+        LinearLayout panel,
+        Person person,
+        Dialog dialog,
+        View[] pages,
+        TextView[] tabs,
+        ScrollView profileScroll,
+        ScrollView memoryScroll,
+        View avatar,
+        EditText bornYear,
+        EditText place,
+        EditText memoryTitle
+    ) {
         java.util.List<String> tips = new java.util.ArrayList<>();
+        java.util.List<Integer> icons = new java.util.ArrayList<>();
+        java.util.List<String> actions = new java.util.ArrayList<>();
         if ((person.photoMediaId == null || person.photoMediaId.isEmpty())
-            && (person.photo == null || person.photo.isEmpty())) tips.add("Добавьте фото");
-        if (person.bornYear.isEmpty()) tips.add("Уточните год рождения");
-        if (person.memories.isEmpty()) tips.add("Сохраните первую историю");
-        if (parentIdsOf(person.id).isEmpty()) tips.add("Добавьте родителей");
-        if (person.place.isEmpty()) tips.add("Добавьте место");
+            && (person.photo == null || person.photo.isEmpty())) {
+            tips.add("Добавьте фотографию");
+            icons.add(R.drawable.ic_menu_image);
+            actions.add("photo");
+        }
+        if (person.bornYear.isEmpty()) {
+            tips.add("Уточните год рождения");
+            icons.add(R.drawable.ic_field_calendar);
+            actions.add("born");
+        }
+        if (person.memories.isEmpty()) {
+            tips.add("Сохраните первую историю");
+            icons.add(R.drawable.ic_menu_add_memory);
+            actions.add("memory");
+        }
+        if (parentIdsOf(person.id).isEmpty()) {
+            tips.add("Добавьте родителей");
+            icons.add(R.drawable.ic_menu_ancestors);
+            actions.add("parents");
+        }
+        if (person.place.isEmpty()) {
+            tips.add("Добавьте место");
+            icons.add(R.drawable.ic_field_location);
+            actions.add("place");
+        }
         if (tips.isEmpty()) {
-            panel.addView(editorEmpty("Подсказок нет"), editorBlockParams());
+            TextView complete = editorText("✓  Карточка хорошо заполнена", 12, Color.rgb(8, 122, 115), true);
+            complete.setGravity(Gravity.CENTER_VERTICAL);
+            complete.setPadding(dp(12), 0, dp(12), 0);
+            complete.setBackground(panelBg(Color.rgb(232, 248, 246), dp(10), Color.argb(72, 24, 169, 153)));
+            panel.addView(complete, new LinearLayout.LayoutParams(-1, dp(48)));
             return;
         }
-        for (String tip : tips) {
-            TextView item = editorText(tip, 12, Color.rgb(28, 34, 38), true);
-            item.setPadding(dp(10), 0, dp(10), 0);
-            item.setBackground(panelBg(Color.rgb(248, 251, 252), dp(8), Color.rgb(217, 224, 229)));
-            panel.addView(item, formFieldParams());
+        for (int i = 0; i < tips.size(); i++) {
+            LinearLayout item = new LinearLayout(activity);
+            item.setOrientation(LinearLayout.HORIZONTAL);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setPadding(dp(10), 0, dp(8), 0);
+            item.setBackground(panelBg(Color.rgb(248, 251, 252), dp(10), Color.rgb(217, 224, 229)));
+
+            FrameLayout iconPlate = new FrameLayout(activity);
+            iconPlate.setBackground(panelBg(Color.rgb(232, 248, 246), dp(9), Color.TRANSPARENT));
+            ImageView icon = new ImageView(activity);
+            icon.setImageResource(icons.get(i));
+            icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
+            iconPlate.addView(icon, new FrameLayout.LayoutParams(dp(21), dp(21), Gravity.CENTER));
+            item.addView(iconPlate, new LinearLayout.LayoutParams(dp(38), dp(38)));
+
+            TextView copy = editorText(tips.get(i), 12, Color.rgb(28, 34, 38), true);
+            copy.setPadding(dp(10), 0, 0, 0);
+            item.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
+            TextView arrow = editorText("›", 21, Color.rgb(8, 122, 115), false);
+            arrow.setGravity(Gravity.CENTER);
+            item.addView(arrow, new LinearLayout.LayoutParams(dp(28), -1));
+
+            final String action = actions.get(i);
+            item.setClickable(true);
+            item.setFocusable(true);
+            item.setOnClickListener(v -> {
+                if ("photo".equals(action)) {
+                    selectEditorPage(0, pages, tabs);
+                    profileScroll.post(() -> {
+                        profileScroll.smoothScrollTo(0, 0);
+                        avatar.performClick();
+                    });
+                } else if ("born".equals(action)) {
+                    focusEditorField(0, pages, tabs, profileScroll, bornYear);
+                } else if ("memory".equals(action)) {
+                    focusEditorField(1, pages, tabs, memoryScroll, memoryTitle);
+                } else if ("parents".equals(action)) {
+                    activity.state.selectedId = person.id;
+                    dialog.dismiss();
+                    activity.addRelationAction("add-parents-2");
+                } else if ("place".equals(action)) {
+                    focusEditorField(0, pages, tabs, profileScroll, place);
+                }
+            });
+
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(52));
+            params.setMargins(0, 0, 0, i == tips.size() - 1 ? 0 : dp(7));
+            panel.addView(item, params);
         }
+    }
+
+    private void focusEditorField(
+        int page,
+        View[] pages,
+        TextView[] tabs,
+        ScrollView scroll,
+        EditText field
+    ) {
+        selectEditorPage(page, pages, tabs);
+        field.requestFocus();
+        field.post(() -> {
+            field.requestRectangleOnScreen(new android.graphics.Rect(0, 0, field.getWidth(), field.getHeight()), true);
+            android.view.inputmethod.InputMethodManager keyboard =
+                (android.view.inputmethod.InputMethodManager) activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.showSoftInput(field, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        });
     }
 
     private void savePersonEditor(Person person, String name, String bornDay, String bornMonth, String bornYear, String diedDay, String diedMonth, String diedYear, String place, String notes, String manualColor, boolean pinned, String memoryTitle, String memoryText) {
         if (person == null || activity.editingBlocked()) return;
         recordUndo("Изменена карточка", person.name.isEmpty() ? "Без имени" : person.name);
-        person.name = name.trim().isEmpty() ? "Без имени" : name.trim();
+        person.name = name.trim().isEmpty() ? activity.tr("Без имени") : name.trim();
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
         person.bornDay = datePart(bornDay, 31);
         person.bornMonth = datePart(bornMonth, 12);
@@ -1296,9 +1462,13 @@ final class MainActivityEditor {
             header.setGravity(Gravity.CENTER_VERTICAL);
             header.setOrientation(LinearLayout.HORIZONTAL);
 
-            TextView title = new TextView(activity);
+            TextView title = new LocalizedTextView(activity);
             title.setGravity(Gravity.CENTER_VERTICAL);
-            title.setText(memory.title == null || memory.title.trim().isEmpty() ? "Воспоминание" : memory.title.trim());
+            if (memory.title == null || memory.title.trim().isEmpty()) {
+                title.setText("Воспоминание");
+            } else {
+                LocalizedViews.setRaw(title, memory.title.trim());
+            }
             title.setTextColor(Color.rgb(28, 34, 38));
             title.setTextSize(14);
             title.setTypeface(uiBold());
@@ -1307,7 +1477,7 @@ final class MainActivityEditor {
             header.addView(title, new LinearLayout.LayoutParams(0, dp(44), 1));
 
             TextView delete = attachmentCloseButton();
-            delete.setContentDescription("Удалить запись");
+            delete.setContentDescription(activity.tr("Удалить запись"));
             delete.setOnClickListener(v -> confirmRemoveMemory(person.id, memory.id));
             header.addView(delete, new LinearLayout.LayoutParams(dp(38), dp(38)));
             card.addView(header, new LinearLayout.LayoutParams(-1, -2));
@@ -1344,7 +1514,7 @@ final class MainActivityEditor {
     }
 
     private TextView attachmentCloseButton() {
-        TextView close = new TextView(activity);
+        TextView close = new LocalizedTextView(activity);
         close.setText("×");
         close.setGravity(Gravity.CENTER);
         close.setTextColor(Color.rgb(197, 83, 75));
@@ -1436,7 +1606,7 @@ final class MainActivityEditor {
         top.setGravity(Gravity.CENTER_VERTICAL);
         ImageView icon = new ImageView(activity);
         icon.setImageResource(R.drawable.ic_editor_archive);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
         icon.setPadding(dp(10), dp(10), dp(10), dp(10));
         icon.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT));
         top.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -1537,7 +1707,7 @@ final class MainActivityEditor {
             preview.setPadding(0, 0, 0, 0);
         } else {
             preview.setImageResource(attachmentIcon(attachment));
-            preview.setColorFilter(Color.rgb(8, 122, 115));
+            preview.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
             preview.setBackground(panelBg(Color.rgb(232, 248, 246), dp(10), Color.TRANSPARENT));
         }
         row.addView(preview, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -1558,7 +1728,7 @@ final class MainActivityEditor {
         row.addView(labels, labelsParams);
 
         TextView close = attachmentCloseButton();
-        close.setContentDescription("Удалить файл " + attachment.filename);
+        close.setContentDescription(activity.tr("Удалить файл ") + attachment.filename);
         close.setOnClickListener(v -> confirmRemoveAttachment(
             person.id,
             memory.id,
@@ -1624,7 +1794,9 @@ final class MainActivityEditor {
             intent.setDataAndType(uri, mime);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.setClipData(android.content.ClipData.newRawUri(file.getName(), uri));
-            activity.startActivity(Intent.createChooser(intent, "Открыть файл"));
+            activity.startActivity(Intent.createChooser(
+                intent,
+                activity.tr("Открыть файл")));
         } catch (Exception error) {
             toast("Не удалось открыть файл: " + error.getMessage());
         }
@@ -1760,6 +1932,7 @@ final class MainActivityEditor {
     private android.graphics.Typeface ui() { return activity.ui(); }
     private android.graphics.Typeface uiBold() { return activity.uiBold(); }
     private android.graphics.drawable.GradientDrawable panelBg(int color, int radius, int stroke) { return activity.panelBg(color, radius, stroke); }
+    private android.graphics.drawable.GradientDrawable colorSwatchBg(int color, int radius) { return activity.colorSwatchBg(color, radius); }
     private android.graphics.drawable.GradientDrawable tealGradientBg(int radius) { return activity.tealGradientBg(radius); }
     private android.widget.Button iconButton(int iconRes, android.view.View.OnClickListener listener) { return activity.iconButton(iconRes, listener); }
     private android.widget.Button iconButton(int iconRes, android.view.View.OnClickListener listener, int textColor) { return activity.iconButton(iconRes, listener, textColor); }

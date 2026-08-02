@@ -23,41 +23,72 @@ import java.util.TreeMap;
  */
 final class TreeLayoutEngine {
     static final float CARD_W = 280f;
-    static final float CARD_H = 120f;
+    static final float CARD_H = 160f;
     static final float GRID = 40f;
     static final float LEVEL_GAP = GRID * 12f;
     static final float SIBLING_GAP = GRID;
 
     static final float SURFACE_W = 24000f;
     static final float SURFACE_H = 16000f;
+    static final int MIN_SURFACE_W = 1200;
+    static final int MIN_SURFACE_H = 800;
+    static final int MAX_SURFACE_SIZE = 100000;
     private static final float PARTNER_GAP = GRID;
     private static final float SIBLING_FAMILY_GAP = GRID * 2f;
     private static final float BRANCH_GAP = GRID * 5f;
     private static final float MARGIN_X = GRID * 4f;
     private static final float MARGIN_Y = GRID * 4f;
-    private static final float GUIDE_CARD_OFFSET = GRID * 9f;
+    // Place a four-row card fully between generation guides. This used to be
+    // GRID * 9 for three-row cards and left the new card one row below the line.
+    private static final float GUIDE_CARD_OFFSET = LEVEL_GAP - CARD_H;
     private static final float ORDER_SCALE = GRID * 30f;
     private static final int ALIGNMENT_PASSES = 6;
 
     private TreeLayoutEngine() {
     }
 
+    static int normalizeSurfaceWidth(int value) {
+        return Math.max(MIN_SURFACE_W, Math.min(MAX_SURFACE_SIZE, value));
+    }
+
+    static int normalizeSurfaceHeight(int value) {
+        return Math.max(MIN_SURFACE_H, Math.min(MAX_SURFACE_SIZE, value));
+    }
+
+    static float surfaceWidth(TreeState state) {
+        return state == null ? SURFACE_W : normalizeSurfaceWidth(state.workspaceWidth);
+    }
+
+    static float surfaceHeight(TreeState state) {
+        return state == null ? SURFACE_H : normalizeSurfaceHeight(state.workspaceHeight);
+    }
+
     static void ensurePositions(TreeState state) {
         if (state == null || state.people.isEmpty()) return;
-        if (!hasSavedPositions(state)) layout(state);
+        if (!hasUsableSavedLayout(state)) layout(state);
         int index = 0;
         for (Person person : state.people.values()) {
             if (!isValidPosition(person)) {
                 Point open = findOpenSpot(
                     state,
                     new Point(
-                        SURFACE_W / 2f + (index % 4) * (CARD_W + GRID),
-                        SURFACE_H / 2f + GRID * 14f + (index / 4) * (CARD_H + GRID)));
+                        surfaceWidth(state) / 2f + (index % 4) * (CARD_W + GRID),
+                        surfaceHeight(state) / 2f + GRID * 14f + (index / 4) * (CARD_H + GRID)));
                 person.x = open.x;
                 person.y = open.y;
+            } else {
+                person.x = clampSnap(person.x, 0f, surfaceWidth(state) - CARD_W);
+                person.y = clampSnap(person.y, 0f, surfaceHeight(state) - CARD_H);
             }
             index++;
         }
+    }
+
+    private static boolean hasUsableSavedLayout(TreeState state) {
+        if (!hasSavedPositions(state)) return false;
+        Relations relations = buildRelations(state);
+        UnitGraph graph = makeUnits(state, relations);
+        return !graph.units.isEmpty() && assignLevelsFromSavedRows(state, graph, relations);
     }
 
     static boolean hasSavedPositions(TreeState state) {
@@ -184,11 +215,10 @@ final class TreeLayoutEngine {
         Relations relations,
         Unit root
     ) {
-        // A manually arranged tree already contains the user's generation
-        // decisions. Preserve those rows and only rebuild horizontal order.
-        // This is also the safest answer for remarriages and imperfect legacy
-        // data where parent edges can form a directed cycle.
-        if (assignLevelsFromSavedRows(state, graph)) return;
+        // Preserve a manual generation plan only when every saved row agrees
+        // with partner, sibling and parent/child constraints. A pile or a
+        // single imported line must be rebuilt from the relationship graph.
+        if (assignLevelsFromSavedRows(state, graph, relations)) return;
 
         Map<String, Integer> assigned = new HashMap<>();
         assignComponentLevels(root, 0, assigned, graph, relations);
@@ -233,7 +263,11 @@ final class TreeLayoutEngine {
         }
     }
 
-    private static boolean assignLevelsFromSavedRows(TreeState state, UnitGraph graph) {
+    private static boolean assignLevelsFromSavedRows(
+        TreeState state,
+        UnitGraph graph,
+        Relations relations
+    ) {
         if (savedRowsContainOverlaps(state)) return false;
         List<Float> saved = new ArrayList<>();
         for (Person person : state.people.values()) {
@@ -261,15 +295,45 @@ final class TreeLayoutEngine {
             return false;
         }
 
+        Map<String, Integer> personRows = new HashMap<>();
+        for (Person person : state.people.values()) {
+            if (!isValidPosition(person)) continue;
+            personRows.put(person.id, nearestRowIndex(snap(person.y), rows));
+        }
+
         for (Unit unit : graph.units) {
             List<Integer> hints = new ArrayList<>();
             for (Person person : unit.personRefs) {
                 if (!isValidPosition(person)) continue;
-                hints.add(nearestRowIndex(snap(person.y), rows));
+                Integer row = personRows.get(person.id);
+                if (row != null) hints.add(row);
             }
             if (hints.isEmpty()) return false;
             Collections.sort(hints);
+            // Partners and co-parents are one visual block and therefore must
+            // already agree on a generation before saved rows can be trusted.
+            if (!hints.get(0).equals(hints.get(hints.size() - 1))) return false;
             unit.level = hints.get(hints.size() / 2);
+        }
+
+        boolean hasParentEdge = false;
+        for (Unit parent : graph.units) {
+            for (String childId : parent.children) {
+                Unit child = graph.unitById.get(childId);
+                if (child == null) continue;
+                hasParentEdge = true;
+                if (child.level != parent.level + 1) return false;
+            }
+        }
+        if (hasParentEdge && rows.size() < 2) return false;
+
+        for (Map.Entry<String, Set<String>> entry : relations.siblingsByPerson.entrySet()) {
+            Unit first = graph.personToUnit.get(entry.getKey());
+            if (first == null) continue;
+            for (String siblingId : entry.getValue()) {
+                Unit second = graph.personToUnit.get(siblingId);
+                if (second != null && second != first && second.level != first.level) return false;
+            }
         }
         return true;
     }
@@ -282,9 +346,9 @@ final class TreeLayoutEngine {
             for (int j = i + 1; j < people.size(); j++) {
                 Person second = people.get(j);
                 if (!isValidPosition(second)) continue;
-                boolean sameRow = Math.abs(first.y - second.y) <= GRID * 2f;
                 boolean horizontalOverlap = Math.abs(first.x - second.x) < CARD_W;
-                if (sameRow && horizontalOverlap) return true;
+                boolean verticalOverlap = Math.abs(first.y - second.y) < CARD_H;
+                if (horizontalOverlap && verticalOverlap) return true;
             }
         }
         return false;
@@ -808,6 +872,18 @@ final class TreeLayoutEngine {
         for (Unit unit : graph.units) maxLevel = Math.max(maxLevel, unit.level);
         List<Float> rowTops = generationRows(state, graph, maxLevel);
 
+        float requiredRight = MARGIN_X;
+        for (Unit unit : graph.units) requiredRight = Math.max(requiredRight, unit.right() + MARGIN_X);
+        float requiredBottom = rowTops.isEmpty()
+            ? MARGIN_Y + CARD_H
+            : rowTops.get(rowTops.size() - 1) + CARD_H + MARGIN_Y;
+        state.workspaceWidth = normalizeSurfaceWidth(Math.max(
+            state.workspaceWidth,
+            (int) Math.ceil(requiredRight / GRID) * (int) GRID));
+        state.workspaceHeight = normalizeSurfaceHeight(Math.max(
+            state.workspaceHeight,
+            (int) Math.ceil(requiredBottom / GRID) * (int) GRID));
+
         for (Unit unit : graph.units) {
             float left = unit.left();
             float top = rowTops.get(Math.min(unit.level, rowTops.size() - 1));
@@ -817,8 +893,8 @@ final class TreeLayoutEngine {
                 person.x = clampSnap(
                     left + i * (CARD_W + PARTNER_GAP),
                     0f,
-                    SURFACE_W - CARD_W);
-                person.y = clampSnap(top, 0f, SURFACE_H - CARD_H);
+                    surfaceWidth(state) - CARD_W);
+                person.y = clampSnap(top, 0f, surfaceHeight(state) - CARD_H);
             }
         }
     }
@@ -1004,15 +1080,14 @@ final class TreeLayoutEngine {
     }
 
     private static Point findOpenSpot(TreeState state, Point preferred) {
-        Set<String> occupied = new HashSet<>();
+        List<Person> occupied = new ArrayList<>();
         for (Person person : state.people.values()) {
-            if (isValidPosition(person)) {
-                occupied.add(snap(person.x) + ":" + snap(person.y));
-            }
+            if (isValidPosition(person)) occupied.add(person);
         }
-        Point start = snapPoint(preferred);
-        if (!occupied.contains(start.x + ":" + start.y)) return start;
-        for (float radius = GRID; radius <= GRID * 14f; radius += GRID) {
+        Point start = snapPoint(state, preferred);
+        if (spotIsOpen(start, occupied)) return start;
+        float maxRadius = Math.max(surfaceWidth(state), surfaceHeight(state));
+        for (float radius = GRID; radius <= maxRadius; radius += GRID) {
             Point[] candidates = new Point[]{
                 new Point(start.x + radius, start.y),
                 new Point(start.x - radius, start.y),
@@ -1024,11 +1099,22 @@ final class TreeLayoutEngine {
                 new Point(start.x - radius, start.y - radius)
             };
             for (Point candidate : candidates) {
-                Point open = snapPoint(candidate);
-                if (!occupied.contains(open.x + ":" + open.y)) return open;
+                Point open = snapPoint(state, candidate);
+                if (spotIsOpen(open, occupied)) return open;
             }
         }
         return start;
+    }
+
+    private static boolean spotIsOpen(Point candidate, List<Person> occupied) {
+        for (Person person : occupied) {
+            boolean separated = candidate.x + CARD_W + GRID <= person.x
+                || person.x + CARD_W + GRID <= candidate.x
+                || candidate.y + CARD_H + GRID <= person.y
+                || person.y + CARD_H + GRID <= candidate.y;
+            if (!separated) return false;
+        }
+        return true;
     }
 
     private static boolean isValidPosition(Person person) {
@@ -1039,10 +1125,10 @@ final class TreeLayoutEngine {
         return Math.round(value / GRID) * GRID;
     }
 
-    private static Point snapPoint(Point point) {
+    private static Point snapPoint(TreeState state, Point point) {
         return new Point(
-            clampSnap(point.x, 0f, SURFACE_W - CARD_W),
-            clampSnap(point.y, 0f, SURFACE_H - CARD_H));
+            clampSnap(point.x, 0f, surfaceWidth(state) - CARD_W),
+            clampSnap(point.y, 0f, surfaceHeight(state) - CARD_H));
     }
 
     private static float clampSnap(float value, float min, float max) {

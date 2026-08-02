@@ -123,6 +123,7 @@ final class MainActivityHistory {
             undoBytes = Math.max(0L, undoBytes - command.estimatedBytes());
             command.undo(activity.state);
             activity.redoStack.push(command);
+            activity.applyStateSettings();
             activity.saveOnly();
             activity.bindState();
         } catch (Exception error) {
@@ -138,6 +139,7 @@ final class MainActivityHistory {
             TreeCommand command = activity.redoStack.pop();
             command.redo(activity.state);
             activity.undoStack.push(command);
+            activity.applyStateSettings();
             undoBytes += command.estimatedBytes();
             trimUndo();
             activity.saveOnly();
@@ -166,7 +168,7 @@ final class MainActivityHistory {
         }
         int count = activity.state.history == null ? 0 : Math.min(8, activity.state.history.size());
         if (count == 0) {
-            TextView empty = new TextView(activity);
+            TextView empty = new LocalizedTextView(activity);
             empty.setText("Действий пока нет");
             empty.setTextColor(Color.rgb(101, 113, 122));
             empty.setTextSize(12);
@@ -180,28 +182,48 @@ final class MainActivityHistory {
 
     View historyItem(HistoryEntry entry) {
         LinearLayout item = new LinearLayout(activity);
-        item.setOrientation(LinearLayout.VERTICAL);
-        item.setPadding(activity.dp(10), activity.dp(8), activity.dp(10), activity.dp(8));
-        item.setBackground(activity.panelBg(Color.WHITE, activity.dp(8), Color.rgb(217, 224, 229)));
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        item.setPadding(activity.dp(9), activity.dp(6), activity.dp(9), activity.dp(6));
+        item.setBackground(activity.panelBg(Color.WHITE, activity.dp(11), Color.rgb(217, 224, 229)));
 
-        TextView label = new TextView(activity);
+        TextView marker = new LocalizedTextView(activity);
+        marker.setText("•");
+        marker.setTextColor(Color.WHITE);
+        marker.setTextSize(16);
+        marker.setGravity(android.view.Gravity.CENTER);
+        marker.setIncludeFontPadding(false);
+        marker.setBackground(activity.panelBg(
+            Color.rgb(24, 169, 153),
+            activity.dp(999),
+            Color.argb(70, 8, 122, 115)));
+        item.addView(marker, new LinearLayout.LayoutParams(activity.dp(28), activity.dp(28)));
+
+        LinearLayout copy = new LinearLayout(activity);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(activity.dp(9), 0, 0, 0);
+
+        TextView label = new LocalizedTextView(activity);
         String detail = entry.detail == null || entry.detail.isEmpty() ? "" : " · " + entry.detail;
         label.setText((entry.label == null || entry.label.isEmpty() ? "Действие" : entry.label) + detail);
         label.setTextColor(Color.rgb(28, 34, 38));
-        label.setTextSize(12);
+        label.setTextSize(11);
         label.setTypeface(activity.uiBold());
         label.setIncludeFontPadding(false);
-        item.addView(label);
+        label.setSingleLine(true);
+        label.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        copy.addView(label);
 
-        TextView time = new TextView(activity);
+        TextView time = new LocalizedTextView(activity);
         time.setText(historyTime(entry.at));
         time.setTextColor(Color.rgb(101, 113, 122));
-        time.setTextSize(11);
+        time.setTextSize(9);
         time.setTypeface(activity.ui());
         time.setIncludeFontPadding(false);
         LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-1, -2);
-        timeParams.setMargins(0, activity.dp(3), 0, 0);
-        item.addView(time, timeParams);
+        timeParams.setMargins(0, activity.dp(2), 0, 0);
+        copy.addView(time, timeParams);
+        item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
         return item;
     }
 
@@ -212,8 +234,8 @@ final class MainActivityHistory {
     }
 
     LinearLayout.LayoutParams historyItemParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(0, 0, 0, activity.dp(7));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, activity.dp(52));
+        params.setMargins(0, 0, 0, activity.dp(6));
         return params;
     }
 

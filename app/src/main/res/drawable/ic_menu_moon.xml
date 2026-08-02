@@ -1,9 +1,14 @@
+<!-- Lucide: moon (ISC). Exact official geometry. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#087A73"
-        android:pathData="M11.01 3.05C6.51 3.54 3 7.36 3 12a9 9 0 0 0 9 9c4.63 0 8.45-3.5 8.95-8 .09-.79-.78-1.42-1.54-.95A5.403 5.403 0 0 1 11.1 7.5c0-1.06.31-2.06.84-2.89.45-.67-.04-1.63-.93-1.56z" />
+        android:fillColor="@android:color/transparent"
+        android:pathData="M20.985,12.486a9,9 0,1 1,-9.473 -9.472c0.405,-0.022 0.617,0.46 0.402,0.803a6,6 0,0 0,8.268 8.268c0.344,-0.215 0.825,-0.004 0.803,0.401"
+        android:strokeColor="#087A73"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
 </vector>

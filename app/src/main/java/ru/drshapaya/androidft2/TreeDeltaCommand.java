@@ -261,6 +261,10 @@ final class TreeDeltaCommand implements TreeCommand {
         final boolean hideCardDetails;
         final boolean compactCards;
         final boolean focusTree;
+        final boolean workspaceBoundsVisible;
+        final String workspaceBoundsStyle;
+        final int workspaceWidth;
+        final int workspaceHeight;
         final String parentLineMode;
 
         Metadata(TreeState state) {
@@ -279,6 +283,10 @@ final class TreeDeltaCommand implements TreeCommand {
             hideCardDetails = state.hideCardDetails;
             compactCards = state.compactCards;
             focusTree = state.focusTree;
+            workspaceBoundsVisible = state.workspaceBoundsVisible;
+            workspaceBoundsStyle = state.workspaceBoundsStyle;
+            workspaceWidth = state.workspaceWidth;
+            workspaceHeight = state.workspaceHeight;
             parentLineMode = state.parentLineMode;
         }
 
@@ -299,6 +307,10 @@ final class TreeDeltaCommand implements TreeCommand {
                 && hideCardDetails == other.hideCardDetails
                 && compactCards == other.compactCards
                 && focusTree == other.focusTree
+                && workspaceBoundsVisible == other.workspaceBoundsVisible
+                && Objects.equals(workspaceBoundsStyle, other.workspaceBoundsStyle)
+                && workspaceWidth == other.workspaceWidth
+                && workspaceHeight == other.workspaceHeight
                 && Objects.equals(parentLineMode, other.parentLineMode);
         }
 
@@ -318,6 +330,10 @@ final class TreeDeltaCommand implements TreeCommand {
             state.hideCardDetails = hideCardDetails;
             state.compactCards = compactCards;
             state.focusTree = focusTree;
+            state.workspaceBoundsVisible = workspaceBoundsVisible;
+            state.workspaceBoundsStyle = workspaceBoundsStyle;
+            state.workspaceWidth = workspaceWidth;
+            state.workspaceHeight = workspaceHeight;
             state.parentLineMode = parentLineMode;
         }
     }

@@ -1,9 +1,10 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+    <!-- Phosphor Sliders Horizontal Regular, MIT License. Official path. -->
     <path
         android:fillColor="#087A73"
-        android:pathData="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+        android:pathData="M40,88H73a32,32 0,0 0,62 0h81a8,8 0,0 0,0 -16H135a32,32 0,0 0,-62 0H40a8,8 0,0 0,0 16ZM104,64A16,16 0,1 1,88 80,16 16,0 0,1 104,64ZM216,168H199a32,32 0,0 0,-62 0H40a8,8 0,0 0,0 16h97a32,32 0,0 0,62 0h17a8,8 0,0 0,0 -16ZM168,192a16,16 0,1 1,16 -16A16,16 0,0 1,168 192Z" />
 </vector>

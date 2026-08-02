@@ -1,9 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#087A73"
-        android:pathData="M18.3 5.71a.996.996 0 0 0-1.41 0L12 10.59 7.11 5.7A.996.996 0 1 0 5.7 7.11L10.59 12 5.7 16.89a.996.996 0 1 0 1.41 1.41L12 13.41l4.89 4.89a.996.996 0 1 0 1.41-1.41L13.41 12l4.89-4.89c.38-.38.38-1.02 0-1.4z" />
+<!-- Google Material Symbols Rounded: close (Apache-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960"><path android:fillColor="#087A73" android:pathData="M480,-424 284,-228q-11,11 -28,11t-28,-11q-11,-11 -11,-28t11,-28l196,-196 -196,-196q-11,-11 -11,-28t11,-28q11,-11 28,-11t28,11l196,196 196,-196q11,-11 28,-11t28,11q11,11 11,28t-11,28L536,-480l196,196q11,11 11,28t-11,28q-11,11 -28,11t-28,-11L480,-424Z" /></group>
 </vector>

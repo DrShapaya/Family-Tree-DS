@@ -1,9 +1,2 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#087A73"
-        android:pathData="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4 11H8c-.55 0-1-.45-1-1s.45-1 1-1h8c.55 0 1 .45 1 1s-.45 1-1 1z" />
-</vector>
+<!-- Lucide: circle-minus (ISC). Exact official geometry. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24"><path android:fillColor="@android:color/transparent" android:pathData="M12,2A10,10 0,1 1,12 22A10,10 0,1 1,12 2M8,12H16" android:strokeColor="#087A73" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2" /></vector>

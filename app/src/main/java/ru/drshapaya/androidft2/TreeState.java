@@ -31,6 +31,10 @@ final class TreeState {
     boolean hideCardDetails = false;
     boolean compactCards = false;
     boolean focusTree = false;
+    boolean workspaceBoundsVisible = true;
+    String workspaceBoundsStyle = "soft";
+    int workspaceWidth = 24000;
+    int workspaceHeight = 16000;
     String parentLineMode = "smart";
 
     private static final int[] COLORS = {
@@ -64,6 +68,7 @@ final class TreeState {
         person.gender = PersonGender.infer(person.name);
         person.x = x;
         person.y = y;
+        person.colorMode = "auto-surname";
         person.manualColor = colorString(colorFor(person.name, people.size()));
         person.color = displayColor(person, people.size());
         people.put(id, person);

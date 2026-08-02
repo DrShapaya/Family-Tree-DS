@@ -13,6 +13,17 @@ import android.view.View;
 final class HueSliderView extends View {
     private static final float PALETTE_SATURATION = 0.58f;
     private static final float PALETTE_BRIGHTNESS = 0.94f;
+    private static final int TRACK_SEGMENTS = 72;
+    private static final int[] TRACK_COLORS = new int[TRACK_SEGMENTS + 1];
+    private static final float[] TRACK_POSITIONS = new float[TRACK_SEGMENTS + 1];
+
+    static {
+        for (int index = 0; index <= TRACK_SEGMENTS; index++) {
+            float position = index / (float) TRACK_SEGMENTS;
+            TRACK_POSITIONS[index] = position;
+            TRACK_COLORS[index] = paletteColor(position * 360f);
+        }
+    }
 
     interface Listener {
         void onColorChanged(int color, boolean fromUser);
@@ -29,7 +40,7 @@ final class HueSliderView extends View {
         super(context);
         setFocusable(true);
         setClickable(true);
-        setContentDescription("Выбор цвета");
+        setContentDescription(AppLanguage.translate(context, "Выбор цвета"));
         thumbStroke.setStyle(Paint.Style.STROKE);
         thumbStroke.setStrokeWidth(dp(3));
         thumbStroke.setColor(Color.WHITE);
@@ -64,16 +75,14 @@ final class HueSliderView extends View {
         float trackHeight = dp(18);
         float centerY = getHeight() / 2f;
         track.set(pad, centerY - trackHeight / 2f, getWidth() - pad, centerY + trackHeight / 2f);
-        int[] colors = {
-            paletteColor(0f),
-            paletteColor(60f),
-            paletteColor(120f),
-            paletteColor(180f),
-            paletteColor(240f),
-            paletteColor(300f),
-            paletteColor(360f)
-        };
-        trackPaint.setShader(new LinearGradient(track.left, 0, track.right, 0, colors, null, Shader.TileMode.CLAMP));
+        trackPaint.setShader(new LinearGradient(
+            track.left,
+            0,
+            track.right,
+            0,
+            TRACK_COLORS,
+            TRACK_POSITIONS,
+            Shader.TileMode.CLAMP));
         canvas.drawRoundRect(track, trackHeight / 2f, trackHeight / 2f, trackPaint);
         trackPaint.setShader(null);
 

@@ -1,9 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#087A73"
-        android:pathData="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+<!-- Google Material Symbols Rounded: search (Apache-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960"><path android:fillColor="#087A73" android:pathData="M380,-320q-109,0 -184.5,-75.5T120,-580q0,-109 75.5,-184.5T380,-840q109,0 184.5,75.5T640,-580q0,44 -14,83t-38,69l224,224q11,11 11,28t-11,28q-11,11 -28,11t-28,-11L532,-372q-30,24 -69,38t-83,14Zm0,-80q75,0 127.5,-52.5T560,-580q0,-75 -52.5,-127.5T380,-760q-75,0 -127.5,52.5T200,-580q0,75 52.5,127.5T380,-400Z" /></group>
 </vector>

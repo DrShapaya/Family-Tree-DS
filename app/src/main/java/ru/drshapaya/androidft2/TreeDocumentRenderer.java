@@ -1,5 +1,6 @@
 package ru.drshapaya.androidft2;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -10,6 +11,8 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.util.LruCache;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -18,6 +21,7 @@ import java.util.Locale;
  */
 final class TreeDocumentRenderer {
     private final TreeState state;
+    private final Context context;
     private final TreeMediaStore mediaStore;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -34,14 +38,15 @@ final class TreeDocumentRenderer {
     private final float cardWidth;
     private final float cardHeight;
 
-    TreeDocumentRenderer(TreeState state, TreeMediaStore mediaStore) {
+    TreeDocumentRenderer(Context context, TreeState state, TreeMediaStore mediaStore) {
+        this.context = context;
         this.state = state == null ? new TreeState() : state;
         this.mediaStore = mediaStore;
         cardWidth = this.state.compactCards
-            ? TreeLayoutEngine.GRID * 6f
+            ? TreeLayoutEngine.GRID * 5f
             : TreeLayoutEngine.CARD_W;
         cardHeight = this.state.compactCards
-            ? TreeLayoutEngine.GRID * 2.5f
+            ? TreeLayoutEngine.GRID * 3f
             : TreeLayoutEngine.CARD_H;
         text.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
     }
@@ -180,7 +185,7 @@ final class TreeDocumentRenderer {
             canvas.drawRoundRect(card, radius, radius, paint);
 
             float padding = state.compactCards ? 10f : 14f;
-            float avatar = state.compactCards ? 48f : 64f;
+            float avatar = state.compactCards ? 56f : 80f;
             float cx = card.left + padding + avatar / 2f;
             float cy = card.top + padding + avatar / 2f;
             drawAvatar(canvas, person, cx, cy, avatar, monochrome);
@@ -189,12 +194,17 @@ final class TreeDocumentRenderer {
             float maxTextWidth = Math.max(1f, card.right - textLeft - padding);
             text.setColor(Color.rgb(34, 37, 39));
             text.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
-            text.setTextSize(17f);
-            drawFitted(canvas, displayName(person), textLeft, card.top + padding + 22f, maxTextWidth);
+            text.setTextSize(state.compactCards ? 15.5f : 18.5f);
+            drawName(
+                canvas,
+                displayName(person),
+                textLeft,
+                card.top + padding + text.getTextSize(),
+                maxTextWidth);
 
             if (!state.hideCardDetails) {
                 text.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
-                text.setTextSize(12f);
+                text.setTextSize(state.compactCards ? 11.5f : 13.5f);
                 text.setColor(Color.rgb(70, 76, 80));
                 String meta = person.place == null ? "" : person.place.trim();
                 if (meta.isEmpty()) meta = yearRange(person);
@@ -267,16 +277,79 @@ final class TreeDocumentRenderer {
         text.setTextSize(original);
     }
 
-    private static String displayName(Person person) {
-        return person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim();
+    private void drawName(Canvas canvas, String value, float x, float baseline, float width) {
+        if (state.compactCards) {
+            drawEllipsized(canvas, value, x, baseline, width);
+            return;
+        }
+        List<String> parts = nameParts(value);
+        float lineHeight = text.getTextSize() * 1.14f;
+        int count = Math.min(4, parts.size());
+        for (int index = 0; index < count; index++) {
+            drawEllipsized(canvas, parts.get(index), x, baseline + index * lineHeight, width);
+        }
     }
 
-    private static String yearRange(Person person) {
+    private void drawEllipsized(Canvas canvas, String value, float x, float baseline, float width) {
+        String source = value == null ? "" : value.trim();
+        if (source.isEmpty()) return;
+        if (text.measureText(source) <= width) {
+            canvas.drawText(source, x, baseline, text);
+            return;
+        }
+        String suffix = "…";
+        float suffixWidth = text.measureText(suffix);
+        int low = 0;
+        int high = source.length();
+        while (low < high) {
+            int middle = (low + high + 1) / 2;
+            if (text.measureText(source, 0, middle) + suffixWidth <= width) low = middle;
+            else high = middle - 1;
+        }
+        while (low > 0 && Character.isHighSurrogate(source.charAt(low - 1))) low--;
+        canvas.drawText(source.substring(0, low).trim() + suffix, x, baseline, text);
+    }
+
+    private List<String> nameParts(String value) {
+        List<String> parts = new ArrayList<>();
+        String[] words = value.trim().split("\\s+");
+        StringBuilder current = new StringBuilder();
+        int parenthesesDepth = 0;
+        for (String word : words) {
+            boolean startsParentheses = word.indexOf('(') >= 0;
+            if (current.length() == 0) current.append(word);
+            else if (parenthesesDepth > 0 || startsParentheses) current.append(' ').append(word);
+            else {
+                parts.add(current.toString());
+                current.setLength(0);
+                current.append(word);
+            }
+            for (int index = 0; index < word.length(); index++) {
+                char character = word.charAt(index);
+                if (character == '(') parenthesesDepth++;
+                else if (character == ')' && parenthesesDepth > 0) parenthesesDepth--;
+            }
+        }
+        if (current.length() > 0) parts.add(current.toString());
+        return parts;
+    }
+
+    private String displayName(Person person) {
+        return person.name == null || person.name.trim().isEmpty()
+            ? AppLanguage.text(context, "Без имени")
+            : person.name.trim();
+    }
+
+    private String yearRange(Person person) {
         String born = person.bornYear == null ? "" : person.bornYear.trim();
         String died = person.diedYear == null ? "" : person.diedYear.trim();
         if (!born.isEmpty() && !died.isEmpty()) return born + "–" + died;
-        if (!born.isEmpty()) return "Род. " + born;
-        if (!died.isEmpty()) return "Ум. " + died;
+        if (!born.isEmpty()) {
+            return (AppLanguage.isEnglish(context) ? "Born " : "Род. ") + born;
+        }
+        if (!died.isEmpty()) {
+            return (AppLanguage.isEnglish(context) ? "Died " : "Ум. ") + died;
+        }
         return "";
     }
 

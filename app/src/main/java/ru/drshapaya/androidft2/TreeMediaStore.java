@@ -285,15 +285,15 @@ final class TreeMediaStore {
 
     static String humanSize(long bytes) {
         if (bytes >= 1024L * 1024L * 1024L) {
-            return String.format(Locale.getDefault(), "%.1f ГБ", bytes / (1024d * 1024d * 1024d));
+            return String.format(Locale.getDefault(), "%.1f GB", bytes / (1024d * 1024d * 1024d));
         }
         if (bytes >= 1024L * 1024L) {
-            return String.format(Locale.getDefault(), "%.0f МБ", bytes / (1024d * 1024d));
+            return String.format(Locale.getDefault(), "%.0f MB", bytes / (1024d * 1024d));
         }
         if (bytes >= 1024L) {
-            return String.format(Locale.getDefault(), "%.0f КБ", bytes / 1024d);
+            return String.format(Locale.getDefault(), "%.0f KB", bytes / 1024d);
         }
-        return bytes + " Б";
+        return bytes + " B";
     }
 
     static final class StoredMedia {

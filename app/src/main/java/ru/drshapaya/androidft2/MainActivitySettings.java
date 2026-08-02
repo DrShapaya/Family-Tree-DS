@@ -68,8 +68,24 @@ final class MainActivitySettings {
     }
 
     void toggleCompactCards() {
-        activity.compactCards = !activity.compactCards;
+        boolean makeCompact = !activity.compactCards;
+        float oldHeight = activity.compactCards
+            ? TreeLayoutEngine.GRID * 3f
+            : TreeLayoutEngine.CARD_H;
+        float newHeight = makeCompact
+            ? TreeLayoutEngine.GRID * 3f
+            : TreeLayoutEngine.CARD_H;
+        float shift = oldHeight - newHeight;
+        for (Person person : activity.state.people.values()) {
+            person.y = Math.max(
+                0f,
+                Math.min(
+                    activity.workspaceHeight - newHeight,
+                    person.y + shift));
+        }
+        activity.compactCards = makeCompact;
         activity.treeView.setCompactCards(activity.compactCards);
+        activity.treeView.invalidateStructureCaches();
         refreshSettingsIfVisible();
         activity.saveOnly();
     }
@@ -102,11 +118,12 @@ final class MainActivitySettings {
     }
 
     void setTheme(String nextTheme) {
-        activity.theme = normalizeTheme(nextTheme);
-        activity.treeView.setTheme(activity.theme);
-        refreshSettingsIfVisible();
+        String normalized = normalizeTheme(nextTheme);
+        if (normalized.equals(activity.theme)) return;
+        activity.theme = normalized;
         activity.saveOnly();
         activity.toast("clean".equals(activity.theme) ? "Чистый режим" : "dark".equals(activity.theme) ? "Тёмная тема" : "Светлая тема");
+        activity.recreateWithTheme();
     }
 
     void startTraining() {
@@ -223,7 +240,7 @@ final class MainActivitySettings {
     }
 
     private TextView trainingText(int size, int color, boolean bold) {
-        TextView text = new TextView(activity);
+        TextView text = new LocalizedTextView(activity);
         text.setTextSize(size);
         text.setTextColor(color);
         text.setTypeface(bold ? activity.uiBold() : activity.ui());

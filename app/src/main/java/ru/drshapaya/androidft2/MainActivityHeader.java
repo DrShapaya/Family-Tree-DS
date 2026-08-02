@@ -21,7 +21,7 @@ final class MainActivityHeader {
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.VERTICAL);
         header.setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10));
-        header.setBackgroundColor(Color.rgb(248, 251, 252));
+        header.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
         header.setElevation(activity.dp(5));
         header.setOnApplyWindowInsetsListener((view, insets) -> {
             int topInset = insets == null ? 0 : insets.getSystemWindowInsetTop();
@@ -47,7 +47,7 @@ final class MainActivityHeader {
         texts.setPadding(activity.dp(9), 0, 0, 0);
         brand.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
 
-        TextView title = new TextView(activity);
+        TextView title = new LocalizedTextView(activity);
         title.setText("Семейное древо");
         title.setTextColor(Color.rgb(28, 34, 38));
         title.setTextSize(20);
@@ -56,14 +56,14 @@ final class MainActivityHeader {
         title.setIncludeFontPadding(false);
         texts.addView(title);
 
-        activity.stats = new TextView(activity);
+        activity.stats = new LocalizedTextView(activity);
         activity.stats.setTextColor(Color.rgb(101, 113, 122));
         activity.stats.setTextSize(13);
         activity.stats.setTypeface(activity.ui());
         activity.stats.setIncludeFontPadding(false);
         texts.addView(activity.stats);
 
-        activity.badge = new TextView(activity);
+        activity.badge = new LocalizedTextView(activity);
         activity.badge.setText(MainActivity.VERSION_BADGE);
         activity.badge.setTextColor(Color.rgb(8, 122, 115));
         activity.badge.setTextSize(12);
@@ -85,16 +85,38 @@ final class MainActivityHeader {
         });
         texts.addView(activity.badge, new LinearLayout.LayoutParams(-2, -2));
 
+        activity.treeQualityButton = activity.actionButton("Оценка дерева", v -> activity.showTreeQualityDialog());
+        activity.treeQualityButton.setTextSize(9);
+        activity.treeQualityButton.setSingleLine(false);
+        activity.treeQualityButton.setGravity(Gravity.CENTER);
+        activity.treeQualityButton.setPadding(activity.dp(7), activity.dp(3), activity.dp(7), activity.dp(3));
+        activity.treeQualityButton.setCompoundDrawablesWithIntrinsicBounds(
+            0,
+            R.drawable.ic_menu_shield,
+            0,
+            0);
+        activity.treeQualityButton.setCompoundDrawablePadding(activity.dp(2));
+        activity.tintDrawables(activity.treeQualityButton, Color.rgb(8, 122, 115));
+        activity.treeQualityButton.setBackground(activity.panelBg(
+            Color.rgb(232, 248, 246),
+            activity.dp(10),
+            Color.argb(92, 24, 169, 153)));
+        LinearLayout.LayoutParams qualityParams = new LinearLayout.LayoutParams(activity.dp(112), activity.dp(56));
+        qualityParams.setMargins(activity.dp(8), 0, 0, 0);
+        brand.addView(activity.treeQualityButton, qualityParams);
+
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, activity.dp(10), 0, 0);
         header.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
-        activity.search = new EditText(activity);
+        activity.search = new LocalizedEditText(activity);
         activity.search.setSingleLine(true);
-        activity.search.setHint("Поиск");
+        activity.search.setHint(activity.tr("Поиск"));
         activity.search.setTextSize(16);
         activity.search.setTypeface(activity.ui());
+        activity.search.setTextColor(AppThemePalette.text(Color.rgb(28, 34, 38)));
+        activity.search.setHintTextColor(AppThemePalette.text(Color.rgb(128, 137, 144)));
         activity.search.setIncludeFontPadding(false);
         activity.search.setPadding(activity.dp(12), 0, activity.dp(12), 0);
         activity.search.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_search, 0, 0, 0);

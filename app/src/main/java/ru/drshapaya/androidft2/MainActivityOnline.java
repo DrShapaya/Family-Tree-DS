@@ -81,7 +81,12 @@ final class MainActivityOnline {
 
         LinearLayout titles = new LinearLayout(activity);
         titles.setOrientation(LinearLayout.VERTICAL);
-        TextView eyebrow = label("ANDROIDFT 2.6.0  ·  ПРИВАТНЫЙ РАЗДЕЛ", 9, Color.argb(210, 255, 255, 255), true);
+        TextView eyebrow = label(
+            "ANDROIDFT " + MainActivity.VERSION_NAME + "  ·  "
+                + activity.tr("ПРИВАТНЫЙ РАЗДЕЛ"),
+            9,
+            Color.argb(210, 255, 255, 255),
+            true);
         TextView title = label("Семейное облако", 23, Color.WHITE, true);
         titles.addView(eyebrow, new LinearLayout.LayoutParams(-1, activity.dp(18)));
         titles.addView(title, new LinearLayout.LayoutParams(-1, activity.dp(32)));
@@ -365,7 +370,10 @@ final class MainActivityOnline {
         keyText.setClickable(!keyMissing);
         keyText.setFocusable(!keyMissing);
         keyText.setContentDescription(
-            keyMissing ? "Ключ приглашения недоступен" : "Скопировать ключ приглашения");
+            activity.tr(
+                keyMissing
+                    ? "Ключ приглашения недоступен"
+                    : "Скопировать ключ приглашения"));
         if (!keyMissing) keyText.setOnClickListener(v -> copyKey(key));
         keyText.setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10));
         keyText.setBackground(activity.panelBg(
@@ -952,7 +960,7 @@ final class MainActivityOnline {
     }
 
     private TextView label(String value, int size, int color, boolean bold) {
-        TextView text = new TextView(activity);
+        TextView text = new LocalizedTextView(activity);
         text.setText(value);
         text.setTextSize(size);
         text.setTextColor(color);
@@ -963,6 +971,8 @@ final class MainActivityOnline {
 
     private Button primaryButton(String value, View.OnClickListener listener) {
         Button button = activity.actionButton(value, listener);
+        button.setElevation(0f);
+        button.setStateListAnimator(null);
         button.setTextColor(Color.WHITE);
         button.setTextSize(13);
         button.setBackground(activity.tealGradientBg(activity.dp(12)));
@@ -974,6 +984,8 @@ final class MainActivityOnline {
 
     private Button secondaryButton(String value, View.OnClickListener listener) {
         Button button = activity.actionButton(value, listener);
+        button.setElevation(0f);
+        button.setStateListAnimator(null);
         button.setTextColor(TEAL);
         button.setBackground(activity.panelBg(
             Color.WHITE,
@@ -987,6 +999,8 @@ final class MainActivityOnline {
 
     private Button smallButton(String value, View.OnClickListener listener) {
         Button button = activity.actionButton(value, listener);
+        button.setElevation(0f);
+        button.setStateListAnimator(null);
         button.setTextSize(12);
         button.setTextColor(TEAL);
         button.setBackground(activity.panelBg(
@@ -1171,14 +1185,21 @@ final class MainActivityOnline {
             .build()
             .toString();
         SpannableStringBuilder text = new SpannableStringBuilder();
+        String invitationTitle = activity.tr(
+            "Приглашение в семейное дерево AndroidFT");
+        String keyInstruction = activity.tr(
+            "Ключ подключения — нажмите и удерживайте, чтобы скопировать:");
+        String openInstruction = activity.tr("Открыть в AndroidFT:");
+        String fallbackInstruction = activity.tr(
+            "Если ссылка не открылась, вставьте ключ в разделе «Семейное облако».");
         int titleStart = text.length();
-        text.append("Приглашение в семейное дерево AndroidFT");
+        text.append(invitationTitle);
         text.setSpan(
             new StyleSpan(android.graphics.Typeface.BOLD),
             titleStart,
             text.length(),
             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        text.append("\n\nКлюч подключения — нажмите и удерживайте, чтобы скопировать:\n");
+        text.append("\n\n").append(keyInstruction).append('\n');
         int keyStart = text.length();
         text.append(key);
         text.setSpan(
@@ -1186,7 +1207,7 @@ final class MainActivityOnline {
             keyStart,
             text.length(),
             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        text.append("\n\nОткрыть в AndroidFT:\n");
+        text.append("\n\n").append(openInstruction).append('\n');
         int linkStart = text.length();
         text.append(inviteLink);
         text.setSpan(
@@ -1194,20 +1215,22 @@ final class MainActivityOnline {
             linkStart,
             text.length(),
             Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        text.append("\n\nЕсли ссылка не открылась, вставьте ключ в разделе «Семейное облако».");
-        String html = "<b>Приглашение в семейное дерево AndroidFT</b><br><br>"
-            + "Ключ подключения — нажмите и удерживайте, чтобы скопировать:<br>"
+        text.append("\n\n").append(fallbackInstruction);
+        String html = "<b>" + TextUtils.htmlEncode(invitationTitle) + "</b><br><br>"
+            + TextUtils.htmlEncode(keyInstruction) + "<br>"
             + "<code>" + TextUtils.htmlEncode(key) + "</code><br><br>"
-            + "Открыть в AndroidFT:<br><a href=\""
+            + TextUtils.htmlEncode(openInstruction) + "<br><a href=\""
             + TextUtils.htmlEncode(inviteLink)
             + "\">" + TextUtils.htmlEncode(inviteLink) + "</a><br><br>"
-            + "Если ссылка не открылась, вставьте ключ в разделе «Семейное облако».";
+            + TextUtils.htmlEncode(fallbackInstruction);
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/html");
-        share.putExtra(Intent.EXTRA_SUBJECT, "Приглашение AndroidFT");
+        share.putExtra(Intent.EXTRA_SUBJECT, activity.tr("Приглашение AndroidFT"));
         share.putExtra(Intent.EXTRA_TEXT, text);
         share.putExtra(Intent.EXTRA_HTML_TEXT, html);
-        activity.startActivity(Intent.createChooser(share, "Отправить ключ дерева"));
+        activity.startActivity(Intent.createChooser(
+            share,
+            activity.tr("Отправить ключ дерева")));
     }
 
     private void copyText(String label, String value) {

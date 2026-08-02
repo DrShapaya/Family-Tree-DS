@@ -1,9 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#087A73"
-        android:pathData="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 10h-3v3c0 .55-.45 1-1 1s-1-.45-1-1v-3H8c-.55 0-1-.45-1-1s.45-1 1-1h3V8c0-.55.45-1 1-1s1 .45 1 1v3h3c.55 0 1 .45 1 1s-.45 1-1 1z" />
+<!-- Google Material Symbols Rounded: add_box (Apache-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960"><path android:fillColor="#087A73" android:pathData="M440,-440v120q0,17 11.5,28.5T480,-280q17,0 28.5,-11.5T520,-320v-120h120q17,0 28.5,-11.5T680,-480q0,-17 -11.5,-28.5T640,-520H520v-120q0,-17 -11.5,-28.5T480,-680q-17,0 -28.5,11.5T440,-640v120H320q-17,0 -28.5,11.5T280,-480q0,17 11.5,28.5T320,-440h120ZM200,-120q-33,0 -56.5,-23.5T120,-200v-560q0,-33 23.5,-56.5T200,-840h560q33,0 56.5,23.5T840,-760v560q0,33 -23.5,56.5T760,-120H200Zm0,-80h560v-560H200v560Zm0,-560v560,-560Z" /></group>
 </vector>

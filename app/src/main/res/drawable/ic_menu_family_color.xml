@@ -1,0 +1,5 @@
+<!-- Lucide: tags (ISC). Exact official geometry. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@android:color/transparent" android:pathData="M13.172,2a2,2 0,0 1,1.414 0.586l6.71,6.71a2.4,2.4 0,0 1,0 3.408l-4.592,4.592a2.4,2.4 0,0 1,-3.408 0l-6.71,-6.71A2,2 0,0 1,6 9.172V3A1,1 0,0 1,7 2ZM2,7V13.172a2,2 0,0 0,0.586 1.414l6.71,6.71a2.4,2.4 0,0 0,3.191 0.193" android:strokeColor="#087A73" android:strokeLineCap="round" android:strokeLineJoin="round" android:strokeWidth="2" />
+    <path android:fillColor="#087A73" android:pathData="M10.5,6a0.5,0.5 0,1 1,0 1a0.5,0.5 0,1 1,0 -1" android:strokeColor="#087A73" android:strokeWidth="2" />
+</vector>
