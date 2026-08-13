@@ -48,33 +48,33 @@
                 <data android:host="drshapaya.ru" />
                 <data android:path="/androidft/join" />
             </intent-filter>
+        </activity>
+        <activity
+            android:name=".TreeFileOpenActivity"
+            android:documentLaunchMode="never"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:host="*" />
-                <data android:pathPattern=".*\\.ftree" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/zip" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="file" />
-                <data android:host="*" />
-                <data android:pathPattern=".*\\.ftree" />
-                <data android:mimeType="application/octet-stream" />
-                <data android:mimeType="application/zip" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
                 <data android:mimeType="application/vnd.drshapaya.familytree+zip" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.ftree" />
+                <data android:pathPattern=".*\\.tree" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
         <provider

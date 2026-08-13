@@ -33,6 +33,84 @@ public final class TreeLayoutEngineStressTest {
         exerciseEveryPlacement(complexRemarriageTree());
     }
 
+    @Test(timeout = 20_000L)
+    public void stepwiseManualArrangeRebuildsLargeTreeDeterministically() {
+        TreeState source = descendantTree(4, 3);
+        TreeState first = TreeStateCopier.copy(source);
+        TreeState second = TreeStateCopier.copy(source);
+        applyPlacement(first, BrokenPlacement.STACK);
+        applyPlacement(second, BrokenPlacement.HEAP);
+
+        TreeLayoutEngine.rebuildStepwise(first);
+        TreeLayoutEngine.rebuildStepwise(second);
+
+        assertLayoutInvariants(first, "STEPWISE");
+        assertSameLayout(first, second, "STEPWISE");
+    }
+
+    @Test(timeout = 20_000L)
+    public void stepwiseManualArrangeIsIdempotentForLargeTree() {
+        TreeState state = descendantTree(4, 3);
+
+        TreeLayoutEngine.rebuildStepwise(state);
+        TreeState arrangedOnce = TreeStateCopier.copy(state);
+        TreeLayoutEngine.rebuildStepwise(state);
+
+        assertLayoutInvariants(state, "STEPWISE_IDEMPOTENT");
+        assertSameLayout(arrangedOnce, state, "STEPWISE_IDEMPOTENT");
+    }
+
+    @Test(timeout = 20_000L)
+    public void manualArrangeDoesNotDependOnAutoArrangePreference() {
+        TreeState disabled = descendantTree(4, 3);
+        TreeState enabled = TreeStateCopier.copy(disabled);
+        disabled.autoArrangeOnAdd = false;
+        enabled.autoArrangeOnAdd = true;
+
+        TreeLayoutEngine.rebuildStepwise(disabled);
+        TreeLayoutEngine.rebuildStepwise(enabled);
+
+        assertTrue("ручное упорядочивание не должно включать настройку", !disabled.autoArrangeOnAdd);
+        assertTrue("ручное упорядочивание не должно выключать настройку", enabled.autoArrangeOnAdd);
+        assertSameLayout(disabled, enabled, "STEPWISE_AUTO_PREFERENCE");
+    }
+
+    @Test(timeout = 30_000L)
+    public void stepwiseManualArrangeKeepsRemarriageUnionsSeparateAndIdempotent() {
+        TreeState state = complexRemarriageTree();
+        String remarried = "g1_f0_c0_person";
+
+        TreeLayoutEngine.rebuildStepwise(state);
+
+        assertLayoutInvariants(state, "STEPWISE_REMARRIAGE");
+        FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
+        assertEquals(2, graph.partnerUnitsOf(remarried).size());
+        FamilyLayoutGraph.SiblingGroup childGroup = graph.siblingGroupByPerson.get(
+            "second_marriage_child_0");
+        assertTrue(childGroup != null);
+        assertTrue(childGroup.people.contains("second_marriage_child_2"));
+        assertTrue(childGroup.people.contains("g2_f0_c0_person"));
+
+        FamilyLayoutGraph.ParentFamily firstUnion = graph.parentFamilyOf("g2_f0_c0_person");
+        FamilyLayoutGraph.ParentFamily secondUnion = graph.parentFamilyOf(
+            "second_marriage_child_0");
+        assertTrue(firstUnion != null && secondUnion != null && firstUnion != secondUnion);
+        assertEquals(
+            describeFamily(firstUnion, state),
+            directCenter(firstUnion.parents, state),
+            directCenter(firstUnion.children, state),
+            TreeLayoutEngine.GRID);
+        assertEquals(
+            describeFamily(secondUnion, state),
+            directCenter(secondUnion.parents, state),
+            directCenter(secondUnion.children, state),
+            TreeLayoutEngine.GRID);
+
+        TreeState arrangedOnce = TreeStateCopier.copy(state);
+        TreeLayoutEngine.rebuildStepwise(state);
+        assertSameLayout(arrangedOnce, state, "STEPWISE_REMARRIAGE_IDEMPOTENT");
+    }
+
     private static void exerciseEveryPlacement(TreeState source) {
         for (BrokenPlacement placement : BrokenPlacement.values()) {
             TreeState damaged = TreeStateCopier.copy(source);
@@ -40,8 +118,8 @@ public final class TreeLayoutEngineStressTest {
             TreeState first = TreeStateCopier.copy(damaged);
             TreeState second = TreeStateCopier.copy(damaged);
 
-            TreeLayoutEngine.ensurePositions(first);
-            TreeLayoutEngine.ensurePositions(second);
+            TreeLayoutEngine.layout(first);
+            TreeLayoutEngine.layout(second);
 
             assertLayoutInvariants(first, placement.name());
             assertSameLayout(first, second, placement.name());
@@ -219,6 +297,33 @@ public final class TreeLayoutEngineStressTest {
             assertEquals(scenario + ": недетерминированный X для " + id, a.x, b.x, EPSILON);
             assertEquals(scenario + ": недетерминированный Y для " + id, a.y, b.y, EPSILON);
         }
+    }
+
+    private static float directCenter(Iterable<String> ids, TreeState state) {
+        float left = Float.MAX_VALUE;
+        float right = -Float.MAX_VALUE;
+        for (String id : ids) {
+            Person person = state.people.get(id);
+            if (person == null) continue;
+            left = Math.min(left, person.x);
+            right = Math.max(right, person.x + TreeLayoutEngine.CARD_W);
+        }
+        return (left + right) / 2f;
+    }
+
+    private static String describeFamily(
+        FamilyLayoutGraph.ParentFamily family,
+        TreeState state
+    ) {
+        StringBuilder value = new StringBuilder();
+        for (String id : family.parents) {
+            value.append(id).append('=').append(state.people.get(id).x).append(' ');
+        }
+        value.append(" children: ");
+        for (String id : family.children) {
+            value.append(id).append('=').append(state.people.get(id).x).append(' ');
+        }
+        return value.toString();
     }
 
     private static void addPerson(TreeState state, String id, String name, int year, String gender) {

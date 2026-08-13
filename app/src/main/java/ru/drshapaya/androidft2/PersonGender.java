@@ -60,6 +60,9 @@ final class PersonGender {
             if (MALE_NAMES.contains(token)) return MALE;
             if (FEMALE_NAMES.contains(token)) return FEMALE;
         }
+        boolean maleKinship = text.matches(".*(отец|папа|дед|дяд|муж|сын|брат).*");
+        boolean femaleKinship = text.matches(".*(мать|мама|баб|тет|жена|дочь|сестр).*");
+        if (maleKinship != femaleKinship) return maleKinship ? MALE : FEMALE;
         for (String token : tokens) {
             if (token.matches(".*(ова|ева|ина|ына|ская|цкая|ая)$")) return FEMALE;
         }

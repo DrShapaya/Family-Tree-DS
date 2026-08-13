@@ -376,6 +376,13 @@ final class TreeCanvasView extends View {
         invalidate();
     }
 
+    void focusWorkspaceCenter() {
+        if (getWidth() == 0 || getHeight() == 0) return;
+        offsetX = getWidth() / 2f - workspaceWidth / 2f * scale;
+        offsetY = getHeight() / 2f - workspaceHeight / 2f * scale;
+        invalidate();
+    }
+
     void focusPerson(String personId) {
         if (state == null || getWidth() == 0 || getHeight() == 0) return;
         Person person = state.people.get(personId);

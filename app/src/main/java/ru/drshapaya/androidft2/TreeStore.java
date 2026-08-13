@@ -623,6 +623,7 @@ final class TreeStore {
         state.hideCardDetails = settings.optBoolean("hideCardDetails", state.hideCardDetails);
         state.compactCards = settings.optBoolean("compactCards", state.compactCards);
         state.focusTree = settings.optBoolean("focusTree", state.focusTree);
+        state.autoArrangeOnAdd = settings.optBoolean("autoArrangeOnAdd", state.autoArrangeOnAdd);
         state.workspaceBoundsVisible = !settings.has("workspaceBoundsVisible")
             || settings.optBoolean("workspaceBoundsVisible", true);
         String boundsStyle = settings.optString("workspaceBoundsStyle", state.workspaceBoundsStyle);
@@ -651,6 +652,7 @@ final class TreeStore {
             .put("hideCardDetails", state.hideCardDetails)
             .put("compactCards", state.compactCards)
             .put("focusTree", state.focusTree)
+            .put("autoArrangeOnAdd", state.autoArrangeOnAdd)
             .put("workspaceBoundsVisible", state.workspaceBoundsVisible)
             .put("workspaceBoundsStyle", state.workspaceBoundsStyle)
             .put("workspaceWidth", TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth))
@@ -757,7 +759,7 @@ final class TreeStore {
         }
         state.rootId = state.people.isEmpty() ? "" : state.people.values().iterator().next().id;
         state.selectedId = state.rootId;
-        TreeLayoutEngine.layout(state);
+        TreeLayoutEngine.rebuildStepwise(state);
         refreshColors(state);
         return state;
     }

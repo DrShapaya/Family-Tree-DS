@@ -687,7 +687,8 @@ final class MainActivityFiles {
                 TreeState imported = TreePackageIO.hasZipSignature(header, count)
                     ? TreePackageIO.read(input, activity.store)
                     : activity.store.parse(readUtf8Limited(input, 25L * 1024L * 1024L));
-                activity.runOnUiThread(() -> applyImportedTree(imported));
+                String sourceName = displayName(uri);
+                activity.runOnUiThread(() -> confirmImportedTree(imported, sourceName));
             } catch (Exception error) {
                 activity.runOnUiThread(() ->
                     activity.toast("Импорт не выполнен: " + safeError(error)));
@@ -696,9 +697,95 @@ final class MainActivityFiles {
         }, "tree-import").start();
     }
 
+    private void confirmImportedTree(TreeState imported, String sourceName) {
+        if (activity.isFinishing() || activity.isDestroyed() || imported == null) return;
+        if (!shouldWarnBeforeReplacing(activity.state, imported)) {
+            applyImportedTree(imported);
+            return;
+        }
+
+        Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(activity);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(activity.dp(18), activity.dp(16), activity.dp(18), activity.dp(16));
+        shell.setBackground(activity.panelBg(
+            Color.rgb(250, 252, 253),
+            activity.dp(18),
+            Color.argb(56, 63, 82, 94)));
+
+        TextView title = versionText(
+            AppLanguage.isEnglish(activity) ? "Open another tree?" : "Открыть другое дерево?",
+            20,
+            Color.rgb(28, 34, 38),
+            true);
+        shell.addView(title, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            activity.dp(44)));
+
+        String safeName = sourceName == null ? "" : sourceName.trim();
+        String message = AppLanguage.isEnglish(activity)
+            ? "The current tree will be replaced. To keep a separate copy, cancel and export it first."
+            : "Текущее дерево будет заменено. Чтобы оставить отдельную копию, нажмите «Отмена» и сначала экспортируйте его.";
+        if (!safeName.isEmpty()) {
+            message += AppLanguage.isEnglish(activity)
+                ? "\n\nFile: " + safeName
+                : "\n\nФайл: " + safeName;
+        }
+        TextView body = versionText(message, 14, Color.rgb(71, 82, 89), false);
+        body.setLineSpacing(0f, 1.12f);
+        shell.addView(body, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        LinearLayout actions = new LinearLayout(activity);
+        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, activity.dp(16), 0, 0);
+        Button cancel = activity.actionButton(
+            AppLanguage.isEnglish(activity) ? "Cancel" : "Отмена",
+            view -> dialog.dismiss());
+        Button open = activity.actionButton(
+            AppLanguage.isEnglish(activity) ? "Open tree" : "Открыть дерево",
+            view -> {
+                dialog.dismiss();
+                applyImportedTree(imported);
+            });
+        actions.addView(cancel, new LinearLayout.LayoutParams(activity.dp(112), activity.dp(44)));
+        LinearLayout.LayoutParams openParams = new LinearLayout.LayoutParams(
+            activity.dp(148),
+            activity.dp(44));
+        openParams.leftMargin = activity.dp(8);
+        actions.addView(open, openParams);
+        shell.addView(actions);
+
+        dialog.setContentView(shell);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.width = Math.min(
+                activity.getResources().getDisplayMetrics().widthPixels - activity.dp(24),
+                activity.dp(520));
+            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            attrs.dimAmount = 0.32f;
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setAttributes(attrs);
+        }
+    }
+
+    static boolean shouldWarnBeforeReplacing(TreeState current, TreeState imported) {
+        return current != null
+            && imported != null
+            && !current.people.isEmpty()
+            && current != imported;
+    }
+
     private void applyImportedTree(TreeState imported) {
         if (activity.isFinishing() || activity.isDestroyed() || imported == null) return;
         activity.recordUndo("Импортировано дерево", "");
+        activity.applyAutoArrangePreference(imported);
         activity.state = imported;
         activity.recordAction("Импортировано дерево", "");
         activity.resetTransientCanvasModes(false);

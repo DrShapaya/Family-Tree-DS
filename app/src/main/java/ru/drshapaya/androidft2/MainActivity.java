@@ -62,7 +62,7 @@ public final class MainActivity extends Activity {
     static final int REQ_EXPORT_TILES = 29;
     static final int REQ_WRITE_PHOTO_PERMISSION = 30;
     static final int REQ_MEMORY_PHOTO = 31;
-    static final String VERSION_NAME = "2.6.4";
+    static final String VERSION_NAME = BuildConfig.VERSION_NAME;
     static final String VERSION_BADGE = "AndroidFT " + VERSION_NAME;
     static final String[][] TRAINING_STEPS = new String[][]{
         {"add-person", "Создайте карточку", "Нажмите подсвеченную кнопку +. На дереве появится новый человек, которого можно сразу заполнить."},
@@ -197,6 +197,7 @@ public final class MainActivity extends Activity {
         }
         store = new TreeStore(this);
         state = store.load();
+        applyAutoArrangePreference(state);
         treeHintDismissed = getSharedPreferences("androidft-ui", MODE_PRIVATE)
             .getBoolean("tree_hint_dismissed", false);
         filesModule = new MainActivityFiles(this);
@@ -260,7 +261,8 @@ public final class MainActivity extends Activity {
         if (!recoveryNotice.isEmpty()) toast(recoveryNotice);
         handleIncomingIntent(getIntent());
         treeView.post(() -> {
-            treeView.fit();
+            if (state == null || state.people.isEmpty()) treeView.focusWorkspaceCenter();
+            else treeView.fit();
             stage.postDelayed(this::offerTrainingIfNeeded, 420);
         });
     }
@@ -1013,9 +1015,9 @@ public final class MainActivity extends Activity {
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
-        View layoutRow = menuRow(R.drawable.ic_menu_layout, "Упорядочить", "Перестраивает карточки нативным layout-алгоритмом.", v -> {
+        View layoutRow = menuRow(R.drawable.ic_menu_layout, "Упорядочить", "Быстро перестраивает дерево по шагам добавления родственников.", v -> {
             recordUndo("Упорядочено дерево");
-            TreeLayoutEngine.layout(state);
+            TreeLayoutEngine.rebuildStepwise(state);
             workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth);
             workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight);
             treeView.setWorkspaceBounds(
@@ -1785,6 +1787,7 @@ public final class MainActivity extends Activity {
             remote.hideCardDetails = local.hideCardDetails;
             remote.compactCards = local.compactCards;
             remote.focusTree = local.focusTree;
+            remote.autoArrangeOnAdd = local.autoArrangeOnAdd;
             remote.workspaceBoundsVisible = local.workspaceBoundsVisible;
             remote.workspaceBoundsStyle = local.workspaceBoundsStyle;
             remote.workspaceWidth = local.workspaceWidth;
@@ -1882,13 +1885,19 @@ public final class MainActivity extends Activity {
         if (editingBlocked()) return;
         recordUndo("Добавлена пустая карточка");
         hideKeyboard();
-        PointF center = treeView.viewportCenterWorld();
+        boolean firstCard = state.people.isEmpty();
+        PointF center = firstCard
+            ? new PointF(
+                (workspaceWidth - TreeLayoutEngine.CARD_W) / 2f,
+                (workspaceHeight - TreeLayoutEngine.CARD_H) / 2f)
+            : treeView.viewportCenterWorld();
         float[] spot = findOpenSpot(center.x, center.y);
         Person person = state.addPerson(tr("Пустая карточка"), spot[0], spot[1]);
         state.selectedId = person.id;
         saveToast("Карточка добавлена");
         bindState();
-        treeView.invalidate();
+        if (firstCard) treeView.post(() -> treeView.focusPerson(person.id));
+        else treeView.invalidate();
         trainingTargetActivated("add-person");
     }
 
@@ -1956,6 +1965,21 @@ public final class MainActivity extends Activity {
             false,
             popup,
             this::addLoosePerson));
+        menu.addView(
+            personMenuSection("АВТОМАТИЧЕСКОЕ РАЗМЕЩЕНИЕ"),
+            new LinearLayout.LayoutParams(-1, dp(30)));
+        menu.addView(personMenuToggleAction(
+            R.drawable.ic_menu_layout,
+            "Упорядочивать после добавления",
+            state.autoArrangeOnAdd,
+            enabled -> {
+                state.autoArrangeOnAdd = enabled;
+                rememberAutoArrangePreference(enabled);
+                saveOnly();
+                toast(enabled
+                    ? "Автоупорядочивание включено"
+                    : "Автоупорядочивание выключено");
+            }));
 
         menu.measure(
             View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
@@ -2251,6 +2275,48 @@ public final class MainActivity extends Activity {
         row.setOnClickListener(v -> {
             popup.dismiss();
             action.run();
+        });
+        row.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(48)));
+        return row;
+    }
+
+    private View personMenuToggleAction(
+        int iconRes,
+        String label,
+        boolean enabled,
+        java.util.function.Consumer<Boolean> action
+    ) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(10), 0, dp(10), 0);
+        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(225, 231, 235)));
+
+        TextView title = personMenuText(iconRes, label, false);
+        title.setBackgroundColor(Color.TRANSPARENT);
+        row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
+
+        TextView toggle = new LocalizedTextView(this);
+        toggle.setText("●");
+        toggle.setTextColor(Color.WHITE);
+        toggle.setTextSize(20);
+        toggle.setPadding(dp(3), 0, dp(3), 0);
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(dp(44), dp(26));
+        toggleParams.setMargins(dp(8), 0, 0, 0);
+        row.addView(toggle, toggleParams);
+
+        final boolean[] value = {enabled};
+        Runnable refresh = () -> {
+            toggle.setGravity(value[0]
+                ? Gravity.END | Gravity.CENTER_VERTICAL
+                : Gravity.START | Gravity.CENTER_VERTICAL);
+            toggle.setBackground(toggleBg(value[0]));
+        };
+        refresh.run();
+        row.setOnClickListener(v -> {
+            value[0] = !value[0];
+            refresh.run();
+            action.accept(value[0]);
         });
         row.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(48)));
         return row;
@@ -3081,6 +3147,9 @@ public final class MainActivity extends Activity {
         if (action.startsWith("add-parents-")) {
             int count = Math.min(2, countFromAction(action, 1));
             java.util.List<String> existingParents = parentIdsOf(current.id);
+            java.util.List<String> siblingFamily = state.siblingFamilyTargetsForNewParent(
+                current.id,
+                existingParents);
             float[] offsets = distribute(count, 340f);
             for (int i = 0; i < count; i++) {
                 float[] spot = positionNear(current, offsets[i], -TreeLayoutEngine.LEVEL_GAP);
@@ -3088,13 +3157,18 @@ public final class MainActivity extends Activity {
                     tr("Новый родитель") + (count > 1 ? " " + (i + 1) : ""),
                     spot[0],
                     spot[1]);
-                state.addRelation("parent", created.id, current.id);
+                for (String childId : siblingFamily) {
+                    state.addRelation("parent", created.id, childId);
+                }
                 newIds.add(created.id);
             }
             if (newIds.size() >= 2) {
                 connectEveryPair(newIds, "partner");
             } else if (newIds.size() == 1 && !existingParents.isEmpty()) {
-                state.addRelation("partner", existingParents.get(0), newIds.get(0), "right");
+                String existingParent = existingParents.get(0);
+                String newParent = newIds.get(0);
+                state.addRelation("partner", existingParent, newParent, "left");
+                state.copyParentLinks(existingParent, newParent);
             }
         } else if (action.startsWith("add-children-")) {
             int count = Math.min(4, countFromAction(action, 1));
@@ -3118,6 +3192,7 @@ public final class MainActivity extends Activity {
             float[] spot = positionNear(current, -320f, 0f);
             Person created = state.addPerson(tr("Новый партнёр"), spot[0], spot[1]);
             state.addRelation("partner", current.id, created.id, "left");
+            state.copyParentLinks(current.id, created.id);
             newIds.add(created.id);
         } else if (action.startsWith("add-siblings-") || "add-sibling".equals(action)) {
             int count = "add-sibling".equals(action) ? 1 : Math.min(3, countFromAction(action, 1));
@@ -3153,6 +3228,7 @@ public final class MainActivity extends Activity {
             : "Добавлен: " + (state.people.get(newId) == null ? "новый человек" : state.people.get(newId).name);
         recordAction(label, current.name.isEmpty() ? "Без имени" : current.name);
         state.selectedId = newId;
+        arrangeAfterPersonAddedIfEnabled(newIds, current.id, action);
         saveToast(newIds.size() > 1 ? "Карточки добавлены: " + newIds.size() : "Родственник добавлен");
         bindState();
         treeView.invalidate();
@@ -3190,9 +3266,20 @@ public final class MainActivity extends Activity {
         recordUndo();
         Person created;
         if ("parent".equals(kind)) {
+            java.util.List<String> existingParents = parentIdsOf(current.id);
+            java.util.List<String> siblingFamily = state.siblingFamilyTargetsForNewParent(
+                current.id,
+                existingParents);
             float[] spot = positionNear(current, -160f, -TreeLayoutEngine.LEVEL_GAP);
             created = state.addPerson(tr("Новый родитель"), spot[0], spot[1]);
-            state.addRelation("parent", created.id, current.id);
+            for (String childId : siblingFamily) {
+                state.addRelation("parent", created.id, childId);
+            }
+            if (!existingParents.isEmpty()) {
+                String existingParent = existingParents.get(0);
+                state.addRelation("partner", existingParent, created.id, "left");
+                state.copyParentLinks(existingParent, created.id);
+            }
         } else if ("child".equals(kind)) {
             float[] spot = positionNear(current, 120f, TreeLayoutEngine.LEVEL_GAP);
             created = state.addPerson(tr("Новый ребёнок"), spot[0], spot[1]);
@@ -3209,6 +3296,7 @@ public final class MainActivity extends Activity {
             float[] spot = positionNear(current, -320f, 0f);
             created = state.addPerson(tr("Новый партнёр"), spot[0], spot[1]);
             state.addRelation("partner", current.id, created.id, "left");
+            state.copyParentLinks(current.id, created.id);
         } else {
             float[] spot = positionNear(current, 320f, 0f);
             created = state.addPerson(tr("Брат или сестра"), spot[0], spot[1]);
@@ -3222,6 +3310,10 @@ public final class MainActivity extends Activity {
         }
         state.selectedId = created.id;
         recordAction("Добавлен: " + created.name, current.name.isEmpty() ? "Без имени" : current.name);
+        arrangeAfterPersonAddedIfEnabled(
+            java.util.Collections.singletonList(created.id),
+            current.id,
+            kind);
         saveToast("Родственник добавлен");
         bindState();
     }
@@ -3280,6 +3372,46 @@ public final class MainActivity extends Activity {
         }
         saveToast("Карточка дублирована");
         bindState();
+    }
+
+    private void arrangeAfterPersonAddedIfEnabled(
+        java.util.Collection<String> addedIds,
+        String anchorId,
+        String action
+    ) {
+        if (state == null || !state.autoArrangeOnAdd || state.people.isEmpty()) return;
+        TreeLayoutEngine.layoutAfterAddition(state, addedIds, anchorId, action);
+        workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth);
+        workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight);
+        if (treeView != null) {
+            treeView.setWorkspaceBounds(
+                workspaceBoundsVisible,
+                workspaceBoundsStyle,
+                workspaceWidth,
+                workspaceHeight);
+            treeView.invalidateStructureCaches();
+        }
+    }
+
+    void applyAutoArrangePreference(TreeState target) {
+        if (target == null) return;
+        android.content.SharedPreferences preferences = getSharedPreferences(
+            "androidft-ui",
+            MODE_PRIVATE);
+        if (preferences.contains("auto_arrange_on_add")) {
+            target.autoArrangeOnAdd = preferences.getBoolean("auto_arrange_on_add", false);
+        } else {
+            preferences.edit()
+                .putBoolean("auto_arrange_on_add", target.autoArrangeOnAdd)
+                .apply();
+        }
+    }
+
+    private void rememberAutoArrangePreference(boolean enabled) {
+        getSharedPreferences("androidft-ui", MODE_PRIVATE)
+            .edit()
+            .putBoolean("auto_arrange_on_add", enabled)
+            .apply();
     }
 
     void confirmDelete() {

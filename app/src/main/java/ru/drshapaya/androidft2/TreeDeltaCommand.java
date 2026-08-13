@@ -261,6 +261,7 @@ final class TreeDeltaCommand implements TreeCommand {
         final boolean hideCardDetails;
         final boolean compactCards;
         final boolean focusTree;
+        final boolean autoArrangeOnAdd;
         final boolean workspaceBoundsVisible;
         final String workspaceBoundsStyle;
         final int workspaceWidth;
@@ -283,6 +284,7 @@ final class TreeDeltaCommand implements TreeCommand {
             hideCardDetails = state.hideCardDetails;
             compactCards = state.compactCards;
             focusTree = state.focusTree;
+            autoArrangeOnAdd = state.autoArrangeOnAdd;
             workspaceBoundsVisible = state.workspaceBoundsVisible;
             workspaceBoundsStyle = state.workspaceBoundsStyle;
             workspaceWidth = state.workspaceWidth;
@@ -307,6 +309,7 @@ final class TreeDeltaCommand implements TreeCommand {
                 && hideCardDetails == other.hideCardDetails
                 && compactCards == other.compactCards
                 && focusTree == other.focusTree
+                && autoArrangeOnAdd == other.autoArrangeOnAdd
                 && workspaceBoundsVisible == other.workspaceBoundsVisible
                 && Objects.equals(workspaceBoundsStyle, other.workspaceBoundsStyle)
                 && workspaceWidth == other.workspaceWidth
@@ -330,6 +333,7 @@ final class TreeDeltaCommand implements TreeCommand {
             state.hideCardDetails = hideCardDetails;
             state.compactCards = compactCards;
             state.focusTree = focusTree;
+            state.autoArrangeOnAdd = autoArrangeOnAdd;
             state.workspaceBoundsVisible = workspaceBoundsVisible;
             state.workspaceBoundsStyle = workspaceBoundsStyle;
             state.workspaceWidth = workspaceWidth;

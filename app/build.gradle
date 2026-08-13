@@ -48,8 +48,8 @@ android {
         applicationId 'ru.drshapaya.familytree'
         minSdk 24
         targetSdk 36
-        versionCode 291
-        versionName '2.6.4'
+        versionCode 296
+        versionName '2.6.5'
         buildConfigField "String", "GITHUB_CLIENT_ID", "\"${githubClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "String", "GITHUB_CLIENT_SECRET", "\"${githubClientSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }

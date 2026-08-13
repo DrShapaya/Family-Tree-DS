@@ -471,7 +471,7 @@ final class MainActivityQuickStart {
         }
         activity.state.rootId = child.id;
         activity.state.selectedId = child.id;
-        TreeLayoutEngine.layout(activity.state);
+        TreeLayoutEngine.rebuildStepwise(activity.state);
         activity.workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(activity.state.workspaceWidth);
         activity.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(activity.state.workspaceHeight);
         activity.saveToast("Быстрый старт создан");

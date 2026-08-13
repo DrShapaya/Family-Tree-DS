@@ -2,8 +2,11 @@ package ru.drshapaya.androidft2;
 
 import android.graphics.Color;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,6 +34,7 @@ final class TreeState {
     boolean hideCardDetails = false;
     boolean compactCards = false;
     boolean focusTree = false;
+    boolean autoArrangeOnAdd = false;
     boolean workspaceBoundsVisible = true;
     String workspaceBoundsStyle = "soft";
     int workspaceWidth = 24000;
@@ -94,6 +98,54 @@ final class TreeState {
         Relation relation = addRelation(type, from, to);
         if (relation != null) relation.side = "left".equals(side) ? "left" : "right";
         return relation;
+    }
+
+    void copyParentLinks(String existingParentId, String newParentId) {
+        if (existingParentId == null || newParentId == null
+            || existingParentId.equals(newParentId)) return;
+        List<String> childIds = new ArrayList<>();
+        for (Relation link : links) {
+            if ("parent".equals(link.type) && existingParentId.equals(link.from)) {
+                childIds.add(link.to);
+            }
+        }
+        for (String childId : childIds) addRelation("parent", newParentId, childId);
+    }
+
+    List<String> siblingFamilyTargetsForNewParent(
+        String childId,
+        Collection<String> existingParentIds
+    ) {
+        LinkedHashSet<String> siblingGroup = new LinkedHashSet<>();
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        if (people.containsKey(childId)) queue.add(childId);
+        while (!queue.isEmpty()) {
+            String personId = queue.removeFirst();
+            if (!people.containsKey(personId) || !siblingGroup.add(personId)) continue;
+            for (Relation link : links) {
+                if (!"sibling".equals(link.type)) continue;
+                if (personId.equals(link.from) && people.containsKey(link.to)) queue.addLast(link.to);
+                else if (personId.equals(link.to) && people.containsKey(link.from)) queue.addLast(link.from);
+            }
+        }
+
+        Set<String> expectedParents = new LinkedHashSet<>();
+        if (existingParentIds != null) expectedParents.addAll(existingParentIds);
+        List<String> result = new ArrayList<>();
+        for (String personId : siblingGroup) {
+            if (personId.equals(childId)) {
+                result.add(personId);
+                continue;
+            }
+            Set<String> actualParents = new LinkedHashSet<>();
+            for (Relation link : links) {
+                if ("parent".equals(link.type) && personId.equals(link.to)) {
+                    actualParents.add(link.from);
+                }
+            }
+            if (actualParents.isEmpty() || actualParents.equals(expectedParents)) result.add(personId);
+        }
+        return result;
     }
 
     void deletePerson(String id) {

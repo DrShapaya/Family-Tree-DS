@@ -109,6 +109,7 @@ final class TreeStateCopier {
         target.hideCardDetails = source.hideCardDetails;
         target.compactCards = source.compactCards;
         target.focusTree = source.focusTree;
+        target.autoArrangeOnAdd = source.autoArrangeOnAdd;
         target.workspaceBoundsVisible = source.workspaceBoundsVisible;
         target.workspaceBoundsStyle = source.workspaceBoundsStyle;
         target.workspaceWidth = source.workspaceWidth;
