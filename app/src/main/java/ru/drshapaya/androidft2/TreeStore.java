@@ -337,6 +337,7 @@ final class TreeStore {
         parseGuides(root.optJSONArray("guides"), state);
         parseSettings(root.optJSONObject("settings"), state);
         parseHistory(root.optJSONArray("history"), state);
+        parsePhotoAlbums(root, state, idMap);
 
         state.rootId = remapId(idMap, root.optString("rootId", state.people.isEmpty() ? "" : state.people.values().iterator().next().id));
         if (!state.people.containsKey(state.rootId) && !state.people.isEmpty()) state.rootId = state.people.values().iterator().next().id;
@@ -372,6 +373,9 @@ final class TreeStore {
             item.put("notes", person.notes);
             item.put("photoId", safeMediaId(person.photoMediaId));
             item.put("photo", person.photoMediaId.isEmpty() ? safeDataUrl(person.photo) : "");
+            item.put("avatarScale", safeAvatarScale(person.avatarScale));
+            item.put("avatarOffsetX", safeAvatarOffset(person.avatarOffsetX));
+            item.put("avatarOffsetY", safeAvatarOffset(person.avatarOffsetY));
             item.put("gender", PersonGender.resolve(person));
             item.put("genderManual", person.genderManual);
             item.put("memories", memoriesToJson(person));
@@ -405,7 +409,156 @@ final class TreeStore {
         root.put("guides", guidesToJson(state));
         root.put("settings", settingsToJson(state));
         root.put("history", historyToJson(state));
+        JSONObject photoAlbums = new JSONObject();
+        for (Map.Entry<String, List<String>> album : state.photoAlbums.entrySet()) {
+            JSONArray ids = new JSONArray();
+            for (String id : album.getValue()) if (state.people.containsKey(id)) ids.put(id);
+            photoAlbums.put(safeText(album.getKey(), 80), ids);
+        }
+        root.put("photoAlbums", photoAlbums);
+        root.put("familyAlbums", new JSONArray(state.familyAlbums));
+        root.put("photoAlbumMedia", mediaMapToJson(state.photoAlbumMedia));
+        root.put("familyAlbumMedia", mediaMapToJson(state.familyAlbumMedia));
+        root.put("personAlbumMedia", mediaMapToJson(state.personAlbumMedia));
+        JSONObject folderAlbums = new JSONObject();
+        for (Map.Entry<String, List<PhotoAlbumFolder>> album : state.photoAlbumFolders.entrySet()) {
+            JSONArray folders = new JSONArray();
+            for (PhotoAlbumFolder folder : album.getValue()) {
+                JSONObject item = new JSONObject();
+                item.put("id", safeText(folder.id, 80));
+                item.put("name", safeText(folder.name, 80));
+                JSONArray peopleIds = new JSONArray();
+                for (String id : folder.personIds) if (state.people.containsKey(id)) peopleIds.put(id);
+                item.put("people", peopleIds);
+                item.put("photos", mediaListToJson(folder.photoMediaIds));
+                folders.put(item);
+            }
+            folderAlbums.put(safeText(album.getKey(), 80), folders);
+        }
+        root.put("photoAlbumFolders", folderAlbums);
         return root;
+    }
+
+    private static JSONObject mediaMapToJson(Map<String, List<String>> source) throws Exception {
+        JSONObject result = new JSONObject();
+        for (Map.Entry<String, List<String>> entry : source.entrySet()) {
+            result.put(safeText(entry.getKey(), 160), mediaListToJson(entry.getValue()));
+        }
+        return result;
+    }
+
+    private static JSONArray mediaListToJson(List<String> source) {
+        JSONArray result = new JSONArray();
+        if (source != null) for (String mediaId : source) {
+            String safe = safeMediaId(mediaId);
+            if (!safe.isEmpty()) result.put(safe);
+        }
+        return result;
+    }
+
+    private static void parsePhotoAlbums(JSONObject root, TreeState state, Map<String, String> idMap) {
+        JSONObject albums = root.optJSONObject("photoAlbums");
+        if (albums != null) {
+            Iterator<String> names = albums.keys();
+            int count = 0;
+            while (names.hasNext() && count++ < 100) {
+                String rawName = names.next();
+                String name = safeText(rawName, 80);
+                if (name.isEmpty()) continue;
+                JSONArray ids = albums.optJSONArray(rawName);
+                List<String> people = new ArrayList<>();
+                if (ids != null) for (int i = 0; i < Math.min(500, ids.length()); i++) {
+                    String id = remapId(idMap, ids.optString(i));
+                    if (state.people.containsKey(id) && !people.contains(id)) people.add(id);
+                }
+                state.photoAlbums.put(name, people);
+            }
+        }
+        JSONArray families = root.optJSONArray("familyAlbums");
+        if (families != null) for (int i = 0; i < Math.min(500, families.length()); i++) {
+            String surname = safeText(families.optString(i), 80).toLowerCase(Locale.ROOT);
+            if (!surname.isEmpty()) state.familyAlbums.add(surname);
+        }
+        parseMediaMap(root.optJSONObject("photoAlbumMedia"), state.photoAlbumMedia, 80);
+        parseMediaMap(root.optJSONObject("familyAlbumMedia"), state.familyAlbumMedia, 80);
+        parsePersonMediaMap(root.optJSONObject("personAlbumMedia"), state.personAlbumMedia, state, idMap);
+        JSONObject folderAlbums = root.optJSONObject("photoAlbumFolders");
+        if (folderAlbums != null) {
+            Iterator<String> albumNames = folderAlbums.keys();
+            int albumCount = 0;
+            while (albumNames.hasNext() && albumCount++ < 100) {
+                String rawAlbumName = albumNames.next();
+                String albumName = safeText(rawAlbumName, 80);
+                if (albumName.isEmpty()) continue;
+                JSONArray folders = folderAlbums.optJSONArray(rawAlbumName);
+                if (folders == null) continue;
+                List<PhotoAlbumFolder> parsed = new ArrayList<>();
+                for (int i = 0; i < Math.min(200, folders.length()); i++) {
+                    JSONObject item = folders.optJSONObject(i);
+                    if (item == null) continue;
+                    PhotoAlbumFolder folder = new PhotoAlbumFolder();
+                    String id = safeText(item.optString("id", ""), 80);
+                    if (!id.isEmpty()) folder.id = id;
+                    String name = safeText(item.optString("name", ""), 80);
+                    if (!name.isEmpty()) folder.name = name;
+                    JSONArray peopleIds = item.optJSONArray("people");
+                    if (peopleIds != null) for (int p = 0; p < Math.min(500, peopleIds.length()); p++) {
+                        String personId = remapId(idMap, peopleIds.optString(p));
+                        if (state.people.containsKey(personId) && !folder.personIds.contains(personId)) {
+                            folder.personIds.add(personId);
+                        }
+                    }
+                    parseMediaList(item.optJSONArray("photos"), folder.photoMediaIds);
+                    parsed.add(folder);
+                }
+                state.photoAlbumFolders.put(albumName, parsed);
+            }
+        }
+    }
+
+    private static void parseMediaMap(
+        JSONObject source,
+        Map<String, List<String>> target,
+        int keyLimit
+    ) {
+        if (source == null) return;
+        Iterator<String> keys = source.keys();
+        int count = 0;
+        while (keys.hasNext() && count++ < 500) {
+            String rawKey = keys.next();
+            String key = safeText(rawKey, keyLimit);
+            if (key.isEmpty()) continue;
+            List<String> mediaIds = new ArrayList<>();
+            parseMediaList(source.optJSONArray(rawKey), mediaIds);
+            target.put(key, mediaIds);
+        }
+    }
+
+    private static void parsePersonMediaMap(
+        JSONObject source,
+        Map<String, List<String>> target,
+        TreeState state,
+        Map<String, String> idMap
+    ) {
+        if (source == null) return;
+        Iterator<String> keys = source.keys();
+        int count = 0;
+        while (keys.hasNext() && count++ < 500) {
+            String rawId = keys.next();
+            String personId = remapId(idMap, safeText(rawId, 160));
+            if (!state.people.containsKey(personId)) continue;
+            List<String> mediaIds = new ArrayList<>();
+            parseMediaList(source.optJSONArray(rawId), mediaIds);
+            target.put(personId, mediaIds);
+        }
+    }
+
+    private static void parseMediaList(JSONArray source, List<String> target) {
+        if (source == null) return;
+        for (int i = 0; i < Math.min(2000, source.length()); i++) {
+            String mediaId = safeMediaId(source.optString(i));
+            if (!mediaId.isEmpty() && !target.contains(mediaId)) target.add(mediaId);
+        }
     }
 
     String exportText(TreeState state) throws Exception {
@@ -442,6 +595,9 @@ final class TreeStore {
         person.notes = safeText(item.optString("notes", ""), 4000);
         person.photoMediaId = safeMediaId(item.optString("photoId", ""));
         person.photo = safeDataUrl(firstPhotoValue(item));
+        person.avatarScale = safeAvatarScale((float) item.optDouble("avatarScale", 1d));
+        person.avatarOffsetX = safeAvatarOffset((float) item.optDouble("avatarOffsetX", 0d));
+        person.avatarOffsetY = safeAvatarOffset((float) item.optDouble("avatarOffsetY", 0d));
         person.genderManual = item.optBoolean("genderManual", item.has("gender"));
         person.gender = PersonGender.normalize(item.optString("gender", ""));
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
@@ -451,6 +607,14 @@ final class TreeStore {
         person.manualColor = safeColorString(item.optString("manualColor", item.optString("color", "")), TreeState.colorString(TreeState.colorFor(person.name, index)));
         person.color = TreeState.displayColor(person, index);
         return person;
+    }
+
+    private static float safeAvatarScale(float value) {
+        return Float.isFinite(value) ? Math.max(1f, Math.min(8f, value)) : 1f;
+    }
+
+    private static float safeAvatarOffset(float value) {
+        return Float.isFinite(value) ? Math.max(-64f, Math.min(64f, value)) : 0f;
     }
 
     private static void parseMemories(JSONArray source, Person person) {

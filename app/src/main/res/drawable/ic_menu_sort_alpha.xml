@@ -1,0 +1,4 @@
+<!-- Material Symbols Rounded: sort_by_alpha (Apache-2.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#087A73" android:pathData="M4,18l4,-4 4,4H9v4H7v-4H4zM7,2h2v10H7V2zM13,5V3h8v2l-5.5,7H21v2h-8v-2l5.5,-7H13zM13,17v-2h8v2l-5.5,5H21v2h-8v-2l5.5,-5H13z" />
+</vector>

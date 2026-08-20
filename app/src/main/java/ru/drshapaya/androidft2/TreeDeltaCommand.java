@@ -178,6 +178,9 @@ final class TreeDeltaCommand implements TreeCommand {
             && Objects.equals(a.notes, b.notes)
             && Objects.equals(a.photoMediaId, b.photoMediaId)
             && Objects.equals(a.photo, b.photo)
+            && Float.compare(a.avatarScale, b.avatarScale) == 0
+            && Float.compare(a.avatarOffsetX, b.avatarOffsetX) == 0
+            && Float.compare(a.avatarOffsetY, b.avatarOffsetY) == 0
             && Objects.equals(a.gender, b.gender)
             && a.genderManual == b.genderManual
             && Objects.equals(a.colorMode, b.colorMode)

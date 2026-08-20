@@ -29,7 +29,7 @@ final class MainActivityQuickStart {
     }
 
     void open() {
-        if (activity.editingBlocked()) return;
+        if (!activity.requireEditingEnabled()) return;
         if (activity.state != null && !activity.state.people.isEmpty()) {
             activity.showStyledConfirmation(
                 R.drawable.ic_menu_sparkles,
@@ -44,7 +44,7 @@ final class MainActivityQuickStart {
     }
 
     private void openDialog() {
-        if (activity.editingBlocked()) return;
+        if (!activity.requireEditingEnabled()) return;
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 

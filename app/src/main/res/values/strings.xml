@@ -1,3 +1,20 @@
 <resources>
     <string name="app_name">FamilyTree</string>
+    <string name="birthday_widget_description">Ближайший день рождения родственника</string>
+    <string name="birthday_widget_preview_person_name">Имя</string>
+    <string name="birthday_widget_preview_subtitle">Через 7 дней</string>
+    <string name="birthday_widget_preview_name">Ближайший день рождения</string>
+    <string name="birthday_widget_preview_date">21 августа</string>
+    <string name="birthday_widget_preview_number">7</string>
+    <string name="birthday_widget_preview_days">дней</string>
+    <string name="birthday_widget_photo_description">Фотография родственника</string>
+    <string name="birthday_widget_family_name">Обратный отсчёт</string>
+    <string name="birthday_widget_compact_name">День рождения · компактный</string>
+    <string name="birthday_widget_square_name">День рождения · квадратный</string>
+    <string name="birthday_widget_regular_name">День рождения · обычный</string>
+    <string name="birthday_widget_wide_name">День рождения · широкий</string>
+    <string name="birthday_widget_compact_description">Компактный виджет 2×1</string>
+    <string name="birthday_widget_square_description">Квадратный виджет 2×2</string>
+    <string name="birthday_widget_regular_description">Обычный виджет 3×2</string>
+    <string name="birthday_widget_wide_description">Широкий виджет 4×2</string>
 </resources>

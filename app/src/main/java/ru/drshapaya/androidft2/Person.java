@@ -15,6 +15,9 @@ final class Person {
     String notes = "";
     String photoMediaId = "";
     String photo = "";
+    float avatarScale = 1f;
+    float avatarOffsetX = 0f;
+    float avatarOffsetY = 0f;
     String gender = PersonGender.UNKNOWN;
     boolean genderManual = false;
     final java.util.List<Memory> memories = new java.util.ArrayList<>();

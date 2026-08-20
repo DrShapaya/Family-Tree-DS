@@ -31,8 +31,9 @@ final class MainActivitySettings {
         if (!activity.editLocked) activity.resetTransientCanvasModes(false);
         activity.editLocked = !activity.editLocked;
         activity.viewMode = false;
-        activity.treeView.setEditLocked(activity.editLocked);
-        activity.toast(activity.editLocked ? "Редактирование заблокировано" : "Редактирование разрешено");
+        activity.treeView.setEditLocked(activity.editingBlocked());
+        activity.refreshLockUi();
+        activity.refreshOpenPersonEditor();
         refreshSettingsIfVisible();
         activity.saveOnly();
         activity.showPanel(activity.activePanel);
@@ -47,6 +48,8 @@ final class MainActivitySettings {
         activity.viewMode = !activity.viewMode;
         activity.editLocked = activity.viewMode;
         activity.treeView.setEditLocked(activity.editingBlocked());
+        activity.refreshLockUi();
+        activity.refreshOpenPersonEditor();
         refreshSettingsIfVisible();
         activity.saveOnly();
         activity.toast(activity.viewMode ? "Режим просмотра включён" : "Режим просмотра выключен");

@@ -14,8 +14,36 @@ final class TreeStateCopier {
         for (Relation relation : source.links) target.links.add(copyRelation(relation));
         for (Guide guide : source.guides) target.guides.add(copyGuide(guide));
         for (HistoryEntry history : source.history) target.history.add(copyHistory(history));
+        for (java.util.Map.Entry<String, java.util.List<String>> album : source.photoAlbums.entrySet()) {
+            target.photoAlbums.put(album.getKey(), new java.util.ArrayList<>(album.getValue()));
+        }
+        copyStringLists(source.photoAlbumMedia, target.photoAlbumMedia);
+        copyStringLists(source.familyAlbumMedia, target.familyAlbumMedia);
+        copyStringLists(source.personAlbumMedia, target.personAlbumMedia);
+        for (java.util.Map.Entry<String, java.util.List<PhotoAlbumFolder>> album : source.photoAlbumFolders.entrySet()) {
+            java.util.List<PhotoAlbumFolder> folders = new java.util.ArrayList<>();
+            for (PhotoAlbumFolder sourceFolder : album.getValue()) {
+                PhotoAlbumFolder folder = new PhotoAlbumFolder();
+                folder.id = sourceFolder.id;
+                folder.name = sourceFolder.name;
+                folder.personIds.addAll(sourceFolder.personIds);
+                folder.photoMediaIds.addAll(sourceFolder.photoMediaIds);
+                folders.add(folder);
+            }
+            target.photoAlbumFolders.put(album.getKey(), folders);
+        }
+        target.familyAlbums.addAll(source.familyAlbums);
         copyMetadata(source, target);
         return target;
+    }
+
+    private static void copyStringLists(
+        java.util.Map<String, java.util.List<String>> source,
+        java.util.Map<String, java.util.List<String>> target
+    ) {
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : source.entrySet()) {
+            target.put(entry.getKey(), new java.util.ArrayList<>(entry.getValue()));
+        }
     }
 
     static Person copyPerson(Person source) {
@@ -34,6 +62,9 @@ final class TreeStateCopier {
         target.notes = source.notes;
         target.photoMediaId = source.photoMediaId;
         target.photo = source.photo;
+        target.avatarScale = source.avatarScale;
+        target.avatarOffsetX = source.avatarOffsetX;
+        target.avatarOffsetY = source.avatarOffsetY;
         target.gender = source.gender;
         target.genderManual = source.genderManual;
         target.colorMode = source.colorMode;

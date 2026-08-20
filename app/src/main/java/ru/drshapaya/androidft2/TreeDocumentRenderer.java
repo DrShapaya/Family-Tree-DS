@@ -231,10 +231,7 @@ final class TreeDocumentRenderer {
         canvas.drawCircle(cx, cy, size / 2f, paint);
         Bitmap bitmap = photo(person);
         if (bitmap != null && !monochrome) {
-            int side = Math.min(bitmap.getWidth(), bitmap.getHeight());
-            int left = Math.max(0, (bitmap.getWidth() - side) / 2);
-            int top = Math.max(0, (bitmap.getHeight() - side) / 2);
-            source.set(left, top, left + side, top + side);
+            source.set(AvatarTransform.sourceRect(bitmap, person));
             RectF target = new RectF(
                 cx - size / 2f,
                 cy - size / 2f,

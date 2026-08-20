@@ -1849,7 +1849,25 @@ final class OnlineTreeManager {
                 }
             }
         }
+        addAlbumMedia(result, state.photoAlbumMedia);
+        addAlbumMedia(result, state.familyAlbumMedia);
+        addAlbumMedia(result, state.personAlbumMedia);
+        for (List<PhotoAlbumFolder> folders : state.photoAlbumFolders.values()) {
+            for (PhotoAlbumFolder folder : folders) {
+                for (String mediaId : folder.photoMediaIds) {
+                    if (validMediaId(mediaId, "photo_")) result.add(mediaId);
+                }
+            }
+        }
         return result;
+    }
+
+    private static void addAlbumMedia(Set<String> result, Map<String, List<String>> albums) {
+        for (List<String> mediaIds : albums.values()) {
+            for (String mediaId : mediaIds) {
+                if (validMediaId(mediaId, "photo_")) result.add(mediaId);
+            }
+        }
     }
 
     private static boolean validMediaId(String value, String prefix) {

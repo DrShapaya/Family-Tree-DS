@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">FamilyTree</string>
+    <string name="birthday_widget_description">The next relative’s birthday</string>
+    <string name="birthday_widget_preview_person_name">Name</string>
+    <string name="birthday_widget_preview_subtitle">In 7 days</string>
+    <string name="birthday_widget_preview_name">Next birthday</string>
+    <string name="birthday_widget_preview_date">21 August</string>
+    <string name="birthday_widget_preview_number">7</string>
+    <string name="birthday_widget_preview_days">days</string>
+    <string name="birthday_widget_photo_description">Relative photo</string>
+    <string name="birthday_widget_family_name">Countdown</string>
+    <string name="birthday_widget_compact_name">Birthday · compact</string>
+    <string name="birthday_widget_square_name">Birthday · square</string>
+    <string name="birthday_widget_regular_name">Birthday · regular</string>
+    <string name="birthday_widget_wide_name">Birthday · wide</string>
+    <string name="birthday_widget_compact_description">Compact 2×1 widget</string>
+    <string name="birthday_widget_square_description">Square 2×2 widget</string>
+    <string name="birthday_widget_regular_description">Regular 3×2 widget</string>
+    <string name="birthday_widget_wide_description">Wide 4×2 widget</string>
+</resources>

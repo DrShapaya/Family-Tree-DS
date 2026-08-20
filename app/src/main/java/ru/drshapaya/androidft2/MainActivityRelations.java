@@ -9,6 +9,7 @@ final class MainActivityRelations {
 
     void startLink(String type) {
         if (activity.state == null || activity.state.people.isEmpty()) return;
+        if (!"kinship".equals(type) && !activity.requireEditingEnabled()) return;
         activity.resetTransientCanvasModes(false);
         activity.pendingLinkType = type;
         activity.pendingLinkFrom = "";
@@ -24,6 +25,7 @@ final class MainActivityRelations {
         if (activity.pendingLinkFrom.isEmpty()) {
             if (activity.editingBlocked() && !kinshipMode) {
                 cancelLinkMode();
+                activity.showEditingLockedPrompt();
                 return true;
             }
             activity.pendingLinkFrom = person.id;
@@ -57,6 +59,7 @@ final class MainActivityRelations {
         }
         if (activity.editingBlocked()) {
             cancelLinkMode();
+            activity.showEditingLockedPrompt();
             return true;
         }
         String fromName = activity.state.people.containsKey(activity.pendingLinkFrom) ? activity.state.people.get(activity.pendingLinkFrom).name : "Без имени";

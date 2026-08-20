@@ -1,5 +1,6 @@
 package ru.drshapaya.androidft2;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ClipData;
@@ -8,6 +9,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.PointF;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -15,13 +17,16 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Base64;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -37,7 +42,13 @@ import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -46,8 +57,10 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public final class MainActivity extends Activity {
@@ -62,8 +75,11 @@ public final class MainActivity extends Activity {
     static final int REQ_EXPORT_TILES = 29;
     static final int REQ_WRITE_PHOTO_PERMISSION = 30;
     static final int REQ_MEMORY_PHOTO = 31;
+    static final int REQ_ALBUM_PHOTOS = 32;
     static final String VERSION_NAME = BuildConfig.VERSION_NAME;
     static final String VERSION_BADGE = "AndroidFT " + VERSION_NAME;
+    static final String DONATION_ALERTS_URL = "https://www.donationalerts.com/r/drshapaya";
+    static final int COLLAPSED_RELEASE_NOTES = 2;
     static final String[][] TRAINING_STEPS = new String[][]{
         {"add-person", "Создайте карточку", "Нажмите подсвеченную кнопку +. На дереве появится новый человек, которого можно сразу заполнить."},
         {"card-menu", "Меню карточки", "Нажмите «Карточка». Здесь находятся редактор человека, быстрый старт, цвета и удаление."},
@@ -91,6 +107,8 @@ public final class MainActivity extends Activity {
     LinearLayout viewPanel;
     LinearLayout branchPanel;
     LinearLayout settingsPanel;
+    View peoplePanel;
+    View morePanel;
     LinearLayout settingsContent;
     LinearLayout historyPanel;
     LinearLayout historyList;
@@ -116,14 +134,15 @@ public final class MainActivity extends Activity {
     Button redoBtn;
     Button treeNav;
     Button cardNav;
+    Button peopleNav;
     Button linksNav;
-    Button filesNav;
-    Button settingsNav;
+    Button moreNav;
+    Button lockRailButton;
     Button treeQualityButton;
     View appHeader;
     View headerBrand;
     Button headerSaveButton;
-    View treeHint;
+    TextView treeHint;
     boolean treeHintDismissed;
     View zoomRail;
     View bottomNavigation;
@@ -174,15 +193,23 @@ public final class MainActivity extends Activity {
     private MainActivityRelations relationsModule;
     private MainActivityEditor editorModule;
     private MainActivityQuickStart quickStartModule;
+    MainActivityPeople peopleModule;
     private MainActivityOnline onlineModule;
     private OnlineTreeManager onlineManager;
     private TreeSaveCoordinator saveCoordinator;
     private TreeQualityAnalyzer.TreeReport qualityReport = new TreeQualityAnalyzer.TreeReport();
     private final Handler toastHandler = new Handler(Looper.getMainLooper());
     private Toast currentToast;
+    private Dialog lockedEditPromptDialog;
+    private final Runnable dismissLockedEditPromptRunnable = () -> {
+        if (lockedEditPromptDialog != null && lockedEditPromptDialog.isShowing()) {
+            lockedEditPromptDialog.dismiss();
+        }
+    };
     private final Runnable cancelToastRunnable = () -> {
         if (currentToast != null) currentToast.cancel();
     };
+    private OnBackInvokedCallback backInvokedCallback;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -192,6 +219,12 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            backInvokedCallback = this::handlePredictiveBack;
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                backInvokedCallback);
+        }
         if (AppLanguage.isEnglish(this) && "Поколение".equals(guideDraftLabel)) {
             guideDraftLabel = "Generation";
         }
@@ -208,6 +241,7 @@ public final class MainActivity extends Activity {
         relationsModule = new MainActivityRelations(this);
         editorModule = new MainActivityEditor(this);
         quickStartModule = new MainActivityQuickStart(this);
+        peopleModule = new MainActivityPeople(this);
         onlineManager = new OnlineTreeManager(this, store, new OnlineTreeManager.Listener() {
             @Override public void onRemoteTree(TreeState remote, String message) {
                 applyOnlineTree(remote, message);
@@ -222,6 +256,9 @@ public final class MainActivity extends Activity {
                 onlineReadOnly = !canEdit;
                 resetTransientCanvasModes(false);
                 if (treeView != null) treeView.setEditLocked(editingBlocked());
+                refreshLockUi();
+                if (editingBlocked()) hideKeyboard();
+                refreshOpenPersonEditor();
                 if (settingsModule != null) settingsModule.refreshSettingsIfVisible();
                 updateCanvasModePanel();
             }
@@ -246,6 +283,7 @@ public final class MainActivity extends Activity {
                 }
 
                 @Override public void onSaved(TreeState snapshot) {
+                    BirthdayWidgetProvider.updateAll(MainActivity.this);
                     if (onlineManager != null) onlineManager.onLocalTreeSaved(snapshot);
                 }
             });
@@ -274,6 +312,25 @@ public final class MainActivity extends Activity {
         handleIncomingIntent(intent);
     }
 
+    @SuppressLint("GestureBackNavigation")
+    @SuppressWarnings("deprecation")
+    @Override
+    public void onBackPressed() {
+        if (!activePanel.isEmpty()) {
+            showPanel("");
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    private void handlePredictiveBack() {
+        if (!activePanel.isEmpty()) {
+            showPanel("");
+            return;
+        }
+        finishAfterTransition();
+    }
+
     @Override
     protected void onStop() {
         DiagnosticsLogger.breadcrumb(this, "activity.stop");
@@ -290,8 +347,18 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && backInvokedCallback != null) {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
+            backInvokedCallback = null;
+        }
         if (saveCoordinator != null) saveCoordinator.close();
         if (onlineManager != null) onlineManager.close();
+        if (peopleModule != null) peopleModule.close();
+        toastHandler.removeCallbacks(dismissLockedEditPromptRunnable);
+        if (lockedEditPromptDialog != null && lockedEditPromptDialog.isShowing()) {
+            lockedEditPromptDialog.dismiss();
+        }
         super.onDestroy();
     }
 
@@ -365,6 +432,9 @@ public final class MainActivity extends Activity {
             @Override public void onCanvasTouched() {
                 clearSearchFocus();
             }
+            @Override public void onEditBlocked() {
+                showEditingLockedPrompt();
+            }
         });
         stage.addView(treeView, new FrameLayout.LayoutParams(-1, -1));
 
@@ -385,7 +455,11 @@ public final class MainActivity extends Activity {
             if (event.getAction() == android.view.MotionEvent.ACTION_UP
                 || event.getAction() == android.view.MotionEvent.ACTION_CANCEL) {
                 float distance = event.getX() - hintDownX[0];
-                if (Math.abs(distance) >= dp(54)) dismissTreeHint(distance >= 0f ? 1 : -1);
+                if (editingBlocked()) {
+                    if (Math.abs(distance) < dp(18)) showEditingLockedPrompt();
+                } else if (Math.abs(distance) >= dp(54)) {
+                    dismissTreeHint(distance >= 0f ? 1 : -1);
+                }
                 return true;
             }
             return true;
@@ -394,7 +468,7 @@ public final class MainActivity extends Activity {
         hintParams.setMargins(dp(12), dp(10), dp(64), 0);
         stage.addView(hint, hintParams);
         treeHint = hint;
-        if (treeHintDismissed) hint.setVisibility(View.GONE);
+        refreshLockUi();
 
         canvasModePanel = buildCanvasModePanel();
         stage.addView(canvasModePanel, canvasModeParams());
@@ -425,13 +499,17 @@ public final class MainActivity extends Activity {
         viewPanel = buildViewPanel();
         branchPanel = buildBranchPanel();
         settingsPanel = buildSettingsPanel();
+        peoplePanel = peopleModule.buildPanel();
+        morePanel = buildMorePanel();
         stage.addView(cardPanel, bottomPanelWrapParams());
         stage.addView(linksPanel, bottomPanelWrapParams());
         stage.addView(guidePanel, bottomPanelWrapParams());
         stage.addView(filesPanel, bottomPanelWrapParams());
         stage.addView(viewPanel, bottomPanelWrapParams());
-        stage.addView(branchPanel, bottomPanelParams(300));
+        stage.addView(branchPanel, bottomPanelWrapParams());
         stage.addView(settingsPanel, fullPanelParams());
+        stage.addView(peoplePanel, fullPanelParams());
+        stage.addView(morePanel, new FrameLayout.LayoutParams(-1, -1));
 
         bottomNavigation = buildBottomNav();
         stage.addView(bottomNavigation, bottomParams());
@@ -632,7 +710,9 @@ public final class MainActivity extends Activity {
         LinearLayout nav = new LinearLayout(this);
         nav.setGravity(Gravity.CENTER);
         nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setPadding(dp(8), dp(7), dp(8), dp(8));
+        nav.setPadding(dp(8), dp(7), dp(8), dp(6));
+        nav.setClipChildren(false);
+        nav.setClipToPadding(false);
         nav.setBackground(panelBg(Color.argb(242, 248, 251, 252), 0, Color.argb(32, 63, 82, 94)));
         nav.setElevation(dp(8));
         treeNav = navButton("Дерево", R.drawable.ic_nav_tree, v -> {
@@ -645,27 +725,372 @@ public final class MainActivity extends Activity {
             trainingTargetActivated("card-menu");
         });
         nav.addView(cardNav, new LinearLayout.LayoutParams(0, -1, 1));
+        peopleNav = navButton("Люди", R.drawable.ic_menu_people, v -> togglePanel("people"));
+        peopleNav.setTextSize(11);
+        peopleNav.setStateListAnimator(null);
+        FrameLayout peopleSlot = new FrameLayout(this);
+        peopleSlot.setClipChildren(false);
+        peopleSlot.setClipToPadding(false);
+        FrameLayout.LayoutParams peopleButtonParams = new FrameLayout.LayoutParams(-1, -1);
+        peopleButtonParams.setMargins(dp(3), 0, dp(3), dp(6));
+        peopleSlot.addView(peopleNav, peopleButtonParams);
+        nav.addView(peopleSlot, new LinearLayout.LayoutParams(0, -1, 1));
         linksNav = navButton("Связи", R.drawable.ic_nav_links, v -> {
             togglePanel("links");
             trainingTargetActivated("links-menu");
         });
         nav.addView(linksNav, new LinearLayout.LayoutParams(0, -1, 1));
-        filesNav = navButton("Файлы", R.drawable.ic_nav_files, v -> {
-            togglePanel("files");
-            trainingTargetActivated("files-menu");
-        });
-        nav.addView(filesNav, new LinearLayout.LayoutParams(0, -1, 1));
-        settingsNav = navButton("Параметры", R.drawable.ic_nav_more, v -> {
-            togglePanel("settings");
-            trainingTargetActivated("settings-menu");
-        });
-        nav.addView(settingsNav, new LinearLayout.LayoutParams(0, -1, 1));
+        moreNav = navButton("Ещё", R.drawable.ic_nav_more, v -> togglePanel("more"));
+        nav.addView(moreNav, new LinearLayout.LayoutParams(0, -1, 1));
         return nav;
+    }
+
+    private View buildMorePanel() {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.argb(52, 15, 32, 38));
+        overlay.setOnClickListener(v -> showPanel(""));
+
+        LinearLayout bubbles = new LinearLayout(this);
+        bubbles.setOrientation(LinearLayout.VERTICAL);
+        bubbles.setGravity(Gravity.RIGHT);
+        bubbles.setPadding(dp(18), dp(16), dp(18), dp(10));
+        bubbles.setBackground(panelBg(Color.argb(246, 248, 251, 252), dp(24), Color.argb(72, 24, 169, 153)));
+        bubbles.setElevation(dp(14));
+        bubbles.setOnClickListener(v -> { });
+        bubbles.addView(moreBubble(R.drawable.ic_nav_files, "Файлы и экспорт", "Сохранение, импорт и отправка", () -> {
+            showPanel("files");
+            trainingTargetActivated("files-menu");
+        }), moreBubbleParams(false));
+        bubbles.addView(moreBubble(R.drawable.ic_editor_archive, "Сохранённые версии", "Последние локальные копии", () -> {
+            showPanel("");
+            filesModule.openVersions();
+        }), moreBubbleParams(false));
+        bubbles.addView(moreBubble(R.drawable.ic_nav_more, "Параметры", "Вид, защита и оформление", () -> {
+            showPanel("settings");
+            trainingTargetActivated("settings-menu");
+        }), moreBubbleParams(false));
+        bubbles.addView(moreBubble(R.drawable.ic_menu_search, "Обучение", "Подсказки по возможностям", () -> {
+            showPanel("");
+            startTraining();
+        }), moreBubbleParams(false));
+        bubbles.addView(moreBubble(R.drawable.ic_menu_info, "О нас", "Команда, версия и что нового", () -> {
+            showPanel("");
+            showAbout();
+        }), moreBubbleParams(true));
+
+        int menuWidth = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(24));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.RIGHT | Gravity.BOTTOM);
+        params.setMargins(dp(16), dp(16), dp(12), dp(86));
+        overlay.addView(bubbles, params);
+        overlay.setVisibility(View.GONE);
+        return overlay;
+    }
+
+    private View moreBubble(int iconRes, String title, String detail, Runnable action) {
+        LinearLayout bubble = new LinearLayout(this);
+        bubble.setGravity(Gravity.CENTER_VERTICAL);
+        bubble.setPadding(dp(8), dp(6), dp(12), dp(6));
+        bubble.setBackground(panelBg(Color.WHITE, dp(999), Color.argb(68, 24, 169, 153)));
+        bubble.setElevation(dp(4));
+        bubble.setOnClickListener(v -> action.run());
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(Color.WHITE);
+        icon.setPadding(dp(12), dp(12), dp(12), dp(12));
+        icon.setBackground(tealGradientBg(dp(999)));
+        bubble.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(10), 0, 0, 0);
+        TextView label = new LocalizedTextView(this);
+        label.setText(title);
+        label.setTextColor(Color.rgb(28, 34, 38));
+        label.setTextSize(12);
+        label.setTypeface(uiBold());
+        label.setSingleLine(true);
+        copy.addView(label, new LinearLayout.LayoutParams(-1, dp(24)));
+        TextView hint = new LocalizedTextView(this);
+        hint.setText(detail);
+        hint.setTextColor(Color.rgb(101, 113, 122));
+        hint.setTextSize(8);
+        hint.setSingleLine(true);
+        copy.addView(hint, new LinearLayout.LayoutParams(-1, dp(20)));
+        bubble.addView(copy, new LinearLayout.LayoutParams(0, dp(48), 1));
+        return bubble;
+    }
+
+    private LinearLayout.LayoutParams moreBubbleParams(boolean last) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(62));
+        params.setMargins(0, 0, 0, last ? 0 : dp(10));
+        return params;
+    }
+
+    private void showAbout() {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = editorDialogShell();
+        shell.addView(editorDialogHeader(dialog, R.drawable.ic_menu_info, "О нас", "Family Tree DS"));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(2), dp(6), dp(2), dp(2));
+
+        ImageView appIcon = new ImageView(this);
+        appIcon.setImageResource(R.drawable.app_icon);
+        appIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        appIcon.setBackground(panelBg(Color.WHITE, dp(14), Color.argb(60, 24, 169, 153)));
+        appIcon.setClipToOutline(true);
+        appIcon.setElevation(dp(5));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(76), dp(76));
+        iconParams.gravity = Gravity.CENTER_HORIZONTAL;
+        iconParams.setMargins(0, 0, 0, dp(4));
+        body.addView(appIcon, iconParams);
+
+        TextView appName = aboutText("Family Tree DS", 20, Color.rgb(28, 34, 38), true, Gravity.CENTER);
+        body.addView(appName, new LinearLayout.LayoutParams(-1, dp(28)));
+        TextView createdBy = aboutText("Приложение создано TeamDS", 10, Color.rgb(83, 94, 103), false, Gravity.CENTER);
+        body.addView(createdBy, new LinearLayout.LayoutParams(-1, dp(20)));
+        TextView version = aboutText("Версия " + VERSION_NAME, 10, Color.rgb(8, 122, 115), true, Gravity.CENTER);
+        body.addView(version, new LinearLayout.LayoutParams(-1, dp(22)));
+
+        LinearLayout socials = new LinearLayout(this);
+        socials.setGravity(Gravity.CENTER_VERTICAL);
+        Button supportDeveloper = actionButton("Поддержать разработчика", v ->
+            openExternalUrl(DONATION_ALERTS_URL));
+        supportDeveloper.setTextSize(9);
+        supportDeveloper.setSingleLine(true);
+        supportDeveloper.setTextColor(Color.rgb(8, 122, 115));
+        supportDeveloper.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_heart, 0, 0, 0);
+        supportDeveloper.setCompoundDrawablePadding(dp(6));
+        tintDrawables(supportDeveloper, Color.rgb(8, 122, 115));
+        supportDeveloper.setBackground(panelBg(Color.rgb(235, 248, 246), dp(999), Color.argb(64, 24, 169, 153)));
+        LinearLayout.LayoutParams supportParams = new LinearLayout.LayoutParams(0, dp(40), 1);
+        supportParams.setMargins(0, 0, dp(10), 0);
+        socials.addView(supportDeveloper, supportParams);
+        socials.addView(socialButton(R.drawable.ic_social_telegram, "Telegram-канал", "https://t.me/FamilyTreeDS"), socialParams(0));
+        socials.addView(socialButton(R.drawable.ic_social_chat, "Telegram-чат", "https://t.me/ChatFamilyTree"), socialParams(dp(8)));
+        socials.addView(socialButton(R.drawable.ic_social_github, "GitHub", "https://github.com/DrShapaya/Family-Tree-DS"), socialParams(dp(8)));
+        LinearLayout.LayoutParams socialsParams = new LinearLayout.LayoutParams(-1, dp(46));
+        socialsParams.setMargins(0, dp(2), 0, dp(6));
+        body.addView(socials, socialsParams);
+
+        LinearLayout notesCard = aboutCard();
+        String notesTitle = AppLanguage.isEnglish(this)
+            ? "Update " + releaseNotesVersion() + " since " + releaseNotesBaseVersion()
+            : "Обновление " + releaseNotesVersion() + " по сравнению с " + releaseNotesBaseVersion();
+        notesCard.addView(aboutText(notesTitle, 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
+        LinearLayout notesList = new LinearLayout(this);
+        notesList.setOrientation(LinearLayout.VERTICAL);
+        notesCard.addView(notesList, new LinearLayout.LayoutParams(-1, -2));
+        bindReleaseNotes(notesList, releaseNotes(), false);
+        body.addView(notesCard, aboutCardParams());
+
+        LinearLayout teamCard = aboutCard();
+        teamCard.addView(aboutText("Команда", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
+        TextView developer = aboutText("DrShapaya", 13, Color.rgb(8, 122, 115), true, Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        developer.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_people, 0, 0, 0);
+        developer.setCompoundDrawablePadding(dp(9));
+        tintDrawables(developer, Color.rgb(8, 122, 115));
+        installHoldTooltip(developer, "Оригинальный создатель, разработчик и дизайнер приложения");
+        developer.setBackground(panelBg(Color.rgb(235, 248, 246), dp(13), Color.argb(52, 24, 169, 153)));
+        developer.setPadding(dp(12), 0, dp(12), 0);
+        LinearLayout.LayoutParams developerParams = new LinearLayout.LayoutParams(-1, dp(42));
+        developerParams.setMargins(0, dp(6), 0, 0);
+        teamCard.addView(developer, developerParams);
+        body.addView(teamCard, aboutCardParams());
+
+        LinearLayout donorsCard = aboutCard();
+        donorsCard.addView(aboutText("Топ донатеры", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
+        LinearLayout donorsEmpty = new LinearLayout(this);
+        donorsEmpty.setGravity(Gravity.CENTER_VERTICAL);
+        TextView nobody = aboutText("Пока здесь никого нет", 11, Color.rgb(83, 94, 103), false, Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        donorsEmpty.addView(nobody, new LinearLayout.LayoutParams(0, dp(40), 1));
+        Button becomeFirst = actionButton("Стать первым", v -> openExternalUrl(DONATION_ALERTS_URL));
+        becomeFirst.setTextSize(10);
+        becomeFirst.setTextColor(Color.WHITE);
+        becomeFirst.setBackground(tealGradientBg(dp(13)));
+        LinearLayout.LayoutParams firstParams = new LinearLayout.LayoutParams(dp(124), dp(40));
+        firstParams.setMargins(dp(10), 0, 0, 0);
+        donorsEmpty.addView(becomeFirst, firstParams);
+        LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, dp(40));
+        emptyParams.setMargins(0, dp(5), 0, 0);
+        donorsCard.addView(donorsEmpty, emptyParams);
+        body.addView(donorsCard, aboutCardParams());
+
+        scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        showEditorDialog(dialog, shell);
+    }
+
+    private TextView aboutText(String value, float size, int color, boolean bold, int gravity) {
+        TextView text = new LocalizedTextView(this);
+        text.setText(value);
+        text.setTextSize(size);
+        text.setTextColor(uiColor(color));
+        text.setTypeface(bold ? uiBold() : ui());
+        text.setGravity(gravity);
+        text.setLineSpacing(dp(2), 1f);
+        return text;
+    }
+
+    private void bindReleaseNotes(LinearLayout host, List<String> notes, boolean expanded) {
+        host.removeAllViews();
+        int visible = expanded ? notes.size() : Math.min(COLLAPSED_RELEASE_NOTES, notes.size());
+        for (int index = 0; index < visible; index++) {
+            String translatedNote = AppLanguage.translateFully(this, notes.get(index));
+            String value = "•  " + translatedNote;
+            TextView noteView = aboutText(value, 10, Color.rgb(70, 83, 92), false, Gravity.LEFT);
+            LocalizedViews.setRaw(noteView, value);
+            noteView.setPadding(0, dp(5), 0, 0);
+            if (!expanded) {
+                noteView.setMaxLines(2);
+                noteView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            }
+            host.addView(noteView, new LinearLayout.LayoutParams(-1, -2));
+        }
+        if (notes.size() <= COLLAPSED_RELEASE_NOTES) return;
+        String label = expanded
+            ? AppLanguage.text(this, "Свернуть")
+            : (AppLanguage.isEnglish(this) ? "Show all · " : "Показать все · ") + notes.size();
+        Button toggle = actionButton(label, v -> bindReleaseNotes(host, notes, !expanded));
+        toggle.setTextColor(Color.rgb(8, 122, 115));
+        toggle.setBackground(panelBg(Color.rgb(235, 248, 246), dp(13), Color.argb(52, 24, 169, 153)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(38));
+        params.setMargins(0, dp(7), 0, 0);
+        host.addView(toggle, params);
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void installHoldTooltip(TextView anchor, String message) {
+        Handler handler = new Handler(Looper.getMainLooper());
+        final PopupWindow[] tooltip = {null};
+        Runnable show = () -> {
+            if (!anchor.isPressed() || tooltip[0] != null) return;
+            TextView content = aboutText(message, 11, Color.WHITE, false, Gravity.LEFT | Gravity.CENTER_VERTICAL);
+            LocalizedViews.setRaw(content, AppLanguage.translateFully(this, message));
+            content.setPadding(dp(14), dp(10), dp(14), dp(10));
+            content.setBackground(panelBg(Color.rgb(35, 55, 62), dp(14), Color.argb(70, 255, 255, 255)));
+            int width = Math.min(dp(330), getResources().getDisplayMetrics().widthPixels - dp(36));
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            PopupWindow popup = new PopupWindow(content, width, content.getMeasuredHeight(), false);
+            popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            popup.setTouchable(false);
+            popup.setOutsideTouchable(false);
+            popup.setElevation(dp(8));
+            tooltip[0] = popup;
+            popup.showAsDropDown(anchor, anchor.getWidth() - width, -anchor.getHeight() - content.getMeasuredHeight() - dp(8));
+        };
+        anchor.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                view.setPressed(true);
+                handler.postDelayed(show, ViewConfiguration.getLongPressTimeout());
+                return true;
+            }
+            if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                handler.removeCallbacks(show);
+                view.setPressed(false);
+                if (tooltip[0] != null) {
+                    tooltip[0].dismiss();
+                    tooltip[0] = null;
+                }
+                return true;
+            }
+            return true;
+        });
+    }
+
+    private LinearLayout aboutCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(13), dp(10), dp(13), dp(10));
+        card.setBackground(panelBg(Color.rgb(248, 251, 252), dp(18), Color.rgb(217, 224, 229)));
+        return card;
+    }
+
+    private LinearLayout.LayoutParams aboutCardParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.setMargins(0, 0, 0, dp(6));
+        return params;
+    }
+
+    private ImageView socialButton(int icon, String description, String url) {
+        ImageView button = new ImageView(this);
+        button.setImageResource(icon);
+        button.setContentDescription(description);
+        button.setPadding(dp(9), dp(9), dp(9), dp(9));
+        button.setColorFilter(Color.WHITE);
+        button.setBackground(tealGradientBg(dp(999)));
+        button.setElevation(dp(3));
+        button.setOnClickListener(v -> openExternalUrl(url));
+        return button;
+    }
+
+    private LinearLayout.LayoutParams socialParams(int leftMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(40), dp(40));
+        params.setMargins(leftMargin, 0, 0, 0);
+        return params;
+    }
+
+    private void openExternalUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception ignored) {
+            toast("Не удалось открыть ссылку");
+        }
+    }
+
+    private String releaseNotesVersion() {
+        try {
+            return releaseNotesJson().optString("version", VERSION_NAME);
+        } catch (Exception ignored) {
+            return VERSION_NAME;
+        }
+    }
+
+    private String releaseNotesBaseVersion() {
+        try {
+            return releaseNotesJson().optString("baseVersion", "2.6.5");
+        } catch (Exception ignored) {
+            return "2.6.5";
+        }
+    }
+
+    private List<String> releaseNotes() {
+        ArrayList<String> notes = new ArrayList<>();
+        try {
+            JSONArray values = releaseNotesJson().optJSONArray("notes");
+            if (values != null) {
+                for (int index = 0; index < values.length(); index++) {
+                    String note = values.optString(index, "").trim();
+                    if (!note.isEmpty()) notes.add(note);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (notes.isEmpty()) notes.add("Улучшения стабильности и интерфейса.");
+        return notes;
+    }
+
+    private JSONObject releaseNotesJson() throws Exception {
+        try (InputStream input = getAssets().open("release_notes.json")) {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            return new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
+        }
     }
 
     private LinearLayout buildCardPanel() {
         LinearLayout panel = basePanel();
-        panel.setPadding(dp(10), dp(8), dp(10), dp(4));
+        panel.setPadding(dp(10), dp(8), dp(10), dp(2));
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -809,6 +1234,7 @@ public final class MainActivity extends Activity {
 
     private LinearLayout buildLinksPanel() {
         LinearLayout panel = basePanel();
+        panel.setPadding(dp(10), dp(10), dp(10), dp(2));
         panel.addView(menuRow(
             R.drawable.ic_menu_route,
             "Кто кому приходится",
@@ -1016,6 +1442,7 @@ public final class MainActivity extends Activity {
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
         View layoutRow = menuRow(R.drawable.ic_menu_layout, "Упорядочить", "Быстро перестраивает дерево по шагам добавления родственников.", v -> {
+            if (!requireEditingEnabled()) return;
             recordUndo("Упорядочено дерево");
             TreeLayoutEngine.rebuildStepwise(state);
             workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth);
@@ -1042,6 +1469,7 @@ public final class MainActivity extends Activity {
 
     private LinearLayout buildBranchPanel() {
         LinearLayout panel = basePanel();
+        panel.setPadding(dp(10), dp(8), dp(10), dp(4));
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.setOrientation(LinearLayout.HORIZONTAL);
@@ -1771,6 +2199,7 @@ public final class MainActivity extends Activity {
         updateHistoryPanel();
         updateBranchStatusPanel();
         updateSelectionToolbar();
+        refreshLockUi();
     }
 
     private void applyOnlineTree(TreeState remote, String message) {
@@ -1793,6 +2222,29 @@ public final class MainActivity extends Activity {
             remote.workspaceWidth = local.workspaceWidth;
             remote.workspaceHeight = local.workspaceHeight;
             remote.parentLineMode = local.parentLineMode;
+            if (remote.photoAlbums.isEmpty()) {
+                for (java.util.Map.Entry<String, java.util.List<String>> album : local.photoAlbums.entrySet()) {
+                    remote.photoAlbums.put(album.getKey(), new java.util.ArrayList<>(album.getValue()));
+                }
+            }
+            if (remote.photoAlbumMedia.isEmpty()) copyAlbumMedia(local.photoAlbumMedia, remote.photoAlbumMedia);
+            if (remote.familyAlbumMedia.isEmpty()) copyAlbumMedia(local.familyAlbumMedia, remote.familyAlbumMedia);
+            if (remote.personAlbumMedia.isEmpty()) copyAlbumMedia(local.personAlbumMedia, remote.personAlbumMedia);
+            if (remote.photoAlbumFolders.isEmpty()) {
+                for (java.util.Map.Entry<String, java.util.List<PhotoAlbumFolder>> entry : local.photoAlbumFolders.entrySet()) {
+                    java.util.List<PhotoAlbumFolder> folders = new java.util.ArrayList<>();
+                    for (PhotoAlbumFolder original : entry.getValue()) {
+                        PhotoAlbumFolder folder = new PhotoAlbumFolder();
+                        folder.id = original.id;
+                        folder.name = original.name;
+                        folder.personIds.addAll(original.personIds);
+                        folder.photoMediaIds.addAll(original.photoMediaIds);
+                        folders.add(folder);
+                    }
+                    remote.photoAlbumFolders.put(entry.getKey(), folders);
+                }
+            }
+            if (remote.familyAlbums.isEmpty()) remote.familyAlbums.addAll(local.familyAlbums);
             if (remote.people.containsKey(local.selectedId)) remote.selectedId = local.selectedId;
         }
         state = remote;
@@ -1806,11 +2258,20 @@ public final class MainActivity extends Activity {
         if (message != null && !message.isEmpty()) toast(message);
     }
 
+    private static void copyAlbumMedia(
+        java.util.Map<String, java.util.List<String>> source,
+        java.util.Map<String, java.util.List<String>> target
+    ) {
+        for (java.util.Map.Entry<String, java.util.List<String>> entry : source.entrySet()) {
+            target.put(entry.getKey(), new java.util.ArrayList<>(entry.getValue()));
+        }
+    }
+
     void openOnlineMenu() {
         if (onlineModule != null) onlineModule.openDashboard();
     }
 
-    private String personInitials(String name) {
+    String personInitials(String name) {
         String value = name == null ? "" : name.trim();
         if (value.isEmpty()) return "?";
         String[] parts = value.split("\\s+");
@@ -1861,6 +2322,140 @@ public final class MainActivity extends Activity {
         return editLocked || onlineReadOnly;
     }
 
+    boolean requireEditingEnabled() {
+        if (!editingBlocked()) return true;
+        showEditingLockedPrompt();
+        return false;
+    }
+
+    void toggleTreeLockFromRail() {
+        toggleLock();
+    }
+
+    void refreshLockUi() {
+        boolean locked = editingBlocked();
+        if (lockRailButton != null) {
+            int tint = locked ? Color.rgb(197, 83, 75) : Color.rgb(8, 122, 115);
+            lockRailButton.setForeground(centeredIcon(
+                locked ? R.drawable.ic_menu_lock : R.drawable.ic_menu_unlock,
+                tint));
+            lockRailButton.setBackground(panelBg(
+                locked ? Color.rgb(255, 241, 239) : Color.WHITE,
+                dp(8),
+                locked ? Color.argb(112, 197, 83, 75) : Color.rgb(217, 224, 229)));
+            lockRailButton.setContentDescription(tr(locked ? "Разблокировать дерево" : "Заблокировать дерево"));
+        }
+        if (treeHint == null) return;
+        treeHint.animate().cancel();
+        treeHint.setTranslationX(0f);
+        treeHint.setAlpha(1f);
+        treeHint.setText(locked
+            ? (onlineReadOnly ? "Дерево доступно только для просмотра" : "Дерево заблокировано")
+            : "Один палец - движение, два пальца - масштаб");
+        treeHint.setTextColor(locked ? Color.rgb(166, 55, 50) : Color.rgb(101, 113, 122));
+        treeHint.setCompoundDrawablesWithIntrinsicBounds(
+            locked ? R.drawable.ic_menu_lock : 0,
+            0,
+            0,
+            0);
+        treeHint.setCompoundDrawablePadding(locked ? dp(7) : 0);
+        if (locked) tintDrawables(treeHint, Color.rgb(197, 83, 75));
+        treeHint.setBackground(panelBg(
+            locked ? Color.argb(242, 255, 241, 239) : Color.argb(218, 255, 255, 255),
+            dp(8),
+            locked ? Color.argb(108, 197, 83, 75) : Color.argb(42, 24, 169, 153)));
+        boolean fullScreenPanel = "settings".equals(activePanel) || "people".equals(activePanel);
+        boolean show = !fullScreenPanel && (locked || (!focusTree && !treeHintDismissed));
+        treeHint.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    void showEditingLockedPrompt() {
+        if (!editingBlocked() || isFinishing() || isDestroyed()) return;
+        toastHandler.removeCallbacks(dismissLockedEditPromptRunnable);
+        if (lockedEditPromptDialog != null && lockedEditPromptDialog.isShowing()) {
+            toastHandler.postDelayed(dismissLockedEditPromptRunnable, 3600L);
+            return;
+        }
+
+        Dialog dialog = new Dialog(this);
+        lockedEditPromptDialog = dialog;
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+
+        LinearLayout card = new LinearLayout(this);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(9), dp(10), dp(9));
+        card.setBackground(panelBg(
+            Color.rgb(255, 249, 248),
+            dp(18),
+            Color.argb(94, 197, 83, 75)));
+        card.setElevation(dp(12));
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_menu_lock);
+        icon.setColorFilter(Color.rgb(197, 83, 75));
+        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        icon.setBackground(panelBg(Color.rgb(255, 235, 232), dp(13), Color.TRANSPARENT));
+        card.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
+
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(10), 0, dp(6), 0);
+        TextView title = new LocalizedTextView(this);
+        title.setText("Дерево заблокировано");
+        title.setTextColor(Color.rgb(126, 49, 45));
+        title.setTextSize(13);
+        title.setTypeface(uiBold());
+        title.setSingleLine(true);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        copy.addView(title, new LinearLayout.LayoutParams(-1, dp(23)));
+        TextView detail = new LocalizedTextView(this);
+        detail.setText(onlineReadOnly
+            ? "Доступ только для просмотра"
+            : "Разблокируйте дерево, чтобы изменить данные");
+        detail.setTextColor(Color.rgb(128, 88, 84));
+        detail.setTextSize(9);
+        detail.setSingleLine(true);
+        detail.setGravity(Gravity.CENTER_VERTICAL);
+        copy.addView(detail, new LinearLayout.LayoutParams(-1, dp(21)));
+        card.addView(copy, new LinearLayout.LayoutParams(0, dp(44), 1));
+
+        Button unlock = actionButton(onlineReadOnly ? "Только просмотр" : "Разблокировать", v -> {
+            if (onlineReadOnly) {
+                toast("Глава дерева включил режим просмотра");
+                return;
+            }
+            dialog.dismiss();
+            toggleLock();
+        });
+        unlock.setTextSize(10);
+        unlock.setSingleLine(true);
+        unlock.setTextColor(onlineReadOnly ? Color.rgb(101, 113, 122) : Color.rgb(166, 55, 50));
+        unlock.setBackground(panelBg(
+            Color.WHITE,
+            dp(12),
+            onlineReadOnly ? Color.rgb(217, 224, 229) : Color.argb(90, 197, 83, 75)));
+        card.addView(unlock, new LinearLayout.LayoutParams(dp(116), dp(42)));
+
+        FrameLayout root = new FrameLayout(this);
+        root.setPadding(dp(12), 0, dp(12), dp(14));
+        root.addView(card, new FrameLayout.LayoutParams(-1, dp(64), Gravity.BOTTOM));
+        dialog.setContentView(root);
+        dialog.setOnDismissListener(ignored -> {
+            toastHandler.removeCallbacks(dismissLockedEditPromptRunnable);
+            if (lockedEditPromptDialog == dialog) lockedEditPromptDialog = null;
+        });
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setGravity(Gravity.BOTTOM);
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+        toastHandler.postDelayed(dismissLockedEditPromptRunnable, 3600L);
+    }
+
     void openPersonEditor() {
         editorModule.openPersonEditor();
     }
@@ -1881,8 +2476,8 @@ public final class MainActivity extends Activity {
         editorModule.updateSelectedFromEditor();
     }
 
-    private void addLoosePerson() {
-        if (editingBlocked()) return;
+    void addLoosePerson() {
+        if (!requireEditingEnabled()) return;
         recordUndo("Добавлена пустая карточка");
         hideKeyboard();
         boolean firstCard = state.people.isEmpty();
@@ -1902,7 +2497,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showAddPersonMenu() {
-        if (editingBlocked() || state == null || addPersonButton == null) return;
+        if (state == null || addPersonButton == null || !requireEditingEnabled()) return;
         Person selected = state.selectedPerson();
         if (selected == null) {
             addLoosePerson();
@@ -3130,7 +3725,7 @@ public final class MainActivity extends Activity {
     }
 
     private void togglePersonPin(Person person) {
-        if (person == null || editingBlocked()) return;
+        if (person == null || !requireEditingEnabled()) return;
         recordUndo(person.pinned ? "Откреплена карточка: " + person.name : "Закреплена карточка: " + person.name);
         person.pinned = !person.pinned;
         saveToast(person.pinned ? "Карточка закреплена" : "Карточка откреплена");
@@ -3138,7 +3733,7 @@ public final class MainActivity extends Activity {
     }
 
     void addRelationAction(String action) {
-        if (editingBlocked()) return;
+        if (!requireEditingEnabled()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
         recordUndo();
@@ -3260,7 +3855,7 @@ public final class MainActivity extends Activity {
     }
 
     private void addRelative(String kind) {
-        if (editingBlocked()) return;
+        if (!requireEditingEnabled()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
         recordUndo();
@@ -3319,7 +3914,7 @@ public final class MainActivity extends Activity {
     }
 
     private void duplicateSelected() {
-        if (editingBlocked()) return;
+        if (!requireEditingEnabled()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
         recordUndo("Дублирована карточка: " + (current.name.isEmpty() ? "Без имени" : current.name));
@@ -3415,7 +4010,7 @@ public final class MainActivity extends Activity {
     }
 
     void confirmDelete() {
-        if (editingBlocked()) return;
+        if (!requireEditingEnabled()) return;
         java.util.Set<String> selectedIds = treeView == null
             ? java.util.Collections.emptySet()
             : treeView.selectedIds();
@@ -3490,10 +4085,7 @@ public final class MainActivity extends Activity {
     }
 
     private void confirmDeleteWholeTree() {
-        if (editingBlocked()) {
-            toast("Сначала выключите защиту правок");
-            return;
-        }
+        if (!requireEditingEnabled()) return;
         if (state == null
             || (state.people.isEmpty() && state.links.isEmpty() && state.guides.isEmpty())) {
             toast("Дерево уже пустое");
@@ -3543,6 +4135,9 @@ public final class MainActivity extends Activity {
         person.notes = "";
         person.photoMediaId = "";
         person.photo = "";
+        person.avatarScale = 1f;
+        person.avatarOffsetX = 0f;
+        person.avatarOffsetY = 0f;
         person.gender = PersonGender.infer(person.name);
         person.genderManual = false;
         person.memories.clear();
@@ -3560,7 +4155,7 @@ public final class MainActivity extends Activity {
     }
 
     void setRootPerson(String personId) {
-        if (personId == null || !state.people.containsKey(personId)) return;
+        if (personId == null || !state.people.containsKey(personId) || !requireEditingEnabled()) return;
         Person person = state.people.get(personId);
         recordUndo("Центр дерева: " + (person == null || person.name.isEmpty() ? "Без имени" : person.name));
         state.rootId = personId;
@@ -3685,7 +4280,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startSelectionMode(String mode) {
-        if (editingBlocked()) return;
+        if (!requireEditingEnabled()) return;
         resetTransientCanvasModes(false);
         lastSelectionMode = "lasso".equals(mode) ? "lasso" : "rect";
         treeView.setSelectionMode(mode);
@@ -3695,7 +4290,7 @@ public final class MainActivity extends Activity {
     }
 
     private void startGuideMode(String mode) {
-        if (editingBlocked()) return;
+        if (!requireEditingEnabled()) return;
         String nextMode = "h".equals(mode) || "v".equals(mode) || "erase".equals(mode) ? mode : "";
         if (!nextMode.isEmpty() && nextMode.equals(activeGuideMode)) {
             cancelGuideMode();
@@ -3734,10 +4329,11 @@ public final class MainActivity extends Activity {
     }
 
     private void clearGuides() {
-        if (state == null || state.guides.isEmpty() || editingBlocked()) {
+        if (state == null || state.guides.isEmpty()) {
             toast("Направляющих нет");
             return;
         }
+        if (!requireEditingEnabled()) return;
         recordUndo("Очищены направляющие", state.guides.size() + " шт.");
         state.guides.clear();
         cancelGuideModeSilently();
@@ -3860,8 +4456,8 @@ public final class MainActivity extends Activity {
         if ("parent-link".equals(id)) return trainingParentLinkTarget;
         if ("tree-menu".equals(id)) return treeNav;
         if ("layout-tree".equals(id)) return trainingLayoutTarget;
-        if ("files-menu".equals(id)) return filesNav;
-        if ("settings-menu".equals(id)) return settingsNav;
+        if ("files-menu".equals(id)) return moreNav;
+        if ("settings-menu".equals(id)) return moreNav;
         return null;
     }
 
@@ -4178,8 +4774,7 @@ public final class MainActivity extends Activity {
         if (canvasModePanel == null || canvasModeTitle == null || canvasModeDetail == null || canvasModeAction == null) return;
         boolean guideActive = !activeGuideMode.isEmpty();
         boolean linkActive = !pendingLinkType.isEmpty();
-        boolean lockActive = editingBlocked();
-        boolean visible = (guideActive || linkActive || lockActive) && activePanel.isEmpty();
+        boolean visible = (guideActive || linkActive) && activePanel.isEmpty();
         canvasModePanel.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) return;
         if (guideActive) {
@@ -4208,10 +4803,6 @@ public final class MainActivity extends Activity {
             }
             return;
         }
-        canvasModeAction.setText("Разблок.");
-        styleCanvasModeAction(false);
-        canvasModeTitle.setText(viewMode ? "Режим просмотра" : "Правки заблокированы");
-        canvasModeDetail.setText("Изменения дерева отключены");
     }
 
     private void styleCanvasModeAction(boolean stop) {
@@ -4481,6 +5072,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (peopleModule != null) peopleModule.onActivityResult(requestCode, resultCode, data);
         filesModule.onActivityResult(requestCode, resultCode, data);
     }
 
@@ -4503,6 +5095,29 @@ public final class MainActivity extends Activity {
     }
 
     void handleIncomingIntent(Intent intent) {
+        String widgetPersonId = intent == null
+            ? ""
+            : intent.getStringExtra(BirthdayWidgetProvider.EXTRA_PERSON_ID);
+        if (widgetPersonId != null
+            && !widgetPersonId.isEmpty()
+            && state != null
+            && state.people.containsKey(widgetPersonId)) {
+            intent.removeExtra(BirthdayWidgetProvider.EXTRA_PERSON_ID);
+            Person person = state.people.get(widgetPersonId);
+            state.selectedId = widgetPersonId;
+            bindEditor(person);
+            showPanel("");
+            if (treeView != null) {
+                treeView.postDelayed(() -> {
+                    if (state != null && state.people.containsKey(widgetPersonId)) {
+                        state.selectedId = widgetPersonId;
+                        bindEditor(state.people.get(widgetPersonId));
+                        treeView.focusPerson(widgetPersonId);
+                    }
+                }, 180L);
+            }
+            return;
+        }
         Uri uri = intent == null ? null : intent.getData();
         if (uri != null
             && "androidft".equalsIgnoreCase(uri.getScheme())
@@ -4771,6 +5386,378 @@ public final class MainActivity extends Activity {
         showPhotoPreviewBitmap(store.mediaStore().decodeBitmap(mediaId, 1800), mediaId, "");
     }
 
+    void showPersonPhotoEditor(Person person) {
+        if (person == null) return;
+        Bitmap source = person.photoMediaId == null || person.photoMediaId.isEmpty()
+            ? bitmapFromDataUrl(person.photo)
+            : store.mediaStore().decodeBitmap(person.photoMediaId, 2200);
+        if (source == null) {
+            showHelp("Фото", "Фото не удалось открыть.");
+            return;
+        }
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(12), dp(12), dp(12), dp(12));
+        shell.setBackground(panelBg(Color.WHITE, dp(20), Color.argb(56, 63, 82, 94)));
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.drawable.ic_menu_edit);
+        mark.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
+        mark.setPadding(dp(9), dp(9), dp(9), dp(9));
+        mark.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT));
+        top.addView(mark, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout heading = new LinearLayout(this);
+        heading.setOrientation(LinearLayout.VERTICAL);
+        heading.setPadding(dp(10), 0, dp(6), 0);
+        TextView title = new LocalizedTextView(this);
+        title.setText("Редактор аватара");
+        title.setTextSize(17);
+        title.setTextColor(uiColor(Color.rgb(28, 34, 38)));
+        title.setTypeface(uiBold());
+        heading.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
+        TextView subtitle = new LocalizedTextView(this);
+        subtitle.setText(person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim());
+        subtitle.setTextSize(10);
+        subtitle.setTextColor(uiColor(Color.rgb(101, 113, 122)));
+        subtitle.setTypeface(ui());
+        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
+        top.addView(heading, new LinearLayout.LayoutParams(0, dp(44), 1));
+        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
+        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(46)));
+
+        FrameLayout imagePlate = new FrameLayout(this);
+        imagePlate.setPadding(dp(5), dp(5), dp(5), dp(5));
+        imagePlate.setBackground(panelBg(Color.rgb(235, 241, 243), dp(16), Color.rgb(207, 219, 225)));
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setImageBitmap(source);
+        imagePlate.addView(image, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        imageParams.setMargins(0, dp(10), 0, dp(10));
+        shell.addView(imagePlate, imageParams);
+
+        final Bitmap[] working = {source};
+        final boolean[] bitmapChanged = {false};
+        final float[] position = {person.avatarScale, person.avatarOffsetX, person.avatarOffsetY};
+
+        LinearLayout rotationTools = new LinearLayout(this);
+        rotationTools.setPadding(dp(5), dp(5), dp(5), dp(5));
+        rotationTools.setBackground(panelBg(Color.rgb(247, 250, 251), dp(15), Color.rgb(217, 224, 229)));
+        Button rotateLeft = avatarToolButton("↶ 90°", v -> {
+            if (!requireEditingEnabled()) return;
+            Bitmap transformed = transformAvatar(working[0], -90f, false);
+            if (transformed != null) {
+                working[0] = transformed;
+                image.setImageBitmap(transformed);
+                bitmapChanged[0] = true;
+                resetAvatarPosition(position);
+            }
+        });
+        Button rotateRight = avatarToolButton("↷ 90°", v -> {
+            if (!requireEditingEnabled()) return;
+            Bitmap transformed = transformAvatar(working[0], 90f, false);
+            if (transformed != null) {
+                working[0] = transformed;
+                image.setImageBitmap(transformed);
+                bitmapChanged[0] = true;
+                resetAvatarPosition(position);
+            }
+        });
+        Button mirror = avatarToolButton("↔ Отразить", v -> {
+            if (!requireEditingEnabled()) return;
+            Bitmap transformed = transformAvatar(working[0], 0f, true);
+            if (transformed != null) {
+                working[0] = transformed;
+                image.setImageBitmap(transformed);
+                bitmapChanged[0] = true;
+                resetAvatarPosition(position);
+            }
+        });
+        rotationTools.addView(rotateLeft, avatarToolParams(0));
+        rotationTools.addView(rotateRight, avatarToolParams(dp(4)));
+        rotationTools.addView(mirror, avatarToolParams(dp(4)));
+        shell.addView(rotationTools, new LinearLayout.LayoutParams(-1, dp(58)));
+
+        LinearLayout cropTools = new LinearLayout(this);
+        cropTools.setPadding(dp(5), dp(5), dp(5), dp(5));
+        cropTools.setBackground(panelBg(Color.rgb(247, 250, 251), dp(15), Color.rgb(217, 224, 229)));
+        Button crop = avatarToolButton("✂ Обрезать", v -> {
+            if (!requireEditingEnabled()) return;
+            showFreeAvatarCropDialog(working[0], transformed -> {
+                working[0] = transformed;
+                image.setImageBitmap(transformed);
+                bitmapChanged[0] = true;
+                resetAvatarPosition(position);
+            });
+        });
+        Button positionButton = avatarToolButton("▣ Позиция", v -> {
+            if (!requireEditingEnabled()) return;
+            showAvatarPositionDialog(working[0], position[0], position[1], position[2], (scale, x, y) -> {
+                position[0] = scale;
+                position[1] = x;
+                position[2] = y;
+            });
+        });
+        cropTools.addView(crop, avatarToolParams(0));
+        cropTools.addView(positionButton, avatarToolParams(dp(4)));
+        LinearLayout.LayoutParams cropToolsParams = new LinearLayout.LayoutParams(-1, dp(58));
+        cropToolsParams.setMargins(0, dp(6), 0, 0);
+        shell.addView(cropTools, cropToolsParams);
+
+        TextView hint = new LocalizedTextView(this);
+        hint.setText("«Обрезать» удаляет края. «Позиция» меняет вид на карточке, не обрезая фото.");
+        hint.setTextSize(9);
+        hint.setTextColor(uiColor(Color.rgb(101, 113, 122)));
+        hint.setTypeface(ui());
+        hint.setGravity(Gravity.CENTER_VERTICAL);
+        shell.addView(hint, new LinearLayout.LayoutParams(-1, dp(34)));
+
+        LinearLayout actions = new LinearLayout(this);
+        Button cancel = actionButton("Закрыть", v -> dialog.dismiss());
+        cancel.setBackground(panelBg(Color.rgb(247, 250, 251), dp(13), Color.rgb(217, 224, 229)));
+        actions.addView(cancel, new LinearLayout.LayoutParams(0, dp(50), 1));
+        Button save = actionButton("Сохранить", v -> {
+            if (!requireEditingEnabled()) return;
+            v.setEnabled(false);
+            rotateLeft.setEnabled(false);
+            rotateRight.setEnabled(false);
+            mirror.setEnabled(false);
+            crop.setEnabled(false);
+            positionButton.setEnabled(false);
+            Bitmap result = working[0];
+            toast("Сохранение аватара…");
+            if (bitmapChanged[0]) {
+                new Thread(() -> saveEditedAvatar(person, result, true, position[0], position[1], position[2], dialog), "avatar-editor-save").start();
+            } else {
+                saveEditedAvatar(person, result, false, position[0], position[1], position[2], dialog);
+            }
+        });
+        save.setTextColor(Color.WHITE);
+        save.setBackground(tealGradientBg(dp(13)));
+        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, dp(50), 1.25f);
+        saveParams.setMargins(dp(8), 0, 0, 0);
+        actions.addView(save, saveParams);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(50));
+        actionsParams.setMargins(0, dp(6), 0, 0);
+        shell.addView(actions, actionsParams);
+
+        dialog.setContentView(shell);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(20), dp(640));
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.width = width;
+            attrs.height = Math.min(Math.round(getResources().getDisplayMetrics().heightPixels * 0.9f), dp(880));
+            attrs.dimAmount = 0.44f;
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setAttributes(attrs);
+        }
+    }
+
+    private Button avatarToolButton(String label, View.OnClickListener action) {
+        Button button = actionButton(label, action);
+        button.setTextSize(10);
+        button.setSingleLine(true);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setPadding(dp(4), 0, dp(4), dp(2));
+        button.setTextColor(uiColor(Color.rgb(8, 122, 115)));
+        button.setBackground(panelBg(Color.rgb(235, 248, 246), dp(11), Color.argb(64, 24, 169, 153)));
+        return button;
+    }
+
+    private LinearLayout.LayoutParams avatarToolParams(int leftMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
+        params.setMargins(leftMargin, 0, 0, 0);
+        return params;
+    }
+
+    private static Bitmap transformAvatar(Bitmap source, float degrees, boolean mirror) {
+        if (source == null) return null;
+        try {
+            Matrix matrix = new Matrix();
+            if (mirror) matrix.postScale(-1f, 1f);
+            if (degrees != 0f) matrix.postRotate(degrees);
+            return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private void resetAvatarPosition(float[] position) {
+        position[0] = 1f;
+        position[1] = 0f;
+        position[2] = 0f;
+    }
+
+    private void saveEditedAvatar(Person person, Bitmap bitmap, boolean bitmapChanged,
+                                  float scale, float offsetX, float offsetY, Dialog dialog) {
+        try {
+            TreeMediaStore.StoredMedia stored = null;
+            if (bitmapChanged) {
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 96, bytes)) {
+                    throw new IllegalStateException("Фото не удалось подготовить");
+                }
+                try (ByteArrayInputStream input = new ByteArrayInputStream(bytes.toByteArray())) {
+                    stored = store.mediaStore().importPhoto(input, "avatar_edited.jpg", "image/jpeg");
+                }
+            }
+            TreeMediaStore.StoredMedia finalStored = stored;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed() || state.people.get(person.id) != person) return;
+                recordUndo("Изменён аватар", person.name == null || person.name.isEmpty() ? "Без имени" : person.name);
+                if (finalStored != null) {
+                    person.photoMediaId = finalStored.id;
+                    person.photo = "";
+                }
+                person.avatarScale = AvatarTransform.clamp(scale, 1f, 8f);
+                person.avatarOffsetX = offsetX;
+                person.avatarOffsetY = offsetY;
+                saveOnly();
+                bindState();
+                treeView.invalidate();
+                refreshOpenPersonEditor();
+                dialog.dismiss();
+                toast("Аватар сохранён");
+            });
+        } catch (Exception error) {
+            runOnUiThread(() -> toast("Аватар не сохранён: " + error.getMessage()));
+        }
+    }
+
+    private interface BitmapCropResult {
+        void accept(Bitmap bitmap);
+    }
+
+    private interface AvatarPositionResult {
+        void accept(float scale, float offsetX, float offsetY);
+    }
+
+    private void showFreeAvatarCropDialog(Bitmap bitmap, BitmapCropResult result) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = editorDialogShell();
+        shell.addView(editorDialogHeader(dialog, R.drawable.ic_menu_edit, "Свободная обрезка", "Перемещайте и тяните углы"));
+        FreeAvatarCropView cropView = new FreeAvatarCropView(this);
+        cropView.setBitmap(bitmap);
+        LinearLayout.LayoutParams cropParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        cropParams.setMargins(0, dp(10), 0, dp(10));
+        shell.addView(cropView, cropParams);
+        LinearLayout actions = new LinearLayout(this);
+        actions.addView(actionButton("Отмена", v -> dialog.dismiss()), new LinearLayout.LayoutParams(0, dp(50), 1));
+        Button apply = actionButton("Применить обрезку", v -> {
+            Bitmap cropped = cropView.croppedBitmap();
+            if (cropped == null) {
+                toast("Не удалось обрезать фото");
+                return;
+            }
+            result.accept(cropped);
+            dialog.dismiss();
+        });
+        apply.setTextColor(Color.WHITE);
+        apply.setBackground(tealGradientBg(dp(13)));
+        LinearLayout.LayoutParams applyParams = new LinearLayout.LayoutParams(0, dp(50), 1.45f);
+        applyParams.setMargins(dp(8), 0, 0, 0);
+        actions.addView(apply, applyParams);
+        shell.addView(actions, new LinearLayout.LayoutParams(-1, dp(50)));
+        showEditorDialog(dialog, shell);
+    }
+
+    private void showAvatarPositionDialog(Bitmap bitmap, float scale, float x, float y, AvatarPositionResult result) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = editorDialogShell();
+        shell.addView(editorDialogHeader(dialog, R.drawable.ic_menu_image, "Вид на карточке", "Фото останется целым"));
+        AvatarPositionView positionView = new AvatarPositionView(this);
+        positionView.setBitmap(bitmap);
+        positionView.setPosition(scale, x, y);
+        LinearLayout.LayoutParams positionParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        positionParams.setMargins(0, dp(10), 0, dp(6));
+        shell.addView(positionView, positionParams);
+        TextView hint = new LocalizedTextView(this);
+        hint.setText("Перемещайте фото одним пальцем, масштабируйте щипком. Затемнённая область не удаляется.");
+        hint.setTextSize(9);
+        hint.setTextColor(uiColor(Color.rgb(101, 113, 122)));
+        hint.setTypeface(ui());
+        hint.setPadding(dp(4), 0, dp(4), dp(6));
+        shell.addView(hint, new LinearLayout.LayoutParams(-1, dp(50)));
+        LinearLayout actions = new LinearLayout(this);
+        Button reset = actionButton("Сбросить", v -> positionView.setPosition(1f, 0f, 0f));
+        actions.addView(reset, new LinearLayout.LayoutParams(0, dp(50), 1));
+        Button apply = actionButton("Готово", v -> {
+            result.accept(positionView.positionScale(), positionView.positionX(), positionView.positionY());
+            dialog.dismiss();
+        });
+        apply.setTextColor(Color.WHITE);
+        apply.setBackground(tealGradientBg(dp(13)));
+        LinearLayout.LayoutParams applyParams = new LinearLayout.LayoutParams(0, dp(50), 1.2f);
+        applyParams.setMargins(dp(8), 0, 0, 0);
+        actions.addView(apply, applyParams);
+        shell.addView(actions, new LinearLayout.LayoutParams(-1, dp(50)));
+        showEditorDialog(dialog, shell);
+    }
+
+    private LinearLayout editorDialogShell() {
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(12), dp(12), dp(12), dp(12));
+        shell.setBackground(panelBg(Color.WHITE, dp(20), Color.argb(56, 63, 82, 94)));
+        return shell;
+    }
+
+    private View editorDialogHeader(Dialog dialog, int icon, String titleText, String subtitleText) {
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(icon);
+        mark.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
+        mark.setPadding(dp(9), dp(9), dp(9), dp(9));
+        mark.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT));
+        top.addView(mark, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout heading = new LinearLayout(this);
+        heading.setOrientation(LinearLayout.VERTICAL);
+        heading.setPadding(dp(10), 0, dp(6), 0);
+        TextView title = new LocalizedTextView(this);
+        title.setText(titleText);
+        title.setTextSize(17);
+        title.setTextColor(uiColor(Color.rgb(28, 34, 38)));
+        title.setTypeface(uiBold());
+        heading.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
+        TextView subtitle = new LocalizedTextView(this);
+        subtitle.setText(subtitleText);
+        subtitle.setTextSize(10);
+        subtitle.setTextColor(uiColor(Color.rgb(101, 113, 122)));
+        subtitle.setTypeface(ui());
+        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
+        top.addView(heading, new LinearLayout.LayoutParams(0, dp(44), 1));
+        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
+        return top;
+    }
+
+    private void showEditorDialog(Dialog dialog, View shell) {
+        dialog.setContentView(shell);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(20), dp(640));
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        WindowManager.LayoutParams attrs = window.getAttributes();
+        attrs.width = width;
+        attrs.height = Math.min(Math.round(getResources().getDisplayMetrics().heightPixels * 0.92f), dp(900));
+        attrs.dimAmount = 0.48f;
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.setAttributes(attrs);
+    }
+
     private void showPhotoPreviewBitmap(Bitmap bitmap, String mediaId, String dataUrl) {
         if (bitmap == null) {
             showHelp("Фото", "Фото не удалось открыть.");
@@ -4918,6 +5905,7 @@ public final class MainActivity extends Activity {
         java.util.Set<String> ids = treeView.selectedIds();
         Person person = state.selectedPerson();
         if (ids.isEmpty() && person == null) return;
+        if (!requireEditingEnabled()) return;
         recordUndo("Изменён цвет карточек: " + (ids.isEmpty() ? 1 : ids.size()));
         if (ids.isEmpty()) ids.add(person.id);
         for (String id : ids) {
@@ -4931,6 +5919,7 @@ public final class MainActivity extends Activity {
     }
 
     private void recolorByFamily() {
+        if (!requireEditingEnabled()) return;
         java.util.Set<String> ids = treeView.selectedIds();
         if (ids.isEmpty()) ids.addAll(state.people.keySet());
         recordUndo("Изменён цвет карточек: " + ids.size());
@@ -5076,6 +6065,25 @@ public final class MainActivity extends Activity {
         button.setBackground(active
             ? panelBg(Color.rgb(232, 248, 246), dp(8), Color.argb(82, 24, 169, 153))
             : panelBg(Color.TRANSPARENT, dp(8), Color.TRANSPARENT));
+    }
+
+    void stylePeopleNav(boolean active) {
+        if (peopleNav == null) return;
+        int color = Color.WHITE;
+        peopleNav.setTextColor(color);
+        Drawable top = peopleNav.getCompoundDrawables()[1];
+        if (top != null) top.mutate().setTint(color);
+        GradientDrawable background = new GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            active
+                ? new int[]{Color.rgb(5, 104, 100), Color.rgb(18, 151, 139)}
+                : new int[]{Color.rgb(13, 136, 126), Color.rgb(27, 176, 158)});
+        background.setCornerRadius(dp(14));
+        background.setStroke(dp(1), active
+            ? Color.argb(150, 6, 92, 88)
+            : Color.argb(120, 255, 255, 255));
+        peopleNav.setBackground(background);
+        peopleNav.setElevation(dp(active ? 7 : 5));
     }
 
     private View menuRow(int iconRes, String label, String help, View.OnClickListener listener) {
@@ -5459,19 +6467,18 @@ public final class MainActivity extends Activity {
     }
 
     void applyFocusTreeUi() {
-        boolean settingsTab = "settings".equals(activePanel);
-        if (appHeader != null) appHeader.setVisibility("settings".equals(activePanel) ? View.GONE : View.VISIBLE);
+        boolean settingsTab = "settings".equals(activePanel) || "people".equals(activePanel);
+        if (appHeader != null) appHeader.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
         if (headerBrand != null) headerBrand.setVisibility(focusTree ? View.GONE : View.VISIBLE);
         if (headerSaveButton != null) headerSaveButton.setVisibility(focusTree ? View.GONE : View.VISIBLE);
-        if (treeHint != null) treeHint.setVisibility(
-            settingsTab || focusTree || treeHintDismissed ? View.GONE : View.VISIBLE);
         if (zoomRail != null) zoomRail.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
+        refreshLockUi();
         updateAddPersonButtonVisibility();
         applyFocusNavStyle(treeNav, "Дерево");
         applyFocusNavStyle(cardNav, "Карточка");
+        applyFocusNavStyle(peopleNav, "Люди");
         applyFocusNavStyle(linksNav, "Связи");
-        applyFocusNavStyle(filesNav, "Файлы");
-        applyFocusNavStyle(settingsNav, "Параметры");
+        applyFocusNavStyle(moreNav, "Ещё");
         if (bottomNavigation != null) {
             ViewGroup.LayoutParams params = bottomNavigation.getLayoutParams();
             if (params != null) {
@@ -5502,7 +6509,9 @@ public final class MainActivity extends Activity {
 
     void updateAddPersonButtonVisibility() {
         if (addPersonButton == null) return;
-        boolean settingsTab = "settings".equals(activePanel);
+        boolean settingsTab = "settings".equals(activePanel)
+            || "people".equals(activePanel)
+            || "more".equals(activePanel);
         boolean selectionVisible = selectionToolbar != null
             && selectionToolbar.getVisibility() == View.VISIBLE;
         addPersonButton.setVisibility(settingsTab || selectionVisible ? View.GONE : View.VISIBLE);

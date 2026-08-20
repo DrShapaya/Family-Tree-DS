@@ -14,6 +14,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -201,7 +202,23 @@ final class TreePackageIO {
                 }
             }
         }
+        addAlbumMedia(ids, state.photoAlbumMedia);
+        addAlbumMedia(ids, state.familyAlbumMedia);
+        addAlbumMedia(ids, state.personAlbumMedia);
+        for (List<PhotoAlbumFolder> folders : state.photoAlbumFolders.values()) {
+            for (PhotoAlbumFolder folder : folders) {
+                for (String mediaId : folder.photoMediaIds) {
+                    if (isMediaId(mediaId, true)) ids.add(mediaId);
+                }
+            }
+        }
         return ids;
+    }
+
+    private static void addAlbumMedia(Set<String> ids, Map<String, List<String>> albums) {
+        for (List<String> mediaIds : albums.values()) {
+            for (String mediaId : mediaIds) if (isMediaId(mediaId, true)) ids.add(mediaId);
+        }
     }
 
     private static void remapMedia(TreeState state, Map<String, String> importedIds) {
@@ -220,6 +237,26 @@ final class TreePackageIO {
                     }
                 }
             }
+        }
+        remapAlbumMedia(state.photoAlbumMedia, importedIds);
+        remapAlbumMedia(state.familyAlbumMedia, importedIds);
+        remapAlbumMedia(state.personAlbumMedia, importedIds);
+        for (List<PhotoAlbumFolder> folders : state.photoAlbumFolders.values()) {
+            for (PhotoAlbumFolder folder : folders) remapMediaList(folder.photoMediaIds, importedIds);
+        }
+    }
+
+    private static void remapAlbumMedia(
+        Map<String, List<String>> albums,
+        Map<String, String> importedIds
+    ) {
+        for (List<String> mediaIds : albums.values()) remapMediaList(mediaIds, importedIds);
+    }
+
+    private static void remapMediaList(List<String> mediaIds, Map<String, String> importedIds) {
+        for (int i = 0; i < mediaIds.size(); i++) {
+            String remapped = importedIds.get(mediaIds.get(i));
+            if (remapped != null) mediaIds.set(i, remapped);
         }
     }
 

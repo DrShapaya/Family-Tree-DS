@@ -19,6 +19,12 @@ final class TreeState {
     final List<Relation> links = new ArrayList<>();
     final List<Guide> guides = new ArrayList<>();
     final List<HistoryEntry> history = new ArrayList<>();
+    final Map<String, List<String>> photoAlbums = new LinkedHashMap<>();
+    final Map<String, List<String>> photoAlbumMedia = new LinkedHashMap<>();
+    final Map<String, List<PhotoAlbumFolder>> photoAlbumFolders = new LinkedHashMap<>();
+    final Map<String, List<String>> familyAlbumMedia = new LinkedHashMap<>();
+    final Map<String, List<String>> personAlbumMedia = new LinkedHashMap<>();
+    final Set<String> familyAlbums = new LinkedHashSet<>();
     String rootId = "";
     String selectedId = "";
     String theme = "light";
@@ -152,6 +158,11 @@ final class TreeState {
         if (id == null) return;
         people.remove(id);
         links.removeIf(link -> id.equals(link.from) || id.equals(link.to));
+        for (List<String> ids : photoAlbums.values()) ids.remove(id);
+        for (List<PhotoAlbumFolder> folders : photoAlbumFolders.values()) {
+            for (PhotoAlbumFolder folder : folders) folder.personIds.remove(id);
+        }
+        personAlbumMedia.remove(id);
         if (id.equals(rootId)) rootId = people.isEmpty() ? "" : people.values().iterator().next().id;
         if (id.equals(selectedId)) selectedId = rootId;
     }

@@ -924,7 +924,7 @@ final class MainActivityFiles {
     void importPhotoFromUri(Uri uri) {
         Person person = activity.state.people.get(activity.pendingPhotoPersonId);
         activity.pendingPhotoPersonId = "";
-        if (person == null || activity.editingBlocked()) return;
+        if (person == null || !activity.requireEditingEnabled()) return;
         try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
             if (input == null) throw new IllegalStateException("Фото не открыто");
             String mime = activity.getContentResolver().getType(uri);
@@ -936,6 +936,9 @@ final class MainActivityFiles {
             activity.recordUndo("Добавлено фото", person.name.isEmpty() ? "Без имени" : person.name);
             person.photoMediaId = stored.id;
             person.photo = "";
+            person.avatarScale = 1f;
+            person.avatarOffsetX = 0f;
+            person.avatarOffsetY = 0f;
             activity.saveToast("Фото загружено");
             activity.bindState();
             activity.treeView.invalidate();
@@ -956,9 +959,9 @@ final class MainActivityFiles {
         activity.pendingMemoryTitle = "";
         activity.pendingMemoryText = "";
         if (person == null
-            || activity.editingBlocked()
             || uris == null
             || uris.isEmpty()) return;
+        if (!activity.requireEditingEnabled()) return;
         List<MemoryAttachment> attachments = new ArrayList<>();
         int failed = 0;
         for (Uri uri : uris) {

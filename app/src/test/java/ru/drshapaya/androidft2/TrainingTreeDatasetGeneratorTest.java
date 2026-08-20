@@ -373,7 +373,7 @@ public final class TrainingTreeDatasetGeneratorTest {
         byte[] manifest = new JSONObject()
             .put("format", "ru.drshapaya.familytree")
             .put("containerVersion", 2)
-            .put("appVersion", "2.6.5")
+            .put("appVersion", "2.7.2")
             .put("mode", "copy")
             .put("createdAt", ZIP_TIME)
             .put("tree", "tree.json")

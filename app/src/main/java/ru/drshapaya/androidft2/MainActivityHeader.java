@@ -167,8 +167,14 @@ final class MainActivityHeader {
         rail.setElevation(activity.dp(6));
         rail.addView(activity.iconButton(R.drawable.ic_nav_card, v -> activity.openPersonEditor()), activity.railButtonParams(false));
         rail.addView(activity.iconButton(R.drawable.ic_menu_fit, v -> activity.treeView.fit()), activity.railButtonParams(false));
+        activity.lockRailButton = activity.iconButton(
+            activity.editingBlocked() ? R.drawable.ic_menu_lock : R.drawable.ic_menu_unlock,
+            v -> activity.toggleTreeLockFromRail());
+        activity.lockRailButton.setContentDescription(activity.tr("Защита правок"));
+        rail.addView(activity.lockRailButton, activity.railButtonParams(false));
         rail.addView(activity.iconButton(R.drawable.ic_menu_zoom_out, v -> activity.treeView.zoomBy(0.86f)), activity.railButtonParams(false));
         rail.addView(activity.iconButton(R.drawable.ic_menu_zoom_in, v -> activity.treeView.zoomBy(1.16f)), activity.railButtonParams(true));
+        activity.refreshLockUi();
         return rail;
     }
 }

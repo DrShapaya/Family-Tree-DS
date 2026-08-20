@@ -48,6 +48,7 @@ final class TreeCanvasView extends View {
         void onTreeChanged();
         void onGuideActionMiss();
         void onCanvasTouched();
+        void onEditBlocked();
     }
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -126,6 +127,7 @@ final class TreeCanvasView extends View {
     private boolean draggingCanvas = false;
     private boolean selecting = false;
     private boolean moved = false;
+    private boolean blockedEditNotified = false;
     private final int touchSlop;
     private float gestureStartOffsetX;
     private float gestureStartOffsetY;
@@ -795,7 +797,7 @@ final class TreeCanvasView extends View {
                 clipPath.addCircle(cx, cy, avatar / 2f, Path.Direction.CW);
                 canvas.save();
                 canvas.clipPath(clipPath);
-                drawPhotoCenterCrop(canvas, photo, avatarRect);
+                drawPhotoCenterCrop(canvas, photo, avatarRect, person);
                 canvas.restore();
                 if (exportMode && !photo.isRecycled()) photo.recycle();
             }
@@ -1174,11 +1176,8 @@ final class TreeCanvasView extends View {
         super.onDetachedFromWindow();
     }
 
-    private void drawPhotoCenterCrop(Canvas canvas, Bitmap photo, RectF target) {
-        int side = Math.min(photo.getWidth(), photo.getHeight());
-        int left = Math.max(0, (photo.getWidth() - side) / 2);
-        int top = Math.max(0, (photo.getHeight() - side) / 2);
-        tmpSrc.set(left, top, left + side, top + side);
+    private void drawPhotoCenterCrop(Canvas canvas, Bitmap photo, RectF target, Person person) {
+        tmpSrc.set(AvatarTransform.sourceRect(photo, person));
         canvas.drawBitmap(photo, tmpSrc, target, null);
     }
 
@@ -1420,6 +1419,7 @@ final class TreeCanvasView extends View {
                 gestureStartOffsetX = offsetX;
                 gestureStartOffsetY = offsetY;
                 moved = false;
+                blockedEditNotified = false;
                 dragStartPositions.clear();
                 dragPersonIds.clear();
                 if (!guideMode.isEmpty() && !editLocked) {
@@ -1476,6 +1476,9 @@ final class TreeCanvasView extends View {
                                 (event.getY() - downY) / scale);
                         }
                     }
+                } else if (editLocked && moved && !dragPersonId.isEmpty() && !blockedEditNotified) {
+                    blockedEditNotified = true;
+                    if (listener != null) listener.onEditBlocked();
                 }
                 lastX = event.getX();
                 lastY = event.getY();

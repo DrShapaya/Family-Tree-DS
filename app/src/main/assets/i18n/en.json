@@ -1096,5 +1096,199 @@
   "Выберите количество детей": "Choose the number of children",
   "Выберите количество братьев или сестёр": "Choose the number of siblings",
   "Вернуть цвет по фамилии": "Restore surname color",
-  "Восстановлен цвет по фамилии": "Surname color restored"
+  "Восстановлен цвет по фамилии": "Surname color restored",
+  "А–Я": "A–Z",
+  "Автоматические коллекции и ваши семейные альбомы": "Automatic collections and your family albums",
+  "Альбомы": "Albums",
+  "Без фото": "Without photos",
+  "Все аватары": "All avatars",
+  "Все люди · нажмите «Фильтры», чтобы сузить список": "Everyone · tap Filters to narrow the list",
+  "Все существующие семьи уже добавлены": "All existing families have already been added",
+  "Выберите запрос или сбросьте фильтры": "Change the query or reset the filters",
+  "Добавить семью": "Add family",
+  "+  Добавить семью из существующих": "+  Add an existing family",
+  "Живые": "Living",
+  "Изменить состав": "Edit members",
+  "Карточка человека": "Person card",
+  "Люди": "People",
+  "Люди не найдены": "No people found",
+  "Любые": "Any",
+  "Мои альбомы": "My albums",
+  "Название альбома": "Album name",
+  "Новый альбом": "New album",
+  "По году рождения": "By birth year",
+  "По имени": "By first name",
+  "По фамилии и имени": "By surname and name",
+  "По семьям": "By family",
+  "Поиск по ФИО, году или месту": "Search by name, year, or place",
+  "Пользовательские альбомы": "Custom albums",
+  "С фото": "With photos",
+  "Семейные альбомы": "Family albums",
+  "Семьи с фотографиями добавляются автоматически": "Families with photos are added automatically",
+  "Список": "List",
+  "Соберите собственную подборку": "Create your own collection",
+  "Сортировка": "Sort",
+  "Создать альбом": "Create album",
+  "Умершие": "Deceased",
+  "Фильтры": "Filters",
+  "Фотографии дерева": "Tree photos",
+  "Фотографий пока нет": "No photos yet",
+  "Фото для": "Photos for",
+  "Фото останутся в карточках людей.": "Photos will remain in the person cards.",
+  "Фото профиля": "Profile photo",
+  "Фото": "Photos",
+  "ФОТО": "PHOTOS",
+  "СТАТУС": "STATUS",
+  "ПОЛ": "GENDER",
+  "Удалить альбом": "Delete album",
+  "Удалить альбом?": "Delete album?",
+  "Ещё": "More",
+  "Файлы и экспорт": "Files and export",
+  "Сохранение, импорт и отправка": "Save, import, and share",
+  "Последние локальные копии": "Latest local copies",
+  "Вид, защита и оформление": "View, protection, and appearance",
+  "Подсказки по возможностям": "Feature tips"
+  ,"Выберите, кого показывать в списке": "Choose who appears in the list"
+  ,"Фотография": "Photo"
+  ,"Применить": "Apply"
+  ,"Сбросить": "Reset"
+  ,"Сортировка А–Я": "Sort A–Z"
+  ,"Выберите порядок людей в списке": "Choose the order of people in the list"
+  ,"Порядок": "Order"
+  ,"Дайте подборке понятное название": "Give the collection a clear name"
+  ,"После этого выберите фотографии людей для альбома": "Then choose people’s photos for the album"
+  ,"Далее": "Next"
+  ,"Дерево заблокировано": "Tree is locked"
+  ,"Дерево доступно только для просмотра": "Tree is read-only"
+  ,"Разблокируйте дерево, чтобы изменить данные": "Unlock the tree to edit details"
+  ,"Доступ только для просмотра": "Read-only access"
+  ,"Разблокировать": "Unlock"
+  ,"Разблокировать дерево": "Unlock tree"
+  ,"Заблокировать дерево": "Lock tree"
+  ,"Добавить человеку фото": "Add photos to a person"
+  ,"Добавить фото": "Add photos"
+  ,"Папка": "Folder"
+  ,"Альбом пока пуст": "This album is empty"
+  ,"Добавьте людей, любые фото или создайте папку": "Add people, any photos, or create a folder"
+  ,"Папка пока пуста": "This folder is empty"
+  ,"Выберите аватары или добавьте фотографии": "Choose avatars or add photos"
+  ,"Основной аватар": "Main avatar"
+  ,"После создания внутри можно добавить людей, любые фото и папки.": "After creating it, you can add people, any photos, and folders."
+  ,"Название можно изменить позже": "You can rename it later"
+  ,"Создать": "Create"
+  ,"Выбор людей": "Choose people"
+  ,"Поиск по имени": "Search by name"
+  ,"Ничего не найдено": "Nothing found"
+  ,"Попробуйте изменить запрос": "Try changing your search"
+  ,"Действия с альбомом": "Album actions"
+  ,"Открыть альбом": "Open album"
+  ,"Фото, люди и папки": "Photos, people, and folders"
+  ,"Выбрать людей": "Choose people"
+  ,"Поиск по аватарам дерева": "Search tree avatars"
+  ,"Добавить фотографии": "Add photos"
+  ,"Любые изображения с устройства": "Any images from this device"
+  ,"Создать папку": "Create folder"
+  ,"Соберите отдельную подборку": "Create a separate collection"
+  ,"Переименовать": "Rename"
+  ,"Изменить название альбома": "Change the album name"
+  ,"Удалить": "Delete"
+  ,"Фото людей останутся в дереве": "People's photos will remain in the tree"
+  ,"Действия с папкой": "Folder actions"
+  ,"Выбрать изображения с устройства": "Choose images from this device"
+  ,"Изменить название папки": "Change the folder name"
+  ,"Удалить папку из альбома": "Delete the folder from the album"
+  ,"Действия с человеком": "Person actions"
+  ,"Человек станет папкой с фотографиями": "The person will become a photo folder"
+  ,"Изменить ФИО в карточке дерева": "Change the name in the tree card"
+  ,"Удалить папку с фото": "Delete photo folder"
+  ,"Основной аватар останется": "The main avatar will remain"
+  ,"Убрать из альбома": "Remove from album"
+  ,"Убрать из папки": "Remove from folder"
+  ,"Человек останется в дереве": "The person will remain in the tree"
+  ,"Новая папка": "New folder"
+  ,"Название папки": "Folder name"
+  ,"Переименовать альбом": "Rename album"
+  ,"Новое название сохранит всё содержимое": "The new name will keep all content"
+  ,"Переименовать папку": "Rename folder"
+  ,"Содержимое останется на месте": "The contents will stay in place"
+  ,"Изменить ФИО": "Change name"
+  ,"Имя обновится во всём дереве": "The name will update throughout the tree"
+  ,"Фамилия Имя Отчество": "Full name"
+  ,"Кому добавить фото": "Who should receive photos"
+  ,"Удалить папку?": "Delete folder?"
+  ,"Удалить дополнительные фото?": "Delete additional photos?"
+  ,"Основной аватар и карточка человека останутся в дереве.": "The main avatar and person card will remain in the tree."
+  ,"Убрать фотографию?": "Remove this photo?"
+  ,"Она перестанет отображаться в этой подборке.": "It will no longer appear in this collection."
+  ,"Убрать": "Remove"
+  ,"Альбом с таким названием уже существует": "An album with this name already exists"
+  ,"Действия с семейной папкой": "Family folder actions"
+  ,"Открыть папку": "Open folder"
+  ,"Аватары и семейные фотографии": "Avatars and family photos"
+  ,"Добавить фото семьи": "Add family photos"
+  ,"Найти человека в дереве": "Find a person in the tree"
+  ,"Очистить добавленные фото": "Clear added photos"
+  ,"Аватары людей останутся": "People's avatars will remain"
+  ,"Убрать добавленные фото?": "Remove added photos?"
+  ,"Аватары членов семьи останутся в папке.": "Family members' avatars will remain in the folder."
+  ,"Редактор аватара": "Avatar editor"
+  ,"↔ Отразить": "↔ Mirror"
+  ,"□ Квадрат": "□ Square"
+  ,"Квадратная обрезка берёт центральную часть изображения.": "Square crop uses the center of the image."
+  ,"Сохранение аватара…": "Saving avatar…"
+  ,"Аватар сохранён": "Avatar saved"
+  ,"Аватар не сохранён": "Avatar was not saved"
+  ,"О нас": "About"
+  ,"Команда, версия и что нового": "Team, version, and what's new"
+  ,"Приложение создано TeamDS": "Created by TeamDS"
+  ,"Версия ": "Version "
+  ,"Что нового в ": "What's new in "
+  ,"Команда": "Team"
+  ,"Топ донатеры": "Top supporters"
+  ,"Пока здесь никого нет": "No supporters yet"
+  ,"Стать первым": "Be the first"
+  ,"Оригинальный создатель, разработчик и дизайнер приложения": "Original creator, developer, and designer of the app"
+  ,"Не удалось открыть ссылку": "Couldn't open the link"
+  ,"Улучшения стабильности и интерфейса.": "Stability and interface improvements."
+  ,"Добавлена защита дерева от любых изменений с быстрым предложением разблокировать.": "Tree protection now blocks every edit and offers a quick unlock action."
+  ,"Появились альбомы, папки, семейные фотографии и подборки фотографий людей.": "Added albums, folders, family photos, and personal photo collections."
+  ,"Добавлен редактор аватара: поворот, отражение, свободная обрезка и позиционирование на карточке.": "The avatar editor now supports rotation, mirroring, free crop, and card positioning."
+  ,"Улучшены меню, нижние отступы, фильтры и плавность раздела «Люди».": "Improved menus, bottom spacing, filters, and People performance."
+  ,"Размер плиток в альбомах теперь меняется жестом щипка.": "Album tile size can now be changed with a pinch gesture."
+  ,"✂ Обрезать": "✂ Crop"
+  ,"▣ Позиция": "▣ Position"
+  ,"«Обрезать» удаляет края. «Позиция» меняет вид на карточке, не обрезая фото.": "Crop removes the edges. Position changes the card view without cropping the photo."
+  ,"Свободная обрезка": "Free crop"
+  ,"Перемещайте и тяните углы": "Move and drag the corners"
+  ,"Применить обрезку": "Apply crop"
+  ,"Не удалось обрезать фото": "Couldn't crop the photo"
+  ,"Вид на карточке": "Card view"
+  ,"Фото останется целым": "The photo stays intact"
+  ,"Перемещайте фото одним пальцем, масштабируйте щипком. Затемнённая область не удаляется.": "Move the photo with one finger and pinch to zoom. The dimmed area is not removed."
+  ,"Подтверждение действия": "Confirm action"
+  ,"Выберите фамилию из дерева": "Choose a surname from the tree"
+  ,"Создать семейную папку": "Create a family folder"
+  ,"Свернуть": "Collapse"
+  ,"Появились свои альбомы, папки, семейные фотографии и подборки фотографий людей.": "Added custom albums, folders, family photos, and personal photo collections."
+  ,"В альбомы и папки можно добавлять людей через поиск и любые фото с устройства.": "People can be added to albums and folders through search, along with any photos from the device."
+  ,"Добавлены красивые меню по долгому нажатию для альбомов, папок, семей и людей.": "Added polished long-press menus for albums, folders, families, and people."
+  ,"Редактор аватара теперь умеет поворачивать в обе стороны, отражать и свободно обрезать фото.": "The avatar editor can now rotate both ways, mirror, and freely crop a photo."
+  ,"Отдельное позиционирование аватара меняет вид на карточке, не удаляя края исходного фото.": "Separate avatar positioning changes the card view without removing the edges of the original photo."
+  ,"Размер плиток в альбомах и папках меняется жестом щипка.": "Tile size in albums and folders can be changed with a pinch gesture."
+  ,"Выровнены отступы меню, исправлены кнопки фильтров и сортировки.": "Menu spacing is now consistent, and the filter and sorting buttons have been fixed."
+  ,"Раздел «Люди» стал работать плавнее, а в меню «Ещё» появился экран с командой, ссылками и примечаниями к обновлению.": "The People section is smoother, and More now includes the team, useful links, and update notes."
+  ,"Поддержать разработчика": "Support the developer"
+  ,"Скоро здесь появятся способы поддержки": "Support options are coming soon"
+  ,"На экране «О нас» добавлена заглушка будущей кнопки поддержки разработчика.": "About now includes a placeholder for the upcoming developer support button."
+  ,"Добавлен центральный раздел «Люди» — полный каталог дерева с алфавитными группами, поиском, фильтрами и сортировкой.": "Added the central People section — a complete tree directory with alphabetical groups, search, filters, and sorting."
+  ,"Из каталога можно открыть карточку человека или мгновенно найти его на дереве.": "Open a person's card from the directory or instantly locate them on the tree."
+  ,"Добавлен раздел фотографий со всеми аватарами, семейными коллекциями и собственными альбомами, которые сохраняются вместе с деревом.": "Added a photo section with all avatars, family collections, and custom albums saved together with the tree."
+  ,"Альбомы поддерживают папки, любые фотографии с устройства и добавление людей через отдельный поиск.": "Albums support folders, any photos from the device, and adding people through a dedicated search."
+  ,"В семейные альбомы можно добавлять фотографии, а у каждого человека может быть собственная папка дополнительных снимков.": "Family albums accept additional photos, and each person can have a folder of extra pictures."
+  ,"Для альбомов, папок, семей и людей добавлены меню по долгому нажатию, предпросмотр содержимого и изменение размера плиток щипком.": "Albums, folders, families, and people now have long-press menus, content previews, and pinch-controlled tile sizes."
+  ,"Добавлены настраиваемые виджеты ближайшего дня рождения разных размеров с фотографиями и выбором родственников.": "Added customizable next-birthday widgets in several sizes with photos and relative selection."
+  ,"Полностью обновлена нижняя навигация, а файлы, сохранённые версии, параметры, обучение и экран «О нас» собраны в меню «Ещё».": "The bottom navigation has been redesigned, while files, saved versions, settings, training, and About are now collected under More."
+  ,"Добавлен отдельный замок, полностью защищающий структуру дерева, карточки и фотографии от изменений.": "Added a dedicated lock that fully protects the tree structure, person cards, and photos from changes."
+  ,"Добавлен редактор фотографий с поворотом в обе стороны, отражением, свободной обрезкой и отдельным позиционированием аватара без удаления краёв.": "Added a photo editor with rotation in both directions, mirroring, free crop, and separate non-destructive avatar positioning."
+  ,"На экране «О нас» появились команда, раскрываемые примечания, ссылки сообщества и добровольная поддержка через DonationAlerts.": "About now includes the team, expandable update notes, community links, and voluntary support through DonationAlerts."
 }

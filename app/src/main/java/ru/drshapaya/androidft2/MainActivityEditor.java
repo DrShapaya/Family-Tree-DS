@@ -1,6 +1,5 @@
 package ru.drshapaya.androidft2;
 
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -172,7 +171,6 @@ final class MainActivityEditor {
         initials.setGravity(Gravity.CENTER);
         avatar.addView(initials, new FrameLayout.LayoutParams(-1, -1));
         ImageView photo = new ImageView(activity);
-        photo.setScaleType(ImageView.ScaleType.CENTER_CROP);
         boolean hasPhoto = person.photoMediaId != null && !person.photoMediaId.isEmpty()
             && activity.store.mediaStore().exists(person.photoMediaId)
             || person.photo != null && !person.photo.isEmpty();
@@ -180,17 +178,14 @@ final class MainActivityEditor {
             ? activity.store.mediaStore().decodeBitmap(person.photoMediaId, 512)
             : bitmapFromDataUrl(person.photo);
         if (personPhoto != null) {
-            photo.setImageBitmap(personPhoto);
+            AvatarTransform.apply(photo, personPhoto, person);
             initials.setVisibility(View.GONE);
         }
         avatar.addView(photo, new FrameLayout.LayoutParams(-1, -1));
         avatar.setOnClickListener(v -> {
-            if (person.photoMediaId != null && !person.photoMediaId.isEmpty()) {
-                activity.showMediaPhotoPreview(person.photoMediaId);
-            } else if (person.photo != null && !person.photo.isEmpty()) {
-                showPhotoPreview(person.photo);
-            }
+            if (hasPhoto) activity.showPersonPhotoEditor(person);
             else {
+                if (!activity.requireEditingEnabled()) return;
                 activity.pendingPhotoPersonId = person.id;
                 openPhotoPicker();
             }
@@ -205,6 +200,7 @@ final class MainActivityEditor {
         LinearLayout photoButtons = new LinearLayout(activity);
         photoButtons.setOrientation(LinearLayout.HORIZONTAL);
         Button loadPhoto = actionButton(hasPhoto ? "Заменить фото" : "Загрузить фото", v -> {
+            if (!activity.requireEditingEnabled()) return;
             activity.pendingPhotoPersonId = person.id;
             openPhotoPicker();
         });
@@ -215,12 +211,15 @@ final class MainActivityEditor {
         tintDrawables(loadPhoto, Color.rgb(8, 122, 115));
         photoButtons.addView(loadPhoto, new LinearLayout.LayoutParams(0, dp(46), 1));
         Button removePhoto = actionButton("Убрать", v -> {
-            if (activity.editingBlocked()
-                || (person.photoMediaId == null || person.photoMediaId.isEmpty())
+            if ((person.photoMediaId == null || person.photoMediaId.isEmpty())
                 && (person.photo == null || person.photo.isEmpty())) return;
+            if (!activity.requireEditingEnabled()) return;
             recordUndo("Удалено фото", person.name);
             person.photoMediaId = "";
             person.photo = "";
+            person.avatarScale = 1f;
+            person.avatarOffsetX = 0f;
+            person.avatarOffsetY = 0f;
             photo.setImageDrawable(null);
             initials.setVisibility(View.VISIBLE);
             saveOnly();
@@ -336,7 +335,7 @@ final class MainActivityEditor {
         LinearLayout memoryActions = new LinearLayout(activity);
         memoryActions.setOrientation(LinearLayout.HORIZONTAL);
         Button memoryFile = actionButton("Файл", v -> {
-            if (activity.editingBlocked()) return;
+            if (!activity.requireEditingEnabled()) return;
             activity.pendingMemoryPersonId = person.id;
             openMemoryFilePicker();
         });
@@ -347,7 +346,7 @@ final class MainActivityEditor {
         memoryFile.setTextSize(11);
         memoryActions.addView(memoryFile, new LinearLayout.LayoutParams(0, dp(48), 1f));
         Button memoryPhoto = actionButton("Фото", v -> {
-            if (activity.editingBlocked()) return;
+            if (!activity.requireEditingEnabled()) return;
             activity.pendingMemoryPersonId = person.id;
             activity.openMemoryPhotoPicker();
         });
@@ -365,10 +364,10 @@ final class MainActivityEditor {
         memoryPhotoParams.setMargins(dp(8), 0, 0, 0);
         memoryActions.addView(memoryPhoto, memoryPhotoParams);
         Button addMemory = actionButton("Сохранить", v -> {
-            if (activity.editingBlocked()
-                || (text(memoryTitle).isEmpty()
+            if (text(memoryTitle).isEmpty()
                     && text(memoryText).isEmpty()
-                    && currentMemoryDraftAttachments.isEmpty())) return;
+                    && currentMemoryDraftAttachments.isEmpty()) return;
+            if (!activity.requireEditingEnabled()) return;
             recordUndo("Сохранена запись памяти", person.name);
             Memory memory = new Memory();
             memory.id = "m_" + java.util.UUID.randomUUID().toString().replace("-", "");
@@ -410,6 +409,13 @@ final class MainActivityEditor {
         colorControl.setGravity(Gravity.CENTER_VERTICAL);
         HueSliderView cardColorSlider = new HueSliderView(activity);
         cardColorSlider.setColor(TreeState.displayColor(person, activity.state.people.size()));
+        cardColorSlider.setOnTouchListener((view, event) -> {
+            if (!activity.editingBlocked()) return false;
+            if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                activity.showEditingLockedPrompt();
+            }
+            return true;
+        });
         TextView cardColorPreview = new LocalizedTextView(activity);
         cardColorPreview.setContentDescription(activity.tr("Выбранный цвет карточки"));
         cardColorPreview.setBackground(colorSwatchBg(cardColorSlider.color(), dp(999)));
@@ -421,7 +427,8 @@ final class MainActivityEditor {
 
         final boolean[] colorUndoRecorded = {false};
         cardColorSlider.setListener((color, fromUser) -> {
-            if (activity.editingBlocked() || !fromUser) return;
+            if (!fromUser) return;
+            if (!activity.requireEditingEnabled()) return;
             if (!colorUndoRecorded[0]) {
                 recordUndo("Изменён цвет карточки", person.name);
                 colorUndoRecorded[0] = true;
@@ -436,7 +443,7 @@ final class MainActivityEditor {
         });
 
         Button automaticColor = actionButton("Вернуть цвет по ФИО", v -> {
-            if (activity.editingBlocked()) return;
+            if (!activity.requireEditingEnabled()) return;
             recordUndo("Восстановлен цвет по ФИО", person.name);
             person.colorMode = "auto-name";
             person.color = TreeState.displayColor(person, activity.state.people.size());
@@ -449,7 +456,7 @@ final class MainActivityEditor {
         colorPanel.addView(automaticColor, formFieldParams());
 
         Button surnameColor = actionButton("Вернуть цвет по фамилии", v -> {
-            if (activity.editingBlocked()) return;
+            if (!activity.requireEditingEnabled()) return;
             recordUndo("Восстановлен цвет по фамилии", person.name);
             person.colorMode = "auto-surname";
             person.color = TreeState.displayColor(person, activity.state.people.size());
@@ -609,7 +616,11 @@ final class MainActivityEditor {
         place.addTextChangedListener(watcher);
         notes.addTextChangedListener(watcher);
         pinned.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (activity.editingBlocked() || person.pinned == isChecked) return;
+            if (person.pinned == isChecked) return;
+            if (!activity.requireEditingEnabled()) {
+                buttonView.setChecked(person.pinned);
+                return;
+            }
             recordUndo(isChecked ? "Закреплена карточка: " + person.name : "Откреплена карточка: " + person.name);
             person.pinned = isChecked;
             saveOnly();
@@ -847,7 +858,7 @@ final class MainActivityEditor {
     }
 
     private void chooseGender(Person person, TextView chip) {
-        if (person == null || activity.editingBlocked()) return;
+        if (person == null || !activity.requireEditingEnabled()) return;
         Dialog picker = new Dialog(activity);
         picker.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -1404,6 +1415,7 @@ final class MainActivityEditor {
         ScrollView scroll,
         EditText field
     ) {
+        if (!activity.requireEditingEnabled()) return;
         selectEditorPage(page, pages, tabs);
         field.requestFocus();
         field.post(() -> {
@@ -1415,7 +1427,7 @@ final class MainActivityEditor {
     }
 
     private void savePersonEditor(Person person, String name, String bornDay, String bornMonth, String bornYear, String diedDay, String diedMonth, String diedYear, String place, String notes, String manualColor, boolean pinned, String memoryTitle, String memoryText) {
-        if (person == null || activity.editingBlocked()) return;
+        if (person == null || !activity.requireEditingEnabled()) return;
         recordUndo("Изменена карточка", person.name.isEmpty() ? "Без имени" : person.name);
         person.name = name.trim().isEmpty() ? activity.tr("Без имени") : name.trim();
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
@@ -1811,7 +1823,7 @@ final class MainActivityEditor {
     }
 
     private void confirmRemoveMemory(String personId, String memoryId) {
-        if (activity.editingBlocked()) return;
+        if (!activity.requireEditingEnabled()) return;
         Person person = activity.state.people.get(personId);
         Memory memory = null;
         if (person != null) {
@@ -1851,7 +1863,7 @@ final class MainActivityEditor {
         String attachmentId,
         Runnable afterRemoval
     ) {
-        if (activity.editingBlocked()) return;
+        if (!activity.requireEditingEnabled()) return;
         Person person = activity.state.people.get(personId);
         MemoryAttachment target = null;
         if (person != null) {
@@ -1915,7 +1927,7 @@ final class MainActivityEditor {
     }
     void updateSelectedFromEditor() {
         Person person = activity.state.selectedPerson();
-        if (person == null) return;
+        if (person == null || activity.editingBlocked()) return;
         person.name = text(activity.nameInput);
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
         person.bornYear = text(activity.bornInput);
@@ -1937,7 +1949,22 @@ final class MainActivityEditor {
     private android.widget.Button iconButton(int iconRes, android.view.View.OnClickListener listener) { return activity.iconButton(iconRes, listener); }
     private android.widget.Button iconButton(int iconRes, android.view.View.OnClickListener listener, int textColor) { return activity.iconButton(iconRes, listener, textColor); }
     private android.widget.Button actionButton(String text, android.view.View.OnClickListener listener) { return activity.actionButton(text, listener); }
-    private android.widget.EditText field(String hint) { return activity.field(hint); }
+    private android.widget.EditText field(String hint) {
+        android.widget.EditText edit = activity.field(hint);
+        boolean editable = !activity.editingBlocked();
+        edit.setFocusable(editable);
+        edit.setFocusableInTouchMode(editable);
+        edit.setCursorVisible(editable);
+        edit.setLongClickable(editable);
+        edit.setOnTouchListener((view, event) -> {
+            if (!activity.editingBlocked()) return false;
+            if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
+                activity.showEditingLockedPrompt();
+            }
+            return true;
+        });
+        return edit;
+    }
     private android.widget.LinearLayout.LayoutParams formFieldParams() { return activity.formFieldParams(); }
     private android.widget.LinearLayout.LayoutParams spacedButtonParams() { return activity.spacedButtonParams(); }
     private String text(android.widget.EditText editText) { return activity.text(editText); }
