@@ -17,8 +17,13 @@ final class SmartLayoutSolver {
     private static final int REBUILD_MAX_DEPTH = 2;
     private static final int COMPACTION_BEAM_WIDTH = 8;
     private static final int COMPACTION_MAX_DEPTH = 3;
+    private static volatile LayoutWeights runtimeWeights;
 
     private SmartLayoutSolver() {}
+
+    static void setRuntimeWeights(LayoutWeights weights) {
+        runtimeWeights = weights;
+    }
 
     static ApplyResult improveAfterAddition(
         TreeState state,
@@ -80,9 +85,7 @@ final class SmartLayoutSolver {
         }
 
         List<LayoutCandidateGenerator> generators = new ArrayList<>();
-        Collection<String> locked = graph.rootId.isEmpty()
-            ? Collections.emptySet()
-            : Collections.singleton(graph.rootId);
+        Collection<String> locked = lockedIds(state, graph.rootId);
         for (LayoutCandidateGenerator generator : compactionGenerators(constraints)) {
             generators.add(new LockedLayoutCandidateGenerator(generator, locked));
         }
@@ -111,6 +114,9 @@ final class SmartLayoutSolver {
         if (!samePosition(graph.rootId, before, proposal.snapshot)) {
             return ApplyResult.rejected("root-moved");
         }
+        if (!preservesLockedPositions(locked, before, proposal.snapshot)) {
+            return ApplyResult.rejected("locked-card-moved");
+        }
         if (!preservesSiblingOrder(graph, before, proposal.snapshot)) {
             return ApplyResult.rejected("sibling-order-changed");
         }
@@ -134,7 +140,7 @@ final class SmartLayoutSolver {
             graph,
             before,
             before,
-            LayoutWeights.defaults());
+            currentWeights());
         LocalBeamLayoutSolver.Result local = proposeAfterAddition(
             state,
             addedIds,
@@ -169,6 +175,9 @@ final class SmartLayoutSolver {
         }
         if (!samePosition(graph.rootId, before, local.proposal.snapshot)) {
             return ApplyResult.rejected("root-moved", local);
+        }
+        if (!preservesLockedPositions(lockedIds(state, ""), before, local.proposal.snapshot)) {
+            return ApplyResult.rejected("locked-card-moved", local);
         }
         for (Map.Entry<String, LayoutSnapshot.Position> entry : before.positions.entrySet()) {
             if (local.usedRegion.activeIds.contains(entry.getKey())) continue;
@@ -212,9 +221,14 @@ final class SmartLayoutSolver {
         LayoutImpactRegion region = LayoutImpactRegion.initial(graph, addedIds, anchorId);
         return new LocalBeamLayoutSolver(
             scorer,
-            defaultGenerators(constraints),
+            lockedGenerators(defaultGenerators(constraints), lockedIds(state, "")),
             beamWidth,
-            maxDepth).solve(graph, current, current, LayoutWeights.defaults(), region);
+            maxDepth).solve(graph, current, current, currentWeights(), region);
+    }
+
+    private static LayoutWeights currentWeights() {
+        LayoutWeights weights = runtimeWeights;
+        return weights == null ? LayoutWeights.defaults() : weights;
     }
 
     static List<LayoutCandidateGenerator> defaultGenerators(LayoutConstraints constraints) {
@@ -238,6 +252,41 @@ final class SmartLayoutSolver {
             new SiblingSpacingCandidateGenerator(),
             new AncestrySideCandidateGenerator(TreeLayoutEngine.GRID * 5f),
             new SymmetricBranchCandidateGenerator(TreeLayoutEngine.GRID * 5f));
+    }
+
+    private static List<LayoutCandidateGenerator> lockedGenerators(
+        List<LayoutCandidateGenerator> source,
+        Collection<String> locked
+    ) {
+        if (locked == null || locked.isEmpty()) return source;
+        List<LayoutCandidateGenerator> result = new ArrayList<>();
+        for (LayoutCandidateGenerator generator : source) {
+            result.add(new LockedLayoutCandidateGenerator(generator, locked));
+        }
+        return result;
+    }
+
+    private static Collection<String> lockedIds(TreeState state, String extraId) {
+        List<String> result = new ArrayList<>();
+        if (state != null) {
+            for (Person person : state.people.values()) {
+                if (person != null && person.pinned) result.add(person.id);
+            }
+        }
+        if (extraId != null && !extraId.isEmpty() && !result.contains(extraId)) result.add(extraId);
+        return result;
+    }
+
+    private static boolean preservesLockedPositions(
+        Collection<String> lockedIds,
+        LayoutSnapshot before,
+        LayoutSnapshot after
+    ) {
+        if (lockedIds == null) return true;
+        for (String id : lockedIds) {
+            if (!samePosition(id, before, after)) return false;
+        }
+        return true;
     }
 
     private static boolean preservesSiblingOrder(

@@ -112,6 +112,14 @@ final class MainActivityQuickStart {
         fatherName.setSingleLine(true);
         EditText motherName = activity.field("Имя мамы, необязательно");
         motherName.setSingleLine(true);
+        EditText paternalGrandfather = activity.field("Имя дедушки по папе, необязательно");
+        paternalGrandfather.setSingleLine(true);
+        EditText paternalGrandmother = activity.field("Имя бабушки по папе, необязательно");
+        paternalGrandmother.setSingleLine(true);
+        EditText maternalGrandfather = activity.field("Имя дедушки по маме, необязательно");
+        maternalGrandfather.setSingleLine(true);
+        EditText maternalGrandmother = activity.field("Имя бабушки по маме, необязательно");
+        maternalGrandmother.setSingleLine(true);
         EditText story = activity.field("Что важно сохранить для семьи?");
         story.setMinLines(4);
         story.setGravity(Gravity.CENTER_VERTICAL);
@@ -150,6 +158,16 @@ final class MainActivityQuickStart {
         parentsCard.addView(field("Папа", fatherName, R.drawable.ic_field_person), activity.formFieldParams());
         parentsCard.addView(field("Мама", motherName, R.drawable.ic_field_person), activity.formFieldParams());
         familyPage.addView(parentsCard, sectionParams());
+        LinearLayout fatherParentsCard = section("Родители папы", "Будут связаны с карточкой папы");
+        fatherParentsCard.addView(field("Дедушка", paternalGrandfather, R.drawable.ic_field_person), activity.formFieldParams());
+        fatherParentsCard.addView(field("Бабушка", paternalGrandmother, R.drawable.ic_field_person), activity.formFieldParams());
+        fatherParentsCard.setVisibility(View.GONE);
+        familyPage.addView(fatherParentsCard, sectionParams());
+        LinearLayout motherParentsCard = section("Родители мамы", "Будут связаны с карточкой мамы");
+        motherParentsCard.addView(field("Дедушка", maternalGrandfather, R.drawable.ic_field_person), activity.formFieldParams());
+        motherParentsCard.addView(field("Бабушка", maternalGrandmother, R.drawable.ic_field_person), activity.formFieldParams());
+        motherParentsCard.setVisibility(View.GONE);
+        familyPage.addView(motherParentsCard, sectionParams());
         LinearLayout storyCard = section("Первая история", "Необязательно — сохранится в вашей карточке");
         storyCard.addView(field("Семейная заметка", story, R.drawable.ic_field_note), activity.formFieldParams());
         familyPage.addView(storyCard, sectionParams());
@@ -206,6 +224,10 @@ final class MainActivityQuickStart {
                 activity.text(selfName),
                 activity.text(fatherName),
                 activity.text(motherName),
+                activity.text(paternalGrandfather),
+                activity.text(paternalGrandmother),
+                activity.text(maternalGrandfather),
+                activity.text(maternalGrandmother),
                 activity.text(story)));
             scroll.scrollTo(0, 0);
         };
@@ -235,16 +257,26 @@ final class MainActivityQuickStart {
                 activity.text(selfPlace),
                 activity.text(fatherName),
                 activity.text(motherName),
+                activity.text(paternalGrandfather),
+                activity.text(paternalGrandmother),
+                activity.text(maternalGrandfather),
+                activity.text(maternalGrandmother),
                 activity.text(story));
         });
         TextWatcher previewWatcher = new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                fatherParentsCard.setVisibility(activity.text(fatherName).trim().isEmpty() ? View.GONE : View.VISIBLE);
+                motherParentsCard.setVisibility(activity.text(motherName).trim().isEmpty() ? View.GONE : View.VISIBLE);
                 preview.setText(previewText(
                     activity.text(selfName),
                     activity.text(fatherName),
                     activity.text(motherName),
+                    activity.text(paternalGrandfather),
+                    activity.text(paternalGrandmother),
+                    activity.text(maternalGrandfather),
+                    activity.text(maternalGrandmother),
                     activity.text(story)));
             }
 
@@ -253,6 +285,10 @@ final class MainActivityQuickStart {
         selfName.addTextChangedListener(previewWatcher);
         fatherName.addTextChangedListener(previewWatcher);
         motherName.addTextChangedListener(previewWatcher);
+        paternalGrandfather.addTextChangedListener(previewWatcher);
+        paternalGrandmother.addTextChangedListener(previewWatcher);
+        maternalGrandfather.addTextChangedListener(previewWatcher);
+        maternalGrandmother.addTextChangedListener(previewWatcher);
         story.addTextChangedListener(previewWatcher);
         renderStep[0].run();
 
@@ -405,15 +441,54 @@ final class MainActivityQuickStart {
         return note;
     }
 
-    private String previewText(String self, String father, String mother, String story) {
+    private String previewText(
+        String self,
+        String father,
+        String mother,
+        String paternalGrandfather,
+        String paternalGrandmother,
+        String maternalGrandfather,
+        String maternalGrandmother,
+        String story
+    ) {
         int cards = 1;
-        if (father != null && !father.trim().isEmpty()) cards++;
-        if (mother != null && !mother.trim().isEmpty()) cards++;
-        int links = Math.max(0, cards - 1);
-        if (cards == 3) links++;
-        String name = self == null || self.trim().isEmpty() ? "ваша карточка" : self.trim();
-        return "Будет создано: " + name + " · карточек: " + cards + " · связей: " + links
-            + (story == null || story.trim().isEmpty() ? "" : " · 1 история");
+        int links = 0;
+        boolean hasFather = !empty(father);
+        boolean hasMother = !empty(mother);
+        if (hasFather) {
+            cards++;
+            links++;
+            int paternalParents = presentCount(paternalGrandfather, paternalGrandmother);
+            cards += paternalParents;
+            links += paternalParents;
+            if (paternalParents == 2) links++;
+        }
+        if (hasMother) {
+            cards++;
+            links++;
+            int maternalParents = presentCount(maternalGrandfather, maternalGrandmother);
+            cards += maternalParents;
+            links += maternalParents;
+            if (maternalParents == 2) links++;
+        }
+        if (hasFather && hasMother) links++;
+        boolean english = AppLanguage.isEnglish(activity);
+        String name = self == null || self.trim().isEmpty()
+            ? (english ? "your card" : "ваша карточка")
+            : self.trim();
+        return english
+            ? "Will create: " + name + " · cards: " + cards + " · connections: " + links
+                + (empty(story) ? "" : " · 1 story")
+            : "Будет создано: " + name + " · карточек: " + cards + " · связей: " + links
+                + (empty(story) ? "" : " · 1 история");
+    }
+
+    private static int presentCount(String first, String second) {
+        return (empty(first) ? 0 : 1) + (empty(second) ? 0 : 1);
+    }
+
+    private static boolean empty(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private LinearLayout.LayoutParams sectionParams() {
@@ -434,12 +509,29 @@ final class MainActivityQuickStart {
         String selfPlace,
         String parentOne,
         String parentTwo,
+        String paternalGrandfather,
+        String paternalGrandmother,
+        String maternalGrandfather,
+        String maternalGrandmother,
         String story
     ) {
         activity.recordUndo("Создано дерево через быстрый старт");
         activity.state.people.clear();
         activity.state.links.clear();
         activity.state.guides.clear();
+        activity.state.history.clear();
+        activity.state.photoAlbums.clear();
+        activity.state.photoAlbumMedia.clear();
+        activity.state.photoAlbumFolders.clear();
+        activity.state.familyAlbumMedia.clear();
+        activity.state.personAlbumMedia.clear();
+        activity.state.familyAlbums.clear();
+        activity.state.rootId = "";
+        activity.state.selectedId = "";
+        activity.branchMode = "all";
+        activity.branchAnchorId = "";
+        activity.pendingBranchMode = "";
+        activity.resetTransientCanvasModes(false);
         Person child = activity.state.addPerson(
             selfName.trim().isEmpty()
                 ? activity.tr("Новый человек")
@@ -460,23 +552,67 @@ final class MainActivityQuickStart {
         Person mother = null;
         if (!parentOne.trim().isEmpty()) {
             father = activity.state.addPerson(parentOne.trim(), 3740, 2780);
+            setGender(father, PersonGender.MALE);
             activity.state.addRelation("parent", father.id, child.id);
         }
         if (!parentTwo.trim().isEmpty()) {
             mother = activity.state.addPerson(parentTwo.trim(), 4260, 2780);
+            setGender(mother, PersonGender.FEMALE);
             activity.state.addRelation("parent", mother.id, child.id);
         }
         if (father != null && mother != null) {
             activity.state.addRelation("partner", father.id, mother.id, "right");
         }
+        addParents(
+            father,
+            paternalGrandfather,
+            paternalGrandmother,
+            3500,
+            3900,
+            2560);
+        addParents(
+            mother,
+            maternalGrandfather,
+            maternalGrandmother,
+            4100,
+            4500,
+            2560);
         activity.state.rootId = child.id;
         activity.state.selectedId = child.id;
         TreeLayoutEngine.rebuildStepwise(activity.state);
         activity.workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(activity.state.workspaceWidth);
         activity.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(activity.state.workspaceHeight);
+        activity.recordAction(
+            "Создано дерево через быстрый старт",
+            activity.state.people.size() + " карточек");
         activity.saveToast("Быстрый старт создан");
         activity.bindState();
         activity.treeView.invalidate();
+    }
+
+    private void addParents(Person child, String fatherName, String motherName, float fatherX, float motherX, float y) {
+        if (child == null) return;
+        Person father = null;
+        Person mother = null;
+        if (!empty(fatherName)) {
+            father = activity.state.addPerson(fatherName.trim(), fatherX, y);
+            setGender(father, PersonGender.MALE);
+            activity.state.addRelation("parent", father.id, child.id);
+        }
+        if (!empty(motherName)) {
+            mother = activity.state.addPerson(motherName.trim(), motherX, y);
+            setGender(mother, PersonGender.FEMALE);
+            activity.state.addRelation("parent", mother.id, child.id);
+        }
+        if (father != null && mother != null) {
+            activity.state.addRelation("partner", father.id, mother.id, "right");
+        }
+    }
+
+    private static void setGender(Person person, String gender) {
+        if (person == null) return;
+        person.gender = gender;
+        person.genderManual = true;
     }
 
     private int dp(int value) {

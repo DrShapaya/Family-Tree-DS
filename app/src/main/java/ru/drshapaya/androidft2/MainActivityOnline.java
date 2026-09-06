@@ -140,7 +140,7 @@ final class MainActivityOnline {
             dashboardContent.addView(sectionTitle("Аккаунт GitHub"));
             dashboardContent.addView(infoCard(
                 "Подключите GitHub один раз",
-                "Нажмите кнопку, подтвердите доступ на GitHub и автоматически вернитесь в AndroidFT. Токен останется в защищённом хранилище телефона."));
+                "Нажмите кнопку, подтвердите доступ на GitHub и автоматически вернитесь в Family Tree DS. Токен останется в защищённом хранилище телефона."));
             if (manager.browserSignInAvailable()) {
                 dashboardContent.addView(primaryButton(
                     "Продолжить через GitHub",
@@ -187,6 +187,10 @@ final class MainActivityOnline {
         dashboardContent.addView(primaryButton(
             "Синхронизировать сейчас",
             v -> retrySync()));
+        dashboardContent.addView(actionCard(
+            "Резервные копии",
+            "Список умных дельт за последние 30 дней и восстановление выбранной версии.",
+            v -> openBackups()));
 
         if (manager.isOwner()) {
             dashboardContent.addView(sectionTitle("Приглашение близких"));
@@ -466,7 +470,7 @@ final class MainActivityOnline {
             return;
         }
         pendingInvitationKey = normalized;
-        copyText("Ключ дерева AndroidFT", normalized);
+        copyText("Ключ дерева Family Tree DS", normalized);
         openDashboard();
         if (manager.signedIn()) {
             openPendingInvitation();
@@ -512,7 +516,7 @@ final class MainActivityOnline {
             shell,
             "↗",
             "Вход в GitHub",
-            "Код уже скопирован. Откройте GitHub, подтвердите AndroidFT и вернитесь в приложение.");
+            "Код уже скопирован. Откройте GitHub, подтвердите Family Tree DS и вернитесь в приложение.");
         TextView codeView = label(code, 25, Color.rgb(8, 122, 115), true);
         codeView.setGravity(Gravity.CENTER);
         codeView.setTextIsSelectable(true);
@@ -669,7 +673,7 @@ final class MainActivityOnline {
                         activity.toast(
                             automatic
                                 ? "Сохранённые онлайн-деревья не найдены"
-                                : "В этом аккаунте нет доступных деревьев AndroidFT");
+                                : "В этом аккаунте нет доступных деревьев Family Tree DS");
                         renderDashboard();
                         return;
                     }
@@ -761,6 +765,115 @@ final class MainActivityOnline {
                 renderDashboard();
             }
         });
+    }
+
+    private void openBackups() {
+        Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = dialogShell();
+        dialogHeader(
+            shell,
+            "↺",
+            "Резервные копии",
+            "Загружаем список умных дельт из GitHub…");
+        shell.addView(note("Автоматически остаются только копии за 30 дней. Одинаковые состояния объединяются."));
+        dialog.setContentView(shell);
+        configureDialog(dialog, shell);
+        dialog.show();
+
+        manager.listBackups(new OnlineTreeManager.Callback<List<OnlineTreeManager.BackupInfo>>() {
+            @Override public void onSuccess(List<OnlineTreeManager.BackupInfo> backups) {
+                shell.removeAllViews();
+                dialogHeader(
+                    shell,
+                    "↺",
+                    "Резервные копии",
+                    backupCountTitle(backups.size()) + ". Старые и одинаковые уже очищены.");
+                if (backups.isEmpty()) {
+                    shell.addView(infoCard(
+                        "Бэкапов пока нет",
+                        "Они появятся после синхронизации онлайн-дерева с изменениями."));
+                } else {
+                    LinearLayout list = new LinearLayout(activity);
+                    list.setOrientation(LinearLayout.VERTICAL);
+                    for (OnlineTreeManager.BackupInfo backup : backups) {
+                        list.addView(backupRow(dialog, backup));
+                    }
+                    ScrollView scroll = new ScrollView(activity);
+                    scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+                    int listHeight = Math.min(activity.dp(430), activity.dp(92 * backups.size()));
+                    shell.addView(scroll, new LinearLayout.LayoutParams(-1, listHeight));
+                }
+                LinearLayout.LayoutParams closeParams =
+                    new LinearLayout.LayoutParams(-1, activity.dp(46));
+                closeParams.setMargins(0, activity.dp(8), 0, 0);
+                shell.addView(smallButton("Закрыть", v -> dialog.dismiss()), closeParams);
+                configureDialog(dialog, shell);
+            }
+
+            @Override public void onError(String message) {
+                dialog.dismiss();
+                activity.toast(message);
+                renderDashboard();
+            }
+        });
+    }
+
+    private View backupRow(Dialog dialog, OnlineTreeManager.BackupInfo backup) {
+        return actionCard(
+            backupTitle(backup),
+            backupDetail(backup),
+            v -> confirm(
+                "Восстановить резервную копию?",
+                "Текущее онлайн-дерево будет заменено выбранной версией. Перед восстановлением GitHub сохранит новое изменение в истории репозитория.",
+                "Восстановить",
+                () -> restoreBackup(dialog, backup)));
+    }
+
+    private void restoreBackup(Dialog listDialog, OnlineTreeManager.BackupInfo backup) {
+        Dialog progress = progressDialog(
+            "Восстановление бэкапа",
+            "Загружаем сохранённый файл дерева и проверяем медиа…");
+        progress.show();
+        manager.restoreBackup(backup, new OnlineTreeManager.Callback<Void>() {
+            @Override public void onSuccess(Void result) {
+                progress.dismiss();
+                if (listDialog != null) listDialog.dismiss();
+                activity.toast("Онлайн-бэкап восстановлен");
+                renderDashboard();
+            }
+
+            @Override public void onError(String message) {
+                progress.dismiss();
+                activity.toast(message);
+                renderDashboard();
+            }
+        });
+    }
+
+    private String backupTitle(OnlineTreeManager.BackupInfo backup) {
+        String date = backup.createdAt <= 0L
+            ? "Без даты"
+            : new SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(new Date(backup.createdAt));
+        return date + " · rev " + backup.revision;
+    }
+
+    private String backupDetail(OnlineTreeManager.BackupInfo backup) {
+        int media = backup.mediaAdded + backup.mediaRemoved;
+        return "Схожесть " + backup.similarity + "%"
+            + " · изменено " + backup.changedItems
+            + " · добавлено " + backup.addedItems
+            + " · удалено " + backup.removedItems
+            + (media > 0 ? " · медиа " + media : "");
+    }
+
+    private String backupCountTitle(int count) {
+        int lastTwo = count % 100;
+        int last = count % 10;
+        String word = lastTwo >= 11 && lastTwo <= 14
+            ? "резервных копий"
+            : last == 1 ? "резервная копия" : last >= 2 && last <= 4 ? "резервные копии" : "резервных копий";
+        return count + " " + word;
     }
 
     private void openParticipants() {
@@ -1167,7 +1280,7 @@ final class MainActivityOnline {
             activity.toast("Ключ пока недоступен");
             return;
         }
-        copyText("Ключ дерева AndroidFT", key);
+        copyText("Ключ дерева Family Tree DS", key);
         activity.toast("Ключ скопирован");
     }
 
@@ -1186,10 +1299,10 @@ final class MainActivityOnline {
             .toString();
         SpannableStringBuilder text = new SpannableStringBuilder();
         String invitationTitle = activity.tr(
-            "Приглашение в семейное дерево AndroidFT");
+            "Приглашение в семейное дерево Family Tree DS");
         String keyInstruction = activity.tr(
             "Ключ подключения — нажмите и удерживайте, чтобы скопировать:");
-        String openInstruction = activity.tr("Открыть в AndroidFT:");
+        String openInstruction = activity.tr("Открыть в Family Tree DS:");
         String fallbackInstruction = activity.tr(
             "Если ссылка не открылась, вставьте ключ в разделе «Семейное облако».");
         int titleStart = text.length();
@@ -1225,7 +1338,7 @@ final class MainActivityOnline {
             + TextUtils.htmlEncode(fallbackInstruction);
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/html");
-        share.putExtra(Intent.EXTRA_SUBJECT, activity.tr("Приглашение AndroidFT"));
+        share.putExtra(Intent.EXTRA_SUBJECT, activity.tr("Приглашение Family Tree DS"));
         share.putExtra(Intent.EXTRA_TEXT, text);
         share.putExtra(Intent.EXTRA_HTML_TEXT, html);
         activity.startActivity(Intent.createChooser(

@@ -38,7 +38,7 @@
         android:fontFamily="sans-serif"
         android:includeFontPadding="false"
         android:maxLines="1"
-        android:text="@string/birthday_widget_preview_date"
+        android:text="@string/birthday_widget_preview_date_age"
         android:textColor="#555861"
         android:textSize="13sp" />
 

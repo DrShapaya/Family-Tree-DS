@@ -55,6 +55,8 @@ final class LayoutScorer {
             symmetryError,
             siblingSpacingError,
             wrongSideError,
+            emptySpace,
+            connectionLength,
             bounds.width(),
             bounds.height());
     }
@@ -292,6 +294,8 @@ final class LayoutScorer {
         final double symmetryError;
         final double siblingSpacingError;
         final double wrongSideError;
+        final double emptySpace;
+        final double connectionLength;
         final double width;
         final double height;
 
@@ -304,6 +308,8 @@ final class LayoutScorer {
             double symmetryError,
             double siblingSpacingError,
             double wrongSideError,
+            double emptySpace,
+            double connectionLength,
             double width,
             double height
         ) {
@@ -315,6 +321,8 @@ final class LayoutScorer {
             this.symmetryError = symmetryError;
             this.siblingSpacingError = siblingSpacingError;
             this.wrongSideError = wrongSideError;
+            this.emptySpace = emptySpace;
+            this.connectionLength = connectionLength;
             this.width = width;
             this.height = height;
         }
@@ -323,6 +331,8 @@ final class LayoutScorer {
             return new Score(
                 Double.POSITIVE_INFINITY,
                 violations,
+                0d,
+                0d,
                 0d,
                 0d,
                 0d,

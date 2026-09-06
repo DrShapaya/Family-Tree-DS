@@ -133,7 +133,17 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
             BirthdayWidgetRenderer.renderBackground(context, birthday, settings, width, height));
         int primary = BirthdayWidgetRenderer.primaryTextColor(birthday, settings);
         int secondary = BirthdayWidgetRenderer.secondaryTextColor(birthday, settings);
-        views.setTextViewText(R.id.birthday_widget_name, BirthdayWidgetRenderer.personName(context, birthday));
+        Bitmap photo = settings.showPhoto
+            ? BirthdayWidgetRenderer.renderPhoto(
+                context,
+                birthday,
+                layoutSize == SIZE_COMPACT ? 58 : layoutSize == SIZE_SQUARE ? 70 : layoutSize == SIZE_WIDE ? 92 : 84)
+            : null;
+        views.setTextViewText(
+            R.id.birthday_widget_name,
+            layoutSize == SIZE_COMPACT
+                ? BirthdayWidgetRenderer.compactPersonName(context, birthday, photo != null)
+                : BirthdayWidgetRenderer.personName(context, birthday));
         views.setTextColor(R.id.birthday_widget_name, primary);
 
         if (layoutSize == SIZE_COMPACT) {
@@ -154,12 +164,6 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
             views.setTextColor(R.id.birthday_widget_days_label, secondary);
         }
 
-        Bitmap photo = settings.showPhoto
-            ? BirthdayWidgetRenderer.renderPhoto(
-                context,
-                birthday,
-                layoutSize == SIZE_COMPACT ? 58 : layoutSize == SIZE_SQUARE ? 70 : layoutSize == SIZE_WIDE ? 92 : 84)
-            : null;
         if (photo == null) {
             views.setViewVisibility(R.id.birthday_widget_photo, View.GONE);
         } else {

@@ -14,14 +14,14 @@
   "Ключ подключения — нажмите и удерживайте, чтобы скопировать:": "Connection key — press and hold to copy:",
   "М": "M",
   "Не удалось сохранить язык приложения": "Failed to save the application language",
-  "Открыть в AndroidFT:": "Open in AndroidFT:",
+  "Открыть в Family Tree DS:": "Open in Family Tree DS:",
   "ПРИВАТНЫЙ РАЗДЕЛ": "PRIVATE SECTION",
   "Русский": "Russian",
   "Язык приложения": "Application language",
   "Язык": "Language",
   "\n\nЕсли ссылка не открылась, вставьте ключ в разделе «Семейное облако».": "If the link does not open, paste the key in the “Family Cloud” section.",
   "\n\nКлюч подключения — нажмите и удерживайте, чтобы скопировать:\n": "Connection key - press and hold to copy:",
-  "\n\nОткрыть в AndroidFT:\n": "Open in AndroidFT:",
+  "\n\nОткрыть в Family Tree DS:\n": "Open in Family Tree DS:",
   " · 1 история": "· 1 memory",
   " · документов: ": "documents:",
   " · карточек: ": "cards:",
@@ -70,8 +70,7 @@
   "%.0f КБ": "%.0f KB",
   "%.0f МБ": "%.0f MB",
   "%.1f ГБ": "%.1f GB",
-  "↓  Нажмите подсвеченный элемент": "↓ Click the highlighted element",
-  "<b>Приглашение в семейное дерево AndroidFT</b><br><br>": "<b>Invitation to the AndroidFT family tree</b><br><br>",
+  "<b>Приглашение в семейное дерево Family Tree DS</b><br><br>": "<b>Invitation to the Family Tree DS family tree</b><br><br>",
   "✓  Изменения сохраняются автоматически": "✓ Changes are saved automatically",
   "1 ребёнок": "1 child",
   "1 родитель": "1 parent",
@@ -114,7 +113,7 @@
   "В .ftree отсутствует tree.json": ".ftree is missing tree.json",
   "В онлайн-дереве отсутствуют вложения: ": "There are no attachments in the online tree:",
   "В сборке не указан GitHub Client ID. Добавьте ANDROIDFT_GITHUB_CLIENT_ID в gradle.properties.": "The build does not include a GitHub Client ID. Add ANDROIDFT_GITHUB_CLIENT_ID to gradle.properties.",
-  "В этом аккаунте нет доступных деревьев AndroidFT": "There are no AndroidFT trees available in this account",
+  "В этом аккаунте нет доступных деревьев Family Tree DS": "There are no Family Tree DS trees available in this account",
   "Ваш GitHub-аккаунт потеряет доступ. Локальная копия останется на телефоне.": "Your GitHub account will lose access. The local copy will remain on the phone.",
   "ваша карточка": "your card",
   "Ваше дерево": "Your tree",
@@ -310,7 +309,7 @@
   "Запись удалена": "Post deleted",
   "Запрашиваем одноразовый код…": "We are asking for a one-time code...",
   "Запрос входа устарел или не прошёл проверку безопасности": "The login request is out of date or fails security checks",
-  "Запрос отправлен. Глава должен открыть AndroidFT; затем повторите подключение.": "Request sent. The owner needs to open AndroidFT; then try connecting again.",
+  "Запрос отправлен. Глава должен открыть Family Tree DS; затем повторите подключение.": "Request sent. The owner needs to open Family Tree DS; then try connecting again.",
   "Защита правок": "Editing lock",
   "золовка": "sister-in-law",
   "зять": "son-in-law",
@@ -355,7 +354,7 @@
   "КАЧЕСТВО ": "QUALITY",
   "Ключ дерева неполный": "Tree key is incomplete",
   "Ключ дерева повреждён": "The tree key is damaged",
-  "Ключ дерева AndroidFT": "AndroidFT Tree Key",
+  "Ключ дерева Family Tree DS": "Family Tree DS Tree Key",
   "Ключ недоступен": "Key not available",
   "Ключ подключения — нажмите и удерживайте, чтобы скопировать:<br>": "Connection key - press and hold to copy:<br>",
   "Ключ пока недоступен": "The key is not yet available",
@@ -366,7 +365,7 @@
   "Ключ скопирован. Войдите в GitHub для подключения": "The key has been copied. Login to GitHub to connect",
   "книжная": "book",
   "Код входа истёк": "Login code has expired",
-  "Код уже скопирован. Откройте GitHub, подтвердите AndroidFT и вернитесь в приложение.": "The code has already been copied. Open GitHub, confirm AndroidFT and return to the application.",
+  "Код уже скопирован. Откройте GitHub, подтвердите Family Tree DS и вернитесь в приложение.": "The code has already been copied. Open GitHub, confirm Family Tree DS and return to the application.",
   "Код GitHub": "GitHub Code",
   "кодировщик PNG завершился с ошибкой": "PNG encoder failed",
   "Компактное": "Compact",
@@ -402,13 +401,12 @@
   "Мать, дочь, сестра, бабушка": "Mother, daughter, sister, grandmother",
   "мачеха": "stepmother",
   "Медиа загружены в фоне: ": "Media loaded in background:",
-  "Медиа AndroidFT": "Media AndroidFT",
+  "Медиа Family Tree DS": "Media Family Tree DS",
   "Медиафайл на GitHub ещё загружается": "The media file is still loading on GitHub",
   "Медиафайл не найден": "Media file not found",
   "Медиафайл превышает допустимые ": "Media file exceeds acceptable limits",
   "Медиафайл слишком большой": "Media file is too big",
   "Меню выбранной карточки": "Menu of the selected card",
-  "Меню карточки": "Card menu",
   "Меняем ключ…": "Changing the key...",
   "Место": "Place",
   "Месяц": "month",
@@ -421,17 +419,9 @@
   "муж сестры или брата": "sister's or brother's husband",
   "мужской": "male",
   "Мужской": "Male",
-  "Нажмите «Дерево». Здесь находятся упорядочивание, рамка, лассо и отображение веток.": "Click Tree. This is where the ordering, frame, lasso and branch display are located.",
-  "Нажмите «Карточка». Здесь находятся редактор человека, быстрый старт, цвета и удаление.": "Tap Card to open the person editor, quick start, colors, and delete actions.",
-  "Нажмите «Параметры». Здесь включаются темы, защита правок, линии, фокус и повторное обучение.": "Click Options. This includes topics, edit protection, lines, focus, and re-teaching.",
-  "Нажмите «Родительская линия». В обычной работе после этого выбираются родитель и ребёнок.": "Click Parent Line. In normal operation, a parent and child are then selected.",
-  "Нажмите «Связи», чтобы открыть инструменты родительских, родственных и братских линий.": "Click Links to open the parent, sibling, and sibling tools.",
-  "Нажмите «Упорядочить». Карточки автоматически выстроятся по поколениям и семейным веткам.": "Click Arrange. Cards will automatically be arranged by generation and family branches.",
-  "Нажмите «Файлы». Здесь сохраняют, импортируют, отправляют и экспортируют дерево.": "Click Files. This is where the tree is saved, imported, sent and exported.",
   "Нажмите карточку-якорь": "Click the anchor card",
-  "Нажмите кнопку, подтвердите доступ на GitHub и автоматически вернитесь в AndroidFT. Токен останется в защищённом хранилище телефона.": "Click the button, confirm access to GitHub and automatically return to AndroidFT. The token will remain in the phone's secure storage.",
+  "Нажмите кнопку, подтвердите доступ на GitHub и автоматически вернитесь в Family Tree DS. Токен останется в защищённом хранилище телефона.": "Click the button, confirm access to GitHub and automatically return to Family Tree DS. The token will remain in the phone's secure storage.",
   "Нажмите на файл или фотографию, чтобы открыть": "Click on a file or photo to open",
-  "Нажмите подсвеченную кнопку +. На дереве появится новый человек, которого можно сразу заполнить.": "Press the illuminated + button. A new person will appear on the tree, which can be filled immediately.",
   "Нажмите пункт, затем выберите две карточки для родственной связи.": "Click the item, then select two cards for the relationship.",
   "Нажмите пункт, затем выберите две карточки для связи брат/сестра.": "Click the item, then select two cards for the brother/sister connection.",
   "Нажмите пункт, затем выберите две карточки: связь между ними будет удалена.": "Click the item, then select two cards: the connection between them will be deleted.",
@@ -534,6 +524,7 @@
   "Он используется только для точных названий родства": "It is only used for exact kinship names",
   "Она станет центром дерева. Остальные сведения можно добавить позже.": "This will become the center of the tree. Other information can be added later.",
   "Онлайн-дерево": "Online tree",
+  "Онлайн-дерево. Синхронизация, резервные копии и доступ близких": "Online tree. Sync, backups, and family access",
   "Онлайн-дерево восстановлено": "Online tree restored",
   "Онлайн-дерево загружено": "Online tree loaded",
   "Онлайн-дерево или приглашение не найдено.": "No online tree or invitation found.",
@@ -543,7 +534,7 @@
   "Онлайн-дерево повреждено": "Online tree is corrupted",
   "Онлайн-дерево подключено": "Online tree connected",
   "Онлайн-дерево создано": "Online tree created",
-  "ОПАСНАЯ ЗОНА": "DANGER ZONE",
+  "Синхронизация, резервные копии и доступ близких": "Sync, backups, and family access",
   "Описание пока не добавлено.": "No description added yet.",
   "Определение родства выключено": "Affinity detection is disabled",
   "Ориентация: ": "Orientation:",
@@ -565,8 +556,8 @@
   "Откреплена карточка: ": "Unpinned card:",
   "Открываем безопасный вход GitHub…": "Opening a secure GitHub login...",
   "Открывает направляющие и линии поколений.": "Reveals guides and generational lines.",
-  "Открывает подменю: FamilyTree, JSON, GEDCOM, PNG, PDF и тайлы.": "Opens submenu: FamilyTree, JSON, GEDCOM, PNG, PDF and tiles.",
-  "Открыть в AndroidFT:<br><a href=\"": "Open in AndroidFT:<br><a href=\"",
+  "Открывает подменю: Family Tree DS, JSON, GEDCOM, PNG, PDF и тайлы.": "Opens submenu: Family Tree DS, JSON, GEDCOM, PNG, PDF and tiles.",
+  "Открыть в Family Tree DS:<br><a href=\"": "Open in Family Tree DS:<br><a href=\"",
   "Открыть запись · ": "Open entry ·",
   "Открыть карточку": "Open card",
   "Открыть редактор": "Open editor",
@@ -600,6 +591,7 @@
   "партнёр": "partner",
   "Партнёра": "Partner",
   "Партнёры": "Partners",
+  "Партнёрская связь": "Partner connection",
   "пасынок": "stepson",
   "Первая история": "First story",
   "первая карточка": "first card",
@@ -685,10 +677,10 @@
   "Предки": "Ancestors",
   "предок": "ancestor",
   "Приватное дерево хранится в GitHub и остаётся доступным участникам независимо от телефона главы.": "The private tree is stored on GitHub and remains available to members even when the owner's phone is offline.",
-  "Приватное онлайн-дерево AndroidFT": "Private online tree AndroidFT",
+  "Приватное онлайн-дерево Family Tree DS": "Private online tree Family Tree DS",
   "Приглашение близких": "Inviting loved ones",
-  "Приглашение в семейное дерево AndroidFT": "Invitation to the AndroidFT family tree",
-  "Приглашение AndroidFT": "AndroidFT Invitation",
+  "Приглашение в семейное дерево Family Tree DS": "Invitation to the Family Tree DS family tree",
+  "Приглашение Family Tree DS": "Family Tree DS Invitation",
   "Приложение закрывается": "The application closes",
   "присоедин": "annexed",
   "Присоединиться к дереву": "Join the tree",
@@ -773,7 +765,7 @@
   "СЕМЕЙНАЯ СВЯЗЬ": "FAMILY CONNECTION",
   "Семейное древо": "Family tree",
   "Семейное древо (JSON)": "Family Tree (JSON)",
-  "Семейное древо FamilyTree": "Family tree FamilyTree",
+  "Семейное дерево Family Tree DS": "Family Tree DS family tree",
   "Семейное облако": "Family Cloud",
   "Семейные связи": "Family connections",
   "Семья": "Family",
@@ -782,7 +774,7 @@
   "сестра супруга или супруги": "spouse's sister",
   "Сжатие PNG…": "PNG compression...",
   "Синхронизация завершена": "Synchronization complete",
-  "Синхронизация AndroidFT": "AndroidFT Synchronization",
+  "Синхронизация Family Tree DS": "Family Tree DS Synchronization",
   "Синхронизация…": "Synchronization…",
   "Синхронизировано": "Synchronized",
   "Синхронизировать сейчас": "Sync now",
@@ -794,20 +786,18 @@
   "Скрыть детали карточек": "Hide card details",
   "Слишком много перенаправлений при загрузке медиа": "Too many redirects when loading media",
   "Слишком много файлов внутри .ftree": "Too many files inside .ftree",
-  "Служебное хранилище фото и вложений онлайн-дерева AndroidFT. ": "Utility storage for photos and attachments of the AndroidFT online tree.",
-  "Служебный канал AndroidFT. Данные дерева здесь не хранятся.": "AndroidFT service channel. The tree data is not stored here.",
+  "Служебное хранилище фото и вложений онлайн-дерева Family Tree DS. ": "Utility storage for photos and attachments of the Family Tree DS online tree.",
+  "Служебный канал Family Tree DS. Данные дерева здесь не хранятся.": "Family Tree DS service channel. The tree data is not stored here.",
   "Сменить": "Change",
   "Сменить ключ": "Change key",
   "Сменить ключ приглашения?": "Change invitation key?",
   "Сначала войдите в GitHub": "First, log into GitHub",
   "Сначала выключите защиту правок": "First turn off edit protection",
-  "Сначала отключите защиту правок": "First disable edit protection",
   "Сначала отключите текущее онлайн-дерево": "First disable the current online tree",
   "Снимок виден на дереве и в карточке": "The photo is visible on the tree and on the card",
   "Совпадений нет — попробуйте фамилию, год или место": "No matches - try last name, year or place",
   "Создаём приватное дерево…": "Creating a private tree...",
   "Создаём приватный репозиторий и ключ приглашения…": "Create a private repository and invitation key...",
-  "Создайте карточку": "Create a card",
   "Создать пустую карточку": "Create a blank card",
   "Создайте новый ключ после восстановления": "Create a new key after recovery",
   "Создан новый ключ": "New key created",
@@ -817,7 +807,7 @@
   "Создание PDF…": "PDF Creation...",
   "Создание PNG-тайлов…": "Creating PNG tiles...",
   "Создано дерево через быстрый старт": "Tree created via quick start",
-  "Создано онлайн-дерево AndroidFT": "AndroidFT online tree created",
+  "Создано онлайн-дерево Family Tree DS": "Family Tree DS online tree created",
   "создать": "create",
   "Создать": "Create",
   "Создать дерево": "Create a tree",
@@ -901,6 +891,7 @@
   "Удалять": "Delete",
   "укажите день и месяц": "indicate day and month",
   "Ум. ": "Died ",
+  "Умный поиск": "Smart search",
   "Упорядочено дерево": "The tree is ordered",
   "Упорядочивание": "Arranging",
   "Упорядочить": "Arrange",
@@ -974,14 +965,14 @@
   "Экспорт дерева": "Export tree",
   "Экспорт не выполнен: ": "Export failed:",
   "Эта запись": "This entry",
-  "Это не ключ AndroidFT": "This is not an AndroidFT key",
+  "Это не ключ Family Tree DS": "This is not a Family Tree DS key",
   "это один и тот же человек": "this is the same person",
   "Этого участника нельзя удалить": "This member cannot be removed",
   "Этот файл": "This file",
   "Android не видит активное интернет-соединение": "Android doesn't see active internet connection",
   "Android не смог найти github.com. Проверьте подключение, ": "Android couldn't find github.com. Check the connection",
-  "AndroidFT · хранилище медиа": "AndroidFT · media storage",
-  "ANDROIDFT 2.6.0  ·  ПРИВАТНЫЙ РАЗДЕЛ": "ANDROIDFT 2.6.0 PRIVATE SECTION",
+  "Family Tree DS · хранилище медиа": "Family Tree DS · media storage",
+  "Family Tree DS 2.6.0  ·  ПРИВАТНЫЙ РАЗДЕЛ": "Family Tree DS 2.6.0 PRIVATE SECTION",
   "GitHub временно недоступен · повторяем…": "GitHub is temporarily unavailable · we repeat...",
   "GitHub защищён и подключён": "GitHub is secure and connected",
   "GitHub не вернул адрес медиафайла": "GitHub did not return the media file address",
@@ -1053,13 +1044,6 @@
   "Циклическая родительская связь": "Cyclic parent relationship",
   "Несовместимые типы связи": "Conflicting relationship types",
   "Указано больше двух родителей": "More than two parents are specified",
-  "Границы поля": "Workspace boundaries",
-  "Границы поля · ": "Workspace boundaries · ",
-  "Настройте вид границы и затемнение за пределами рабочего поля.": "Customize the boundary and shading outside the workspace.",
-  "Настройте размер, вид границы и затемнение за пределами рабочего поля.": "Customize the workspace size, boundary, and outside shading.",
-  "Границы и затемнение рабочего поля выключены.": "Workspace boundaries and shading are off.",
-  "Выберите, как обозначать рабочую область дерева": "Choose how the tree workspace is marked",
-  "Показывать границы поля": "Show workspace boundaries",
   "ОФОРМЛЕНИЕ": "APPEARANCE",
   "Мягкие": "Soft",
   "Спокойный пунктир и лёгкое затемнение снаружи": "Subtle dashes and light shading outside",
@@ -1074,19 +1058,6 @@
   "Сохранить": "Save",
   "РАЗМЕР РАБОЧЕЙ ЗОНЫ": "WORKSPACE SIZE",
   "Ширина × высота в единицах полотна": "Width × height in canvas units",
-  "Ширина": "Width",
-  "Высота": "Height",
-  "Вкл": "On",
-  "Выкл": "Off",
-  "Применить размер": "Apply size",
-  "Сбросить 24 000 × 16 000": "Reset to 24,000 × 16,000",
-  "Размер рабочей зоны уже установлен": "The workspace already has this size",
-  "Изменён размер рабочей зоны": "Workspace size changed",
-  "Размер рабочей зоны обновлён": "Workspace size updated",
-  "Дерево может сместиться": "The tree may shift",
-  "Вы уменьшаете рабочую область": "You are reducing the workspace",
-  "Карточки за новыми границами будут перенесены внутрь поля. Из-за этого расположение веток может измениться.": "Cards outside the new boundaries will be moved inside the workspace. This may change the branch layout.",
-  "Всё равно уменьшить": "Reduce anyway",
   "Мужчины": "Men",
   "Женщины": "Women",
   "Не указан": "Not specified",
@@ -1291,4 +1262,74 @@
   ,"Добавлен отдельный замок, полностью защищающий структуру дерева, карточки и фотографии от изменений.": "Added a dedicated lock that fully protects the tree structure, person cards, and photos from changes."
   ,"Добавлен редактор фотографий с поворотом в обе стороны, отражением, свободной обрезкой и отдельным позиционированием аватара без удаления краёв.": "Added a photo editor with rotation in both directions, mirroring, free crop, and separate non-destructive avatar positioning."
   ,"На экране «О нас» появились команда, раскрываемые примечания, ссылки сообщества и добровольная поддержка через DonationAlerts.": "About now includes the team, expandable update notes, community links, and voluntary support through DonationAlerts."
+  ,"Нижнее меню автоматически поднимается над системной панелью навигации — как при управлении тремя кнопками, так и при использовании жестов.": "The bottom menu now automatically stays above the system navigation bar in both three-button and gesture navigation modes."
+  ,"Предложение пройти обучение показывается только один раз и больше не появляется у пользователей с уже созданным деревом.": "The training offer is now shown only once and no longer appears for users who already have a tree."
+  ,"Обучение полностью переработано: оно безопасно знакомит с интерфейсом, точно подсвечивает нужные кнопки и не изменяет пользовательское дерево.": "Training has been completely redesigned: it safely introduces the interface, precisely highlights the required buttons, and never changes the user's tree."
+  ,"Как управлять деревом": "How to navigate the tree"
+  ,"Перемещайте полотно одним пальцем, меняйте масштаб щипком, а карточку выбирайте обычным нажатием.": "Move the canvas with one finger, pinch to zoom, and tap a card to select it."
+  ,"Добавление человека": "Adding a person"
+  ,"Кнопка + создаёт первую карточку или открывает выбор родственника. В обучении мы ничего добавлять не будем.": "The + button creates the first card or opens relative options. The tour will not add anything."
+  ,"Нажмите «Карточка»: здесь редактируются ФИО, даты, фото, заметки и другие сведения выбранного человека.": "Tap Card to edit the selected person's name, dates, photos, notes, and other details."
+  ,"Люди и фотографии": "People and photos"
+  ,"Нажмите «Люди»: здесь находятся общий каталог, поиск, фильтры, аватары, семейные и собственные альбомы.": "Tap People to open the directory, search, filters, avatars, family collections, and custom albums."
+  ,"Нажмите «Связи»: отсюда создаются родительские, родственные и братские линии, а также определяется родство.": "Tap Connections to create parent, family, and sibling links or determine relationships."
+  ,"Нажмите «Дерево»: здесь находятся упорядочивание, выделение, ветки и линии поколений.": "Tap Tree to access arranging, selection, branches, and generation lines."
+  ,"Остальные возможности": "More features"
+  ,"Нажмите «Ещё», чтобы открыть файлы, сохранённые версии, параметры, обучение и информацию о приложении.": "Tap More to open files, saved versions, settings, training, and app information."
+  ,"Всё важное под рукой": "Everything important in one place"
+  ,"Файлы и экспорт, резервные версии, параметры и повторный запуск обучения находятся в этом меню.": "Files and export, backup versions, settings, and restarting the tour are all available in this menu."
+  ,"Закрыть обучение": "Close training"
+  ,"Нажмите подсвеченную кнопку": "Tap the highlighted button"
+  ,"Пропустить": "Skip"
+  ,"Обучение завершено — его всегда можно открыть снова через «Ещё»": "Training is complete — you can always open it again from More"
+  ,"Начнём с основных жестов": "Let's start with the basic gestures"
+  ,"Посмотрите на подсвеченный элемент": "Look at the highlighted element"
+  ,"Элемент сейчас недоступен — перейдите к следующему шагу": "This element is currently unavailable — continue to the next step"
+  ,"Нажмите здесь": "Tap here"
+  ,"Это меню": "This menu"
+  ,"Обратите внимание": "Take a look"
+  ,"Раздел открыт": "Section opened"
+  ,"Раздел открыт. Осмотритесь и нажмите «Далее»": "The section is open. Take a look, then tap Next."
+  ,"Поиск по имени, году или месту": "Search by name, year, or place"
+  ,"Родители папы": "Father's parents"
+  ,"Родители мамы": "Mother's parents"
+  ,"Будут связаны с карточкой папы": "They will be linked to the father's card"
+  ,"Будут связаны с карточкой мамы": "They will be linked to the mother's card"
+  ,"Имя дедушки по папе, необязательно": "Paternal grandfather's name, optional"
+  ,"Имя бабушки по папе, необязательно": "Paternal grandmother's name, optional"
+  ,"Имя дедушки по маме, необязательно": "Maternal grandfather's name, optional"
+  ,"Имя бабушки по маме, необязательно": "Maternal grandmother's name, optional"
+  ,"Дедушка": "Grandfather"
+  ,"Бабушка": "Grandmother"
+  ,"Обучение полностью переработано: открытый раздел остаётся на экране до явного перехода дальше, а подсказки безопасно знакомят с интерфейсом без изменения дерева.": "Training has been completely redesigned: an opened section remains visible until you explicitly continue, while safe tips introduce the interface without changing the tree."
+  ,"В альбоме «Все аватары» появился поиск по имени, году и месту.": "The All Avatars album now has search by name, year, and place."
+  ,"«Быстрый старт» теперь создаёт до трёх поколений: после добавления родителей можно сразу указать их родителей.": "Quick Start can now create up to three generations: after entering parents, you can immediately add their parents."
+  ,"Основное": "General"
+  ,"Визуал": "Visuals"
+  ,"Дерево и данные": "Tree and data"
+  ,"Размер шрифта": "Font size"
+  ,"Масштаб интерфейса": "Interface scale"
+  ,"Меньше": "Smaller"
+  ,"Обычно": "Normal"
+  ,"Больше": "Larger"
+  ,"Мелкий": "Small"
+  ,"Обычный": "Default"
+  ,"Крупный": "Large"
+  ,"Компактно": "Compact"
+  ,"Крупно": "Large"
+  ,"Масштаб интерфейса обновлён": "Interface scale updated"
+  ,"Размер шрифта обновлён": "Font size updated"
+  ,"1 карточка далеко от основного дерева": "1 card is far from the main tree"
+  ," карточки далеко от основного дерева": " cards are far from the main tree"
+  ,"Показать": "Show"
+  ,"Вернуть": "Bring back"
+  ,"Далёкие карточки возвращены ближе": "Distant cards were brought closer"
+  ,"Карточки возвращены ближе": "Cards were brought closer"
+  ,"Цвет карточки": "Card color"
+  ,"Оформление": "Appearance"
+  ,"Человек удалён": "Person deleted"
+  ,"Действия поиска": "Search actions"
+  ,"История и сохранение запросов": "Search history and saved searches"
+  ,"Недавние и сохранённые запросы": "Recent and saved searches"
+  ,"Сохранить текущий запрос и фильтры": "Save current query and filters"
 }

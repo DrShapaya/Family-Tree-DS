@@ -119,7 +119,7 @@ final class MainActivityFiles {
 
         shell.addView(exportCaption("ДЛЯ ПЕРЕНОСА"));
         shell.addView(exportOption(
-            "FamilyTree (.ftree)",
+            "Family Tree DS (.ftree)",
             "Полная копия с фото и вложениями",
             () -> {
                 dialog.dismiss();
@@ -825,7 +825,7 @@ final class MainActivityFiles {
         String mime = "png".equals(extension)
             ? "image/png"
             : "webp".equals(extension) ? "image/webp" : "image/jpeg";
-        String filename = "AndroidFT_photo_" + dateStamp() + "." + extension;
+        String filename = "FamilyTreeDS_photo_" + dateStamp() + "." + extension;
         new Thread(() -> {
             Uri destination = null;
             try {
@@ -835,15 +835,15 @@ final class MainActivityFiles {
                 if (android.os.Build.VERSION.SDK_INT >= 29) {
                     values.put(
                         android.provider.MediaStore.Images.Media.RELATIVE_PATH,
-                        android.os.Environment.DIRECTORY_PICTURES + "/AndroidFT");
+                        android.os.Environment.DIRECTORY_PICTURES + "/Family Tree DS");
                     values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 1);
                 } else {
                     File directory = new File(
                         android.os.Environment.getExternalStoragePublicDirectory(
                             android.os.Environment.DIRECTORY_PICTURES),
-                        "AndroidFT");
+                        "Family Tree DS");
                     if (!directory.isDirectory() && !directory.mkdirs()) {
-                        throw new IOException("Не удалось создать папку AndroidFT");
+                        throw new IOException("Не удалось создать папку Family Tree DS");
                     }
                     values.put(
                         android.provider.MediaStore.Images.Media.DATA,
@@ -1188,7 +1188,7 @@ final class MainActivityFiles {
                         pageWidth - margin,
                         pageHeight - margin - footer);
                     renderer.render(page.getCanvas(), world, target, renderScale, monochrome);
-                    String caption = "AndroidFT " + MainActivity.VERSION_NAME
+                    String caption = "Family Tree DS " + MainActivity.VERSION_NAME
                         + " · " + number + "/" + pageCount
                         + (AppLanguage.isEnglish(activity)
                             ? " · row " + (row + 1) + ", column " + (column + 1)
@@ -1350,7 +1350,7 @@ final class MainActivityFiles {
 
     private String exportGedcomText(TreeState sourceState) {
         StringBuilder out = new StringBuilder();
-        out.append("0 HEAD\n1 SOUR AndroidFT\n1 CHAR UTF-8\n");
+        out.append("0 HEAD\n1 SOUR Family Tree DS\n1 CHAR UTF-8\n");
         for (Person person : sourceState.people.values()) {
             out.append("0 @").append(person.id).append("@ INDI\n");
             out.append("1 NAME ").append(cleanGed(person.name)).append("\n");
@@ -1447,7 +1447,7 @@ final class MainActivityFiles {
                     send.setType(TreePackageIO.MIME_TYPE);
                     send.putExtra(
                         Intent.EXTRA_SUBJECT,
-                        activity.tr("Семейное древо FamilyTree"));
+                        activity.tr("Семейное дерево Family Tree DS"));
                     send.putExtra(Intent.EXTRA_TITLE, filename);
                     send.putExtra(Intent.EXTRA_STREAM, uri);
                     send.setClipData(ClipData.newRawUri(filename, uri));

@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Bitmap;
 import android.graphics.DashPathEffect;
+import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -12,6 +13,7 @@ import android.graphics.PathMeasure;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.util.Base64;
 import android.util.LruCache;
@@ -87,6 +89,8 @@ final class TreeCanvasView extends View {
     private TreeMediaStore mediaStore;
     private Listener listener;
     private String filter = "";
+    private SmartPeopleSearch.Query smartFilter;
+    private Calendar smartFilterNow = Calendar.getInstance();
     private String branchMode = "all";
     private String branchAnchorId = "";
     private String selectionMode = "";
@@ -111,8 +115,7 @@ final class TreeCanvasView extends View {
     private boolean generationLines = true;
     private boolean hideDetails = false;
     private boolean compactCards = false;
-    private boolean workspaceBoundsVisible = true;
-    private String workspaceBoundsStyle = "soft";
+    private float fontScale = 1f;
     private float workspaceWidth = TreeLayoutEngine.SURFACE_W;
     private float workspaceHeight = TreeLayoutEngine.SURFACE_H;
     private boolean appendSelection = false;
@@ -186,6 +189,8 @@ final class TreeCanvasView extends View {
             failedPhotoLoads.clear();
         }
         this.state = state;
+        smartFilter = this.filter.isEmpty() || state == null ? null : SmartPeopleSearch.parse(state, this.filter, state.selectedId);
+        smartFilterNow = Calendar.getInstance();
         visibleBranchIds = null;
         spatialDirty = true;
         invalidate();
@@ -215,7 +220,9 @@ final class TreeCanvasView extends View {
     }
 
     void setFilter(String filter) {
-        this.filter = filter == null ? "" : filter.trim().toLowerCase(Locale.ROOT);
+        this.filter = filter == null ? "" : filter.trim();
+        this.smartFilter = state == null ? null : SmartPeopleSearch.parse(state, this.filter, state.selectedId);
+        this.smartFilterNow = Calendar.getInstance();
         invalidate();
     }
 
@@ -271,7 +278,19 @@ final class TreeCanvasView extends View {
     }
 
     void setCompactCards(boolean enabled) {
+        if (compactCards == enabled) return;
         compactCards = enabled;
+        nameLinesCache.evictAll();
+        nameEllipsisCache.evictAll();
+        invalidate();
+    }
+
+    void setFontScale(float value) {
+        float normalized = MainActivity.normalizeFontScale(value);
+        if (Math.abs(fontScale - normalized) < 0.001f) return;
+        fontScale = normalized;
+        nameLinesCache.evictAll();
+        nameEllipsisCache.evictAll();
         invalidate();
     }
 
@@ -353,11 +372,7 @@ final class TreeCanvasView extends View {
         invalidate();
     }
 
-    void setWorkspaceBounds(boolean visible, String style, int width, int height) {
-        workspaceBoundsVisible = visible;
-        workspaceBoundsStyle = "contrast".equals(style) || "outline".equals(style)
-            ? style
-            : "soft";
+    void setWorkspaceSize(int width, int height) {
         workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(width);
         workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(height);
         invalidate();
@@ -490,7 +505,6 @@ final class TreeCanvasView extends View {
     private void drawScene(Canvas canvas, int width, int height, boolean exportMode) {
         canvas.drawColor(canvasBackground());
         if (!exportMode && !"clean".equals(theme)) drawGrid(canvas, width, height);
-        if (!exportMode) drawWorkspaceBounds(canvas, width, height);
         if (state == null) return;
         refreshToday();
         prepareBranchCache();
@@ -517,47 +531,8 @@ final class TreeCanvasView extends View {
         for (float y = startY; y < height; y += grid) canvas.drawLine(0, y, width, y, paint);
     }
 
-    private void drawWorkspaceBounds(Canvas canvas, int width, int height) {
-        if (!workspaceBoundsVisible) return;
-        float left = sx(0f);
-        float top = sy(0f);
-        float right = sx(workspaceWidth);
-        float bottom = sy(workspaceHeight);
-
-        // Slightly shade only the part outside the editable surface. This keeps the
-        // boundary understandable even when just one of its sides is on screen.
-        paint.setStyle(Paint.Style.FILL);
-        paint.setPathEffect(null);
-        boolean outlineOnly = "outline".equals(workspaceBoundsStyle);
-        boolean contrast = "contrast".equals(workspaceBoundsStyle);
-        paint.setColor("dark".equals(theme)
-            ? Color.argb(contrast ? 96 : 64, 0, 0, 0)
-            : Color.argb(contrast ? 54 : 28, 46, 64, 72));
-        if (!outlineOnly) {
-            if (left > 0f) canvas.drawRect(0f, 0f, Math.min(width, left), height, paint);
-            if (right < width) canvas.drawRect(Math.max(0f, right), 0f, width, height, paint);
-            float innerLeft = Math.max(0f, left);
-            float innerRight = Math.min(width, right);
-            if (innerRight > innerLeft) {
-                if (top > 0f) canvas.drawRect(innerLeft, 0f, innerRight, Math.min(height, top), paint);
-                if (bottom < height) canvas.drawRect(innerLeft, Math.max(0f, bottom), innerRight, height, paint);
-            }
-        }
-
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(contrast ? 3.2f : outlineOnly ? 1.6f : 2.2f);
-        paint.setColor("dark".equals(theme)
-            ? Color.argb(contrast ? 245 : 210, 83, 211, 197)
-            : Color.argb(contrast ? 240 : 190, 8, 122, 115));
-        paint.setPathEffect(outlineOnly ? null : new DashPathEffect(
-            contrast ? new float[] {18f, 7f} : new float[] {14f, 9f},
-            0f));
-        canvas.drawRect(left, top, right, bottom, paint);
-        paint.setPathEffect(null);
-    }
-
     private int canvasBackground() {
-        if ("dark".equals(theme)) return Color.rgb(22, 24, 22);
+        if ("dark".equals(theme)) return Color.rgb(16, 23, 27);
         if ("clean".equals(theme)) return Color.WHITE;
         return Color.rgb(243, 246, 248);
     }
@@ -584,12 +559,10 @@ final class TreeCanvasView extends View {
             boolean selected = link.id != null && link.id.equals(selectedLinkId);
             boolean onPath = pathActive && highlightedPathEdges.contains(edgeKey(link.from, link.to));
             paint.setColor(onPath
-                ? Color.rgb(47, 140, 255)
+                ? AppThemePalette.blue()
                 : selected
-                    ? Color.rgb(197, 83, 75)
-                    : "parent".equals(link.type)
-                        ? Color.rgb(47, 125, 117)
-                        : Color.argb(190, 83, 94, 88));
+                    ? AppThemePalette.text(Color.rgb(197, 83, 75))
+                    : AppThemePalette.relationColor(link.type));
             paint.setStrokeWidth(onPath
                 ? Math.max(5f, 8f * scale)
                 : selected ? Math.max(3.4f, 5f * scale) : Math.max(2.4f, 3.6f * scale));
@@ -612,8 +585,11 @@ final class TreeCanvasView extends View {
             if (!generationRows.add(row)) continue;
             float y = sy(row);
             if (y < -40f || y > height + 40f) continue;
-            int alpha = Math.max(46, Math.min(120, (int) (95 * scale)));
-            paint.setColor(Color.argb(alpha, 24, 169, 82));
+            int alpha = Math.max(28, Math.min(72, (int) (58 * scale)));
+            int color = AppThemePalette.isDark()
+                ? Color.rgb(88, 103, 110)
+                : Color.rgb(177, 191, 198);
+            paint.setColor(withAlpha(color, alpha));
             canvas.drawLine(0, y, width, y, paint);
         }
     }
@@ -690,8 +666,11 @@ final class TreeCanvasView extends View {
                 radius,
                 paint);
         }
-        paint.setColor(adjustForSelection(person));
+        int cardColor = adjustForSelection(person);
+        paint.setShader(cardFillGradient(left, top, left + width, top + height, cardColor));
+        paint.setColor(cardColor);
         canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
+        paint.setShader(null);
         boolean selected = person.id.equals(state.selectedId);
         boolean multiSelected = selectedIds.contains(person.id);
         boolean lineStart = person.id.equals(pendingLineFromId);
@@ -701,7 +680,7 @@ final class TreeCanvasView extends View {
             float pathHalo = Math.max(4f, 7f * scale);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(3.2f, 6.5f * scale));
-            paint.setColor(Color.argb(225, 47, 140, 255));
+            paint.setColor(withAlpha(AppThemePalette.blue(), 225));
             canvas.drawRoundRect(
                 left - pathHalo,
                 top - pathHalo,
@@ -716,7 +695,7 @@ final class TreeCanvasView extends View {
             float halo = Math.max(2.5f, 4.5f * scale);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(2.4f, 5f * scale));
-            paint.setColor(Color.argb(215, 24, 169, 153));
+            paint.setColor(withAlpha(AppThemePalette.primaryBright(), 215));
             canvas.drawRoundRect(
                 left - halo,
                 top - halo,
@@ -729,14 +708,22 @@ final class TreeCanvasView extends View {
         if (multiSelected) {
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(3.6f, 7.5f * scale));
-            paint.setColor(Color.argb(188, 27, 117, 255));
+            paint.setColor(withAlpha(AppThemePalette.secondaryBright(), 188));
             canvas.drawRoundRect(left - 4f * scale, top - 4f * scale, left + width + 4f * scale, top + height + 4f * scale, radius + 5f * scale, radius + 5f * scale, paint);
         }
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(selected || multiSelected
             ? Math.max(2.6f, 3.8f * scale)
             : (lineStart || person.pinned ? 3.2f : 2f) * scale);
-        paint.setColor(lineStart ? Color.rgb(197, 83, 75) : multiSelected ? Color.rgb(27, 117, 255) : selected ? Color.rgb(8, 122, 115) : person.pinned ? Color.rgb(31, 94, 89) : Color.argb(180, 255, 255, 255));
+        paint.setColor(lineStart
+            ? AppThemePalette.text(Color.rgb(197, 83, 75))
+            : multiSelected
+                ? AppThemePalette.secondaryBright()
+                : selected
+                    ? AppThemePalette.primary()
+                    : person.pinned
+                        ? AppThemePalette.text(Color.rgb(31, 94, 89))
+                        : cardNeonStroke(person.color, 220));
         canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
         if (person.id.equals(focusHighlightId)) {
             long remaining = focusHighlightUntil - SystemClock.uptimeMillis();
@@ -746,7 +733,7 @@ final class TreeCanvasView extends View {
                 float halo = (7f + 10f * (1f - phase)) * scale;
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(Math.max(3.5f, 5.5f * scale));
-                paint.setColor(Color.argb(Math.min(220, alpha), 24, 169, 153));
+                paint.setColor(withAlpha(AppThemePalette.primaryBright(), Math.min(220, alpha)));
                 canvas.drawRoundRect(
                     left - halo,
                     top - halo,
@@ -788,7 +775,7 @@ final class TreeCanvasView extends View {
             float cx = left + pad + avatar / 2f;
             float cy = top + pad + avatar / 2f;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(128, 255, 255, 255));
+            paint.setColor(cardNeonStroke(person.color, 58));
             canvas.drawCircle(cx, cy, avatar / 2f, paint);
             Bitmap photo = photoBitmap(person, exportMode);
             if (photo != null) {
@@ -803,7 +790,7 @@ final class TreeCanvasView extends View {
             }
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3f * scale);
-            paint.setColor(Color.argb(184, 255, 255, 255));
+            paint.setColor(cardNeonStroke(person.color, 224));
             canvas.drawCircle(cx, cy, avatar / 2f, paint);
             Paint.FontMetrics fm;
             if (photo == null) {
@@ -973,9 +960,9 @@ final class TreeCanvasView extends View {
     }
 
     private int adjustForSelection(Person person) {
-        if (selectedIds.contains(person.id)) return blend(person.color, Color.rgb(27, 117, 255), 0.16f);
+        if (selectedIds.contains(person.id)) return blend(person.color, AppThemePalette.secondaryBright(), 0.16f);
         if (!person.id.equals(state.selectedId)) return person.color;
-        return blend(blend(person.color, Color.WHITE, 0.16f), Color.rgb(24, 169, 153), 0.18f);
+        return blend(blend(person.color, Color.WHITE, 0.16f), AppThemePalette.primaryBright(), 0.18f);
     }
 
     private String dateMeta(Person person) {
@@ -1230,11 +1217,12 @@ final class TreeCanvasView extends View {
         if (text.isEmpty()) return text;
         float stableScale = Math.max(0.001f, scale);
         int widthKey = Math.round(maxWidth / stableScale);
-        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + text + '\u0000' + widthKey;
+        int fontKey = Math.round(fontScale * 100f);
+        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + text + '\u0000' + widthKey + '\u0000' + fontKey;
         String cached = nameEllipsisCache.get(cacheKey);
         if (cached != null) return cached;
         float originalTextSize = textPaint.getTextSize();
-        textPaint.setTextSize(compactCards ? 15.5f : 18.5f);
+        textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * fontScale);
         String result = ellipsize(text, maxWidth / stableScale);
         textPaint.setTextSize(originalTextSize);
         nameEllipsisCache.put(cacheKey, result);
@@ -1254,16 +1242,17 @@ final class TreeCanvasView extends View {
     }
 
     private float cardTextScale() {
-        return scale;
+        return scale * fontScale;
     }
 
     private String[] nameLines(String value, float maxWidth) {
         int widthKey = Math.round(maxWidth / Math.max(0.001f, scale));
-        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + value + '\u0000' + widthKey;
+        int fontKey = Math.round(fontScale * 100f);
+        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + value + '\u0000' + widthKey + '\u0000' + fontKey;
         String[] cached = nameLinesCache.get(cacheKey);
         if (cached != null) return cached;
         float originalTextSize = textPaint.getTextSize();
-        textPaint.setTextSize(compactCards ? 15.5f : 18.5f);
+        textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * fontScale);
         float stableMaxWidth = maxWidth / Math.max(0.001f, scale);
         List<String> lines = new ArrayList<>();
         if (!compactCards) {
@@ -1681,22 +1670,22 @@ final class TreeCanvasView extends View {
             }
             path.close();
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(34, 8, 122, 115));
+            paint.setColor(withAlpha(AppThemePalette.secondary(), 34));
             paint.setPathEffect(null);
             canvas.drawPath(path, paint);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(2.6f);
-            paint.setColor(Color.rgb(8, 122, 115));
+            paint.setColor(AppThemePalette.secondary());
             paint.setPathEffect(new DashPathEffect(new float[] {12f, 8f}, 0f));
             canvas.drawPath(path, paint);
         } else if (!selectionRect.isEmpty()) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(28, 8, 122, 115));
+            paint.setColor(withAlpha(AppThemePalette.secondary(), 28));
             paint.setPathEffect(null);
             canvas.drawRect(sx(selectionRect.left), sy(selectionRect.top), sx(selectionRect.right), sy(selectionRect.bottom), paint);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(2.6f);
-            paint.setColor(Color.rgb(8, 122, 115));
+            paint.setColor(AppThemePalette.secondary());
             paint.setPathEffect(new DashPathEffect(new float[] {12f, 8f}, 0f));
             canvas.drawRect(sx(selectionRect.left), sy(selectionRect.top), sx(selectionRect.right), sy(selectionRect.bottom), paint);
         }
@@ -1819,8 +1808,8 @@ final class TreeCanvasView extends View {
             PointF start = dragStartPositions.get(id);
             Person person = state.people.get(id);
             if (start == null || person == null || person.pinned) continue;
-            person.x = clamp(start.x + dx, 0f, workspaceWidth - cardWidthWorld());
-            person.y = clamp(start.y + dy, 0f, workspaceHeight - cardHeightWorld());
+            person.x = start.x + dx;
+            person.y = start.y + dy;
         }
     }
 
@@ -1867,7 +1856,22 @@ final class TreeCanvasView extends View {
     private boolean matches(Person person) {
         if (!branchAllows(person.id)) return false;
         if (filter.isEmpty()) return true;
-        return cardMeta(person).search.contains(filter);
+        if (smartFilter != null && smartFilter.active) {
+            if (!smartFilter.kinshipFirstId.isEmpty() && !smartFilter.kinshipSecondId.isEmpty()) {
+                return person.id.equals(smartFilter.kinshipFirstId) || person.id.equals(smartFilter.kinshipSecondId);
+            }
+            return SmartPeopleSearch.matches(state, smartFilter, person, this::hasSearchPhoto, smartFilterNow);
+        }
+        return cardMeta(person).search.contains(filter.toLowerCase(Locale.ROOT));
+    }
+
+    private boolean hasSearchPhoto(Person person) {
+        if (person == null) return false;
+        if (person.photo != null && !person.photo.trim().isEmpty()) return true;
+        return person.photoMediaId != null
+            && !person.photoMediaId.trim().isEmpty()
+            && mediaStore != null
+            && mediaStore.exists(person.photoMediaId);
     }
 
     private boolean branchAllows(String id) {
@@ -2012,17 +2016,29 @@ final class TreeCanvasView extends View {
     }
 
     private float snapPersonX(float value) {
-        return clamp(
-            TreeLayoutEngine.snap(value),
-            0f,
-            workspaceWidth - cardWidthWorld());
+        return TreeLayoutEngine.snap(value);
     }
 
     private float snapPersonY(float value) {
-        return clamp(
-            TreeLayoutEngine.snap(value),
-            0f,
-            workspaceHeight - cardHeightWorld());
+        return TreeLayoutEngine.snap(value);
+    }
+
+    private int cardNeonStroke(int color, int alpha) {
+        int mixed = blend(color, Color.WHITE, AppThemePalette.isDark() ? 0.18f : 0.06f);
+        int cappedAlpha = AppThemePalette.isDark()
+            ? Math.min(alpha, 214)
+            : Math.min(alpha, 178);
+        return withAlpha(mixed, cappedAlpha);
+    }
+
+    private Shader cardFillGradient(float left, float top, float right, float bottom, int color) {
+        int topColor = color;
+        int bottomColor = blend(color, Color.BLACK, AppThemePalette.isDark() ? 0.18f : 0.12f);
+        return new LinearGradient(left, top, right, bottom, topColor, bottomColor, Shader.TileMode.CLAMP);
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color));
     }
 
     private static int blend(int a, int b, float amount) {

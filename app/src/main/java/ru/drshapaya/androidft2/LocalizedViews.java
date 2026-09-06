@@ -2,6 +2,7 @@ package ru.drshapaya.androidft2;
 
 import android.content.Context;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -16,6 +17,15 @@ final class LocalizedViews {
         } else {
             view.setText(text);
         }
+    }
+
+    static float scaledTextSize(Context context, float size) {
+        float scale = context == null
+            ? 1f
+            : MainActivity.normalizeFontScale(context
+                .getSharedPreferences("androidft-ui", Context.MODE_PRIVATE)
+                .getFloat("font_scale", 1f));
+        return size * scale;
     }
 }
 
@@ -34,6 +44,14 @@ final class LocalizedTextView extends TextView {
 
     @Override public void setTextColor(int color) {
         super.setTextColor(AppThemePalette.text(color));
+    }
+
+    @Override public void setTextSize(float size) {
+        super.setTextSize(TypedValue.COMPLEX_UNIT_SP, LocalizedViews.scaledTextSize(getContext(), size));
+    }
+
+    @Override public void setTextSize(int unit, float size) {
+        super.setTextSize(unit, LocalizedViews.scaledTextSize(getContext(), size));
     }
 
     void setRawText(CharSequence text) {
@@ -57,6 +75,14 @@ final class LocalizedButton extends Button {
     @Override public void setTextColor(int color) {
         super.setTextColor(AppThemePalette.text(color));
     }
+
+    @Override public void setTextSize(float size) {
+        super.setTextSize(TypedValue.COMPLEX_UNIT_SP, LocalizedViews.scaledTextSize(getContext(), size));
+    }
+
+    @Override public void setTextSize(int unit, float size) {
+        super.setTextSize(unit, LocalizedViews.scaledTextSize(getContext(), size));
+    }
 }
 
 final class LocalizedCheckBox extends CheckBox {
@@ -75,6 +101,14 @@ final class LocalizedCheckBox extends CheckBox {
     @Override public void setTextColor(int color) {
         super.setTextColor(AppThemePalette.text(color));
     }
+
+    @Override public void setTextSize(float size) {
+        super.setTextSize(TypedValue.COMPLEX_UNIT_SP, LocalizedViews.scaledTextSize(getContext(), size));
+    }
+
+    @Override public void setTextSize(int unit, float size) {
+        super.setTextSize(unit, LocalizedViews.scaledTextSize(getContext(), size));
+    }
 }
 
 final class LocalizedEditText extends EditText {
@@ -90,4 +124,11 @@ final class LocalizedEditText extends EditText {
         super.setTextColor(AppThemePalette.text(color));
     }
 
+    @Override public void setTextSize(float size) {
+        super.setTextSize(TypedValue.COMPLEX_UNIT_SP, LocalizedViews.scaledTextSize(getContext(), size));
+    }
+
+    @Override public void setTextSize(int unit, float size) {
+        super.setTextSize(unit, LocalizedViews.scaledTextSize(getContext(), size));
+    }
 }

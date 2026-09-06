@@ -32,7 +32,11 @@ final class MainActivityPanels {
             activity.peoplePanel.setVisibility("people".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
             if ("people".equals(activity.activePanel) && activity.peopleModule != null) activity.peopleModule.refresh();
         }
-        if (activity.morePanel != null) activity.morePanel.setVisibility("more".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
+        if (activity.morePanel != null) {
+            boolean moreVisible = "more".equals(activity.activePanel);
+            activity.morePanel.setVisibility(moreVisible ? View.VISIBLE : View.GONE);
+            if (moreVisible) activity.morePanel.bringToFront();
+        }
         activity.styleNav(activity.treeNav, "view".equals(activity.activePanel)
             || "branch".equals(activity.activePanel)
             || "guides".equals(activity.activePanel));
@@ -47,6 +51,7 @@ final class MainActivityPanels {
         activity.updateBranchStatusPanel();
         activity.updateSelectionToolbar();
         activity.updateCanvasModePanel();
+        activity.updateDistantCardsWarning();
     }
 
     void togglePanel(String panel) {

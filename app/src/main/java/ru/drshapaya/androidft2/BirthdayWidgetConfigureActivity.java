@@ -605,8 +605,14 @@ public final class BirthdayWidgetConfigureActivity extends Activity {
             row.addView(check, new LinearLayout.LayoutParams(dp(48), dp(48)));
             LinearLayout labels = new LinearLayout(this);
             labels.setOrientation(LinearLayout.VERTICAL);
-            labels.addView(label(name, 16, false, PRIMARY));
-            labels.addView(label(personBirthSummary(person), 12, false, SECONDARY));
+            TextView nameView = label(name, 16, false, PRIMARY);
+            nameView.setSingleLine(false);
+            nameView.setMaxLines(2);
+            nameView.setLineSpacing(dp(1), 1f);
+            labels.addView(nameView, new LinearLayout.LayoutParams(-1, -2));
+            TextView dateView = label(personBirthSummary(person), 12, false, SECONDARY);
+            dateView.setSingleLine(true);
+            labels.addView(dateView, new LinearLayout.LayoutParams(-1, -2));
             row.addView(labels, new LinearLayout.LayoutParams(0, -2, 1));
             check.setOnCheckedChangeListener((button, checked) -> {
                 if (checked) selectedIds.add(person.id);
@@ -614,7 +620,8 @@ public final class BirthdayWidgetConfigureActivity extends Activity {
                 updatePersonFilterCount(count, selectedIds.size(), people.size());
             });
             row.setOnClickListener(v -> check.setChecked(!check.isChecked()));
-            list.addView(row, new LinearLayout.LayoutParams(-1, dp(54)));
+            row.setMinimumHeight(dp(58));
+            list.addView(row, new LinearLayout.LayoutParams(-1, -2));
             if (index + 1 < visiblePeople.size()) {
                 list.addView(divider(), new LinearLayout.LayoutParams(-1, dp(1)));
             }

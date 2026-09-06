@@ -71,6 +71,56 @@ public final class TreeQualityAnalyzerTest {
         assertTrue(report.completeness >= 90);
     }
 
+    @Test
+    public void duplicateNameAndBirthYearAreWarnings() {
+        TreeState state = new TreeState();
+        Person first = person("p1", "Иванов Иван", "1980");
+        Person second = person("p2", "Иванов Иван", "1980");
+        state.people.put(first.id, first);
+        state.people.put(second.id, second);
+        state.rootId = first.id;
+
+        TreeQualityAnalyzer.PersonReport report = TreeQualityAnalyzer.analyze(state).person(second.id);
+
+        assertTrue(report.warnings() > 0);
+        assertEquals(1, report.countCategory(TreeQualityAnalyzer.CATEGORY_DUPLICATES));
+    }
+
+    @Test
+    public void disconnectedRelatedBranchIsStructureWarning() {
+        TreeState state = new TreeState();
+        Person root = person("root", "Иванов Иван", "1980");
+        Person otherParent = person("otherParent", "Петров Пётр", "1960");
+        Person otherChild = person("otherChild", "Петров Павел", "1990");
+        state.people.put(root.id, root);
+        state.people.put(otherParent.id, otherParent);
+        state.people.put(otherChild.id, otherChild);
+        state.rootId = root.id;
+        state.links.add(new Relation("r1", "parent", otherParent.id, otherChild.id));
+
+        TreeQualityAnalyzer.PersonReport report = TreeQualityAnalyzer.analyze(state).person(otherParent.id);
+
+        assertTrue(report.warnings() > 0);
+        assertEquals(1, report.countCategory(TreeQualityAnalyzer.CATEGORY_STRUCTURE));
+    }
+
+    @Test
+    public void emptyMemoryAttachmentIsWarning() {
+        TreeState state = new TreeState();
+        Person person = person("p1", "Иванов Иван", "1980");
+        Memory memory = new Memory();
+        memory.title = "Документ";
+        memory.attachments.add(new MemoryAttachment());
+        person.memories.add(memory);
+        state.people.put(person.id, person);
+        state.rootId = person.id;
+
+        TreeQualityAnalyzer.PersonReport report = TreeQualityAnalyzer.analyze(state).person(person.id);
+
+        assertTrue(report.warnings() > 0);
+        assertEquals(1, report.countCategory(TreeQualityAnalyzer.CATEGORY_MEMORY));
+    }
+
     private static Person person(String id, String name, String bornYear) {
         Person person = new Person(id);
         person.name = name;

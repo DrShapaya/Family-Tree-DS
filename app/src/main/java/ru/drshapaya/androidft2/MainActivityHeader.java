@@ -63,28 +63,6 @@ final class MainActivityHeader {
         activity.stats.setIncludeFontPadding(false);
         texts.addView(activity.stats);
 
-        activity.badge = new LocalizedTextView(activity);
-        activity.badge.setText(MainActivity.VERSION_BADGE);
-        activity.badge.setTextColor(Color.rgb(8, 122, 115));
-        activity.badge.setTextSize(12);
-        activity.badge.setTypeface(activity.uiBold());
-        activity.badge.setIncludeFontPadding(false);
-        activity.badge.setPadding(activity.dp(8), activity.dp(3), activity.dp(8), activity.dp(3));
-        activity.badge.setBackground(activity.panelBg(Color.argb(120, 255, 255, 255), activity.dp(999), Color.argb(60, 24, 169, 153)));
-        final int[] versionTaps = {0};
-        final long[] lastVersionTap = {0L};
-        activity.badge.setOnClickListener(view -> {
-            long now = android.os.SystemClock.elapsedRealtime();
-            if (now - lastVersionTap[0] > 1800L) versionTaps[0] = 0;
-            lastVersionTap[0] = now;
-            versionTaps[0]++;
-            if (versionTaps[0] >= 5) {
-                versionTaps[0] = 0;
-                activity.openOnlineMenu();
-            }
-        });
-        texts.addView(activity.badge, new LinearLayout.LayoutParams(-2, -2));
-
         activity.treeQualityButton = activity.actionButton("Оценка дерева", v -> activity.showTreeQualityDialog());
         activity.treeQualityButton.setTextSize(9);
         activity.treeQualityButton.setSingleLine(false);
@@ -96,11 +74,9 @@ final class MainActivityHeader {
             0,
             0);
         activity.treeQualityButton.setCompoundDrawablePadding(activity.dp(2));
-        activity.tintDrawables(activity.treeQualityButton, Color.rgb(8, 122, 115));
-        activity.treeQualityButton.setBackground(activity.panelBg(
-            Color.rgb(232, 248, 246),
-            activity.dp(10),
-            Color.argb(92, 24, 169, 153)));
+        activity.treeQualityButton.setTextColor(AppThemePalette.secondary());
+        activity.tintDrawables(activity.treeQualityButton, AppThemePalette.secondary());
+        activity.treeQualityButton.setBackground(activity.softAccentGradientBg(activity.dp(10)));
         LinearLayout.LayoutParams qualityParams = new LinearLayout.LayoutParams(activity.dp(112), activity.dp(56));
         qualityParams.setMargins(activity.dp(8), 0, 0, 0);
         brand.addView(activity.treeQualityButton, qualityParams);

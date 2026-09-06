@@ -253,6 +253,8 @@ final class TreeDeltaCommand implements TreeCommand {
         final String selectedId;
         final String theme;
         final int printScale;
+        final float uiScale;
+        final float fontScale;
         final boolean editLocked;
         final boolean historyHidden;
         final boolean inspectorHidden;
@@ -265,8 +267,6 @@ final class TreeDeltaCommand implements TreeCommand {
         final boolean compactCards;
         final boolean focusTree;
         final boolean autoArrangeOnAdd;
-        final boolean workspaceBoundsVisible;
-        final String workspaceBoundsStyle;
         final int workspaceWidth;
         final int workspaceHeight;
         final String parentLineMode;
@@ -276,6 +276,8 @@ final class TreeDeltaCommand implements TreeCommand {
             selectedId = state.selectedId;
             theme = state.theme;
             printScale = state.printScale;
+            uiScale = state.uiScale;
+            fontScale = state.fontScale;
             editLocked = state.editLocked;
             historyHidden = state.historyHidden;
             inspectorHidden = state.inspectorHidden;
@@ -288,8 +290,6 @@ final class TreeDeltaCommand implements TreeCommand {
             compactCards = state.compactCards;
             focusTree = state.focusTree;
             autoArrangeOnAdd = state.autoArrangeOnAdd;
-            workspaceBoundsVisible = state.workspaceBoundsVisible;
-            workspaceBoundsStyle = state.workspaceBoundsStyle;
             workspaceWidth = state.workspaceWidth;
             workspaceHeight = state.workspaceHeight;
             parentLineMode = state.parentLineMode;
@@ -301,6 +301,8 @@ final class TreeDeltaCommand implements TreeCommand {
                 && Objects.equals(selectedId, other.selectedId)
                 && Objects.equals(theme, other.theme)
                 && printScale == other.printScale
+                && Float.compare(uiScale, other.uiScale) == 0
+                && Float.compare(fontScale, other.fontScale) == 0
                 && editLocked == other.editLocked
                 && historyHidden == other.historyHidden
                 && inspectorHidden == other.inspectorHidden
@@ -313,8 +315,6 @@ final class TreeDeltaCommand implements TreeCommand {
                 && compactCards == other.compactCards
                 && focusTree == other.focusTree
                 && autoArrangeOnAdd == other.autoArrangeOnAdd
-                && workspaceBoundsVisible == other.workspaceBoundsVisible
-                && Objects.equals(workspaceBoundsStyle, other.workspaceBoundsStyle)
                 && workspaceWidth == other.workspaceWidth
                 && workspaceHeight == other.workspaceHeight
                 && Objects.equals(parentLineMode, other.parentLineMode);
@@ -325,6 +325,8 @@ final class TreeDeltaCommand implements TreeCommand {
             state.selectedId = selectedId;
             state.theme = theme;
             state.printScale = printScale;
+            state.uiScale = uiScale;
+            state.fontScale = fontScale;
             state.editLocked = editLocked;
             state.historyHidden = historyHidden;
             state.inspectorHidden = inspectorHidden;
@@ -337,8 +339,6 @@ final class TreeDeltaCommand implements TreeCommand {
             state.compactCards = compactCards;
             state.focusTree = focusTree;
             state.autoArrangeOnAdd = autoArrangeOnAdd;
-            state.workspaceBoundsVisible = workspaceBoundsVisible;
-            state.workspaceBoundsStyle = workspaceBoundsStyle;
             state.workspaceWidth = workspaceWidth;
             state.workspaceHeight = workspaceHeight;
             state.parentLineMode = parentLineMode;

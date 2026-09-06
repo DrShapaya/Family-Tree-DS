@@ -48,7 +48,7 @@ final class OnlineInviteKey {
     static Parsed parse(String source) {
         String normalized = source == null ? "" : source.trim().replaceAll("\\s+", "");
         if (!normalized.startsWith(KEY_PREFIX + "-")) {
-            throw new IllegalArgumentException("Это не ключ AndroidFT");
+            throw new IllegalArgumentException("Это не ключ Family Tree DS");
         }
         String body = normalized.substring((KEY_PREFIX + "-").length());
         int separator = body.indexOf('-');

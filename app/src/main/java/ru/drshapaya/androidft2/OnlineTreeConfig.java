@@ -61,9 +61,11 @@ final class OnlineTreeConfig {
     String gistId() { return preferences.getString("gistId", ""); }
     String lastSha() { return preferences.getString("lastSha", ""); }
     String lastEtag() { return preferences.getString("lastEtag", ""); }
+    String lastBackupHash() { return preferences.getString("lastBackupHash", ""); }
     boolean isOwner() { return preferences.getBoolean("isOwner", false); }
     boolean canEdit() { return preferences.getBoolean("canEdit", true); }
     long lastSyncAt() { return preferences.getLong("lastSyncAt", 0L); }
+    long lastBackupAt() { return preferences.getLong("lastBackupAt", 0L); }
     boolean localEditPending() { return preferences.getBoolean("localEditPending", false); }
     Set<String> remoteMediaIds() {
         Set<String> value = preferences.getStringSet("remoteMediaIds", Collections.emptySet());
@@ -123,6 +125,12 @@ final class OnlineTreeConfig {
         );
     }
 
+    void setLastBackup(String stateHash, long createdAt) {
+        requireCommit(preferences.edit()
+            .putString("lastBackupHash", safe(stateHash))
+            .putLong("lastBackupAt", Math.max(0L, createdAt)));
+    }
+
     void markRemoteMedia(String mediaId) {
         if (mediaId == null || mediaId.isEmpty()) return;
         Set<String> ids = remoteMediaIds();
@@ -143,6 +151,8 @@ final class OnlineTreeConfig {
             .remove("canEdit")
             .remove("treeAccountId")
             .remove("lastSyncAt")
+            .remove("lastBackupAt")
+            .remove("lastBackupHash")
             .remove("remoteMediaIds")
             .remove("localEditPending"));
         secrets.remove(INVITE_SECRET);

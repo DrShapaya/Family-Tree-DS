@@ -48,6 +48,11 @@ final class TreeLayoutEngine {
     private TreeLayoutEngine() {
     }
 
+    interface RebuildProgress {
+        boolean isCancelled();
+        void onProgress(int current, int total, String detail);
+    }
+
     static int normalizeSurfaceWidth(int value) {
         return Math.max(MIN_SURFACE_W, Math.min(MAX_SURFACE_SIZE, value));
     }
@@ -108,9 +113,14 @@ final class TreeLayoutEngine {
      * coordinates and uses the same local rules as auto-arrange-on-add.
      */
     static void rebuildStepwise(TreeState state) {
-        if (state == null || state.people.isEmpty()) return;
+        rebuildStepwise(state, null);
+    }
+
+    static boolean rebuildStepwise(TreeState state, RebuildProgress progress) {
+        if (state == null || state.people.isEmpty()) return false;
 
         TreeState source = TreeStateCopier.copy(state);
+        int totalPeople = source.people.size();
         Relations finalRelations = buildRelations(source);
         Map<String, Integer> sourceOrder = new LinkedHashMap<>();
         int order = 0;
@@ -131,12 +141,23 @@ final class TreeLayoutEngine {
         working.rootId = rootId;
         working.selectedId = rootId;
         Person root = TreeStateCopier.copyPerson(source.people.get(rootId));
-        root.x = snap(surfaceWidth(working) / 2f - CARD_W / 2f);
-        root.y = snap(surfaceHeight(working) / 2f - CARD_H / 2f);
+        if (root.pinned && isValidPosition(root)) {
+            root.x = snap(root.x);
+            root.y = snap(root.y);
+        } else {
+            root.x = snap(surfaceWidth(working) / 2f - CARD_W / 2f);
+            root.y = snap(surfaceHeight(working) / 2f - CARD_H / 2f);
+        }
         working.people.put(root.id, root);
         syncAvailableRelations(source, working);
+        if (!reportRebuildProgress(progress, working.people.size(), totalPeople, "Размещаем основную карточку")) {
+            return false;
+        }
 
         while (working.people.size() < source.people.size()) {
+            if (!reportRebuildProgress(progress, working.people.size(), totalPeople, "Подбираем следующую семейную ветку")) {
+                return false;
+            }
             StepAction next = nextRebuildAction(
                 source,
                 working,
@@ -146,17 +167,31 @@ final class TreeLayoutEngine {
                 sourceOrder);
             if (next == null) {
                 String seedId = firstMissingPerson(source, working, sourceOrder);
-                if (seedId.isEmpty()) break;
-                Person seed = TreeStateCopier.copyPerson(source.people.get(seedId));
+            if (seedId.isEmpty()) break;
+            Person seed = TreeStateCopier.copyPerson(source.people.get(seedId));
+            if (seed.pinned && isValidPosition(seed)) {
+                seed.x = snap(seed.x);
+                seed.y = snap(seed.y);
+            } else {
                 seed.x = snap(maxRight(working) + BRANCH_GAP);
                 seed.y = root.y;
+            }
                 working.people.put(seed.id, seed);
                 syncAvailableRelations(source, working);
+                if (!reportRebuildProgress(progress, working.people.size(), totalPeople, "Размещаем отдельную ветку")) {
+                    return false;
+                }
                 continue;
             }
             addRebuildStep(source, working, next, sourceOrder);
+            if (!reportRebuildProgress(progress, working.people.size(), totalPeople, rebuildProgressDetail(next))) {
+                return false;
+            }
         }
 
+        if (!reportRebuildProgress(progress, totalPeople, totalPeople, "Уплотняем и проверяем раскладку")) {
+            return false;
+        }
         Person arrangedRoot = working.people.get(rootId);
         float rootTargetX = snap(surfaceWidth(working) / 2f - CARD_W / 2f);
         if (arrangedRoot != null) {
@@ -177,6 +212,110 @@ final class TreeLayoutEngine {
         }
         state.workspaceWidth = working.workspaceWidth;
         state.workspaceHeight = working.workspaceHeight;
+        reportRebuildProgress(progress, totalPeople, totalPeople, "Готово");
+        return true;
+    }
+
+    static boolean rebuildSelected(
+        TreeState state,
+        Collection<String> selectedIds,
+        String anchorId,
+        RebuildProgress progress
+    ) {
+        LinkedHashSet<String> ids = existingIds(state, selectedIds);
+        if (state == null || ids.size() < 2) return false;
+
+        String resolvedAnchorId = ids.contains(anchorId) ? anchorId : ids.iterator().next();
+        Person originalAnchor = state.people.get(resolvedAnchorId);
+        float originalAnchorX = originalAnchor == null ? 0f : originalAnchor.x;
+        float originalAnchorY = originalAnchor == null ? 0f : originalAnchor.y;
+
+        TreeState scoped = new TreeState();
+        TreeStateCopier.copyMetadata(state, scoped);
+        scoped.people.clear();
+        scoped.links.clear();
+        scoped.guides.clear();
+        scoped.rootId = resolvedAnchorId;
+        scoped.selectedId = scoped.rootId;
+        scoped.workspaceWidth = state.workspaceWidth;
+        scoped.workspaceHeight = state.workspaceHeight;
+        for (String id : ids) {
+            Person source = state.people.get(id);
+            if (source == null) continue;
+            Person copied = TreeStateCopier.copyPerson(source);
+            if (id.equals(scoped.rootId)) copied.pinned = true;
+            scoped.people.put(id, copied);
+        }
+        for (Relation relation : state.links) {
+            if (ids.contains(relation.from) && ids.contains(relation.to)) {
+                scoped.links.add(TreeStateCopier.copyRelation(relation));
+            }
+        }
+        if (scoped.people.size() < 2) return false;
+        boolean completed = rebuildStepwise(scoped, progress);
+        if (!completed) return false;
+
+        // A selected rebuild uses a canonical temporary surface. Put the rebuilt
+        // branch back on its original attachment point before checking it against
+        // the rest of the real tree; otherwise the branch jumps to canvas centre.
+        Person arrangedAnchor = scoped.people.get(resolvedAnchorId);
+        if (arrangedAnchor != null && originalAnchor != null) {
+            float dx = snap(originalAnchorX - arrangedAnchor.x);
+            float dy = snap(originalAnchorY - arrangedAnchor.y);
+            for (Person person : scoped.people.values()) {
+                person.x = snap(person.x + dx);
+                person.y = snap(person.y + dy);
+            }
+        }
+
+        LinkedHashSet<String> movableIds = new LinkedHashSet<>();
+        for (String id : ids) {
+            Person target = state.people.get(id);
+            Person arranged = scoped.people.get(id);
+            if (target == null || arranged == null || target.pinned) continue;
+            target.x = arranged.x;
+            target.y = arranged.y;
+            movableIds.add(id);
+        }
+        // Non-selected cards remain fixed obstacles. If the rebuilt family block
+        // touches one of them, move the whole selected branch by the smallest grid
+        // offset instead of shifting individual relatives or leaving an overlap.
+        avoidStationaryCollisions(state, movableIds);
+        expandWorkspaceToFit(state);
+        return true;
+    }
+
+    private static LinkedHashSet<String> existingIds(
+        TreeState state,
+        Collection<String> selectedIds
+    ) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (state == null || selectedIds == null) return result;
+        for (String id : selectedIds) {
+            if (state.people.containsKey(id)) result.add(id);
+        }
+        return result;
+    }
+
+    private static boolean reportRebuildProgress(
+        RebuildProgress progress,
+        int current,
+        int total,
+        String detail
+    ) {
+        if (progress == null) return true;
+        if (progress.isCancelled()) return false;
+        progress.onProgress(Math.max(0, current), Math.max(1, total), detail == null ? "" : detail);
+        return !progress.isCancelled();
+    }
+
+    private static String rebuildProgressDetail(StepAction action) {
+        if (action == null) return "Размещаем семейную ветку";
+        if ("parents".equals(action.action)) return "Размещаем родителей";
+        if ("children".equals(action.action)) return "Размещаем детей";
+        if ("siblings".equals(action.action)) return "Размещаем братьев и сестёр";
+        if ("partner".equals(action.action)) return "Размещаем партнёра";
+        return "Размещаем семейную ветку";
     }
 
     private static void addRebuildStep(
@@ -196,8 +335,13 @@ final class TreeLayoutEngine {
             Person original = source.people.get(id);
             if (original == null || working.people.containsKey(id)) continue;
             Person person = TreeStateCopier.copyPerson(original);
-            person.x = snap(baseX + index * (CARD_W + GRID));
-            person.y = snap(baseY);
+            if (person.pinned && isValidPosition(person)) {
+                person.x = snap(person.x);
+                person.y = snap(person.y);
+            } else {
+                person.x = snap(baseX + index * (CARD_W + GRID));
+                person.y = snap(baseY);
+            }
             working.people.put(id, person);
             added.add(id);
         }
@@ -626,7 +770,7 @@ final class TreeLayoutEngine {
         }
         for (Map.Entry<String, Float> repair : repairedRows.entrySet()) {
             Person person = state.people.get(repair.getKey());
-            if (person != null) person.y = repair.getValue();
+            if (person != null && !person.pinned) person.y = repair.getValue();
         }
     }
 
@@ -696,7 +840,7 @@ final class TreeLayoutEngine {
         targetY = Math.max(0f, snap(targetY));
         for (String id : addedIds) {
             Person person = state.people.get(id);
-            if (person != null) person.y = targetY;
+            if (person != null && !person.pinned) person.y = targetY;
         }
     }
 
@@ -2079,7 +2223,7 @@ final class TreeLayoutEngine {
         float snapped = snap(delta);
         for (String id : ids) {
             Person person = state.people.get(id);
-            if (person != null) person.x += snapped;
+            if (person != null && !person.pinned) person.x += snapped;
         }
     }
 
@@ -2090,7 +2234,9 @@ final class TreeLayoutEngine {
         }
         if (!Float.isFinite(minX) || minX >= 0f) return;
         float delta = snap(-minX);
-        for (Person person : state.people.values()) person.x += delta;
+        for (Person person : state.people.values()) {
+            if (!person.pinned) person.x += delta;
+        }
     }
 
     private static void expandWorkspaceToFit(TreeState state) {

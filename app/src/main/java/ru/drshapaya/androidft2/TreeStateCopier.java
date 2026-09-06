@@ -129,6 +129,8 @@ final class TreeStateCopier {
         target.selectedId = source.selectedId;
         target.theme = source.theme;
         target.printScale = source.printScale;
+        target.uiScale = source.uiScale;
+        target.fontScale = source.fontScale;
         target.editLocked = source.editLocked;
         target.historyHidden = source.historyHidden;
         target.inspectorHidden = source.inspectorHidden;
@@ -141,8 +143,6 @@ final class TreeStateCopier {
         target.compactCards = source.compactCards;
         target.focusTree = source.focusTree;
         target.autoArrangeOnAdd = source.autoArrangeOnAdd;
-        target.workspaceBoundsVisible = source.workspaceBoundsVisible;
-        target.workspaceBoundsStyle = source.workspaceBoundsStyle;
         target.workspaceWidth = source.workspaceWidth;
         target.workspaceHeight = source.workspaceHeight;
         target.parentLineMode = source.parentLineMode;

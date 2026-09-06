@@ -776,6 +776,8 @@ final class TreeStore {
         if (settings == null) return;
         state.theme = normalizeTheme(settings.optString("theme", state.theme));
         state.printScale = Math.max(55, Math.min(130, settings.optInt("printScale", state.printScale)));
+        state.uiScale = safeScale((float) settings.optDouble("uiScale", state.uiScale), 0.9f, 1.2f);
+        state.fontScale = safeScale((float) settings.optDouble("fontScale", state.fontScale), 0.92f, 1.1f);
         state.editLocked = settings.optBoolean("editLocked", state.editLocked);
         state.historyHidden = settings.optBoolean("historyHidden", state.historyHidden);
         state.inspectorHidden = settings.optBoolean("inspectorHidden", state.inspectorHidden);
@@ -788,12 +790,6 @@ final class TreeStore {
         state.compactCards = settings.optBoolean("compactCards", state.compactCards);
         state.focusTree = settings.optBoolean("focusTree", state.focusTree);
         state.autoArrangeOnAdd = settings.optBoolean("autoArrangeOnAdd", state.autoArrangeOnAdd);
-        state.workspaceBoundsVisible = !settings.has("workspaceBoundsVisible")
-            || settings.optBoolean("workspaceBoundsVisible", true);
-        String boundsStyle = settings.optString("workspaceBoundsStyle", state.workspaceBoundsStyle);
-        state.workspaceBoundsStyle = "contrast".equals(boundsStyle) || "outline".equals(boundsStyle)
-            ? boundsStyle
-            : "soft";
         state.workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(
             settings.optInt("workspaceWidth", state.workspaceWidth));
         state.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(
@@ -805,6 +801,8 @@ final class TreeStore {
         return new JSONObject()
             .put("theme", normalizeTheme(state.theme))
             .put("printScale", Math.max(55, Math.min(130, state.printScale)))
+            .put("uiScale", safeScale(state.uiScale, 0.9f, 1.2f))
+            .put("fontScale", safeScale(state.fontScale, 0.92f, 1.1f))
             .put("editLocked", state.editLocked)
             .put("historyHidden", state.historyHidden)
             .put("inspectorHidden", state.inspectorHidden)
@@ -817,8 +815,6 @@ final class TreeStore {
             .put("compactCards", state.compactCards)
             .put("focusTree", state.focusTree)
             .put("autoArrangeOnAdd", state.autoArrangeOnAdd)
-            .put("workspaceBoundsVisible", state.workspaceBoundsVisible)
-            .put("workspaceBoundsStyle", state.workspaceBoundsStyle)
             .put("workspaceWidth", TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth))
             .put("workspaceHeight", TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight))
             .put("parentLineMode", "orthogonal".equals(state.parentLineMode) ? "orthogonal" : "smart");
@@ -1057,6 +1053,11 @@ final class TreeStore {
     private static String normalizeColorMode(String mode) {
         if ("manual".equals(mode) || "auto-surname".equals(mode)) return mode;
         return "auto-name";
+    }
+
+    private static float safeScale(float value, float min, float max) {
+        if (!Float.isFinite(value)) return 1f;
+        return Math.max(min, Math.min(max, value));
     }
 
     private static String normalizeMemoryType(String type) {

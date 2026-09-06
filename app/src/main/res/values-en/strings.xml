@@ -1,10 +1,11 @@
 <resources>
-    <string name="app_name">FamilyTree</string>
+    <string name="app_name">Family Tree DS</string>
     <string name="birthday_widget_description">The next relative’s birthday</string>
     <string name="birthday_widget_preview_person_name">Name</string>
-    <string name="birthday_widget_preview_subtitle">In 7 days</string>
+    <string name="birthday_widget_preview_subtitle">7 days</string>
     <string name="birthday_widget_preview_name">Next birthday</string>
     <string name="birthday_widget_preview_date">21 August</string>
+    <string name="birthday_widget_preview_date_age">21 August, age 36</string>
     <string name="birthday_widget_preview_number">7</string>
     <string name="birthday_widget_preview_days">days</string>
     <string name="birthday_widget_photo_description">Relative photo</string>

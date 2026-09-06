@@ -19,6 +19,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 
@@ -102,6 +103,20 @@ final class GitHubApi {
         }
     }
 
+    static final class ContentItem {
+        final String path;
+        final String sha;
+        final String type;
+        final long size;
+
+        ContentItem(String path, String sha, String type, long size) {
+            this.path = path == null ? "" : path;
+            this.sha = sha == null ? "" : sha;
+            this.type = type == null ? "" : type;
+            this.size = Math.max(0L, size);
+        }
+    }
+
     JSONObject requestDeviceCode(String clientId) throws Exception {
         return form(
             OAUTH + "/device/code",
@@ -154,7 +169,7 @@ final class GitHubApi {
     JSONObject createPrivateRepository(String token, String name) throws Exception {
         JSONObject body = new JSONObject()
             .put("name", name)
-            .put("description", "Приватное онлайн-дерево AndroidFT")
+            .put("description", "Приватное онлайн-дерево Family Tree DS")
             .put("private", true)
             .put("auto_init", true)
             .put("has_issues", false)
@@ -168,9 +183,9 @@ final class GitHubApi {
             .put("protocol", 1)
             .put("type", "androidft-invitation-channel")
             .put("treeIdHash", OnlineInviteKey.shortHash(treeId))
-            .put("notice", "Служебный канал AndroidFT. Данные дерева здесь не хранятся.");
+            .put("notice", "Служебный канал Family Tree DS. Данные дерева здесь не хранятся.");
         JSONObject body = new JSONObject()
-            .put("description", "AndroidFT invitation channel")
+            .put("description", "Family Tree DS invitation channel")
             .put("public", false)
             .put("files", new JSONObject().put(
                 "androidft-invite.json",
@@ -313,6 +328,47 @@ final class GitHubApi {
         return decodeFileContent(token, url, response, raw.etag);
     }
 
+    String getBlobText(String token, String owner, String repo, String sha) throws Exception {
+        JSONObject response = json(
+            "GET",
+            API + "/repos/" + segment(owner) + "/" + segment(repo)
+                + "/git/blobs/" + segment(sha),
+            token,
+            null);
+        String encoding = response.optString("encoding", "");
+        String content = response.optString("content", "");
+        if ("base64".equalsIgnoreCase(encoding)) {
+            byte[] decoded = Base64.decode(content.replaceAll("\\s+", ""), Base64.DEFAULT);
+            return new String(decoded, StandardCharsets.UTF_8);
+        }
+        return content;
+    }
+
+    List<ContentItem> listDirectory(
+        String token,
+        String owner,
+        String repo,
+        String directory
+    ) throws Exception {
+        JSONArray items = jsonArray(
+            "GET",
+            API + "/repos/" + segment(owner) + "/" + segment(repo)
+                + "/contents/" + path(directory),
+            token,
+            null);
+        java.util.ArrayList<ContentItem> result = new java.util.ArrayList<>();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            result.add(new ContentItem(
+                item.optString("path", ""),
+                item.optString("sha", ""),
+                item.optString("type", ""),
+                item.optLong("size", 0L)));
+        }
+        return result;
+    }
+
     FileContent getFileIfChanged(
         String token,
         String owner,
@@ -366,7 +422,7 @@ final class GitHubApi {
             (text == null ? "" : text).getBytes(StandardCharsets.UTF_8),
             Base64.NO_WRAP);
         JSONObject body = new JSONObject()
-            .put("message", message == null || message.isEmpty() ? "Синхронизация AndroidFT" : message)
+            .put("message", message == null || message.isEmpty() ? "Синхронизация Family Tree DS" : message)
             .put("content", encoded);
         if (sha != null && !sha.isEmpty()) body.put("sha", sha);
         JSONObject response = json(
@@ -377,6 +433,25 @@ final class GitHubApi {
             body);
         JSONObject content = response.optJSONObject("content");
         return new FileContent(text, content == null ? "" : content.optString("sha", ""));
+    }
+
+    void deleteFile(
+        String token,
+        String owner,
+        String repo,
+        String path,
+        String sha,
+        String message
+    ) throws Exception {
+        JSONObject body = new JSONObject()
+            .put("message", message == null || message.isEmpty() ? "Удаление файла Family Tree DS" : message)
+            .put("sha", sha == null ? "" : sha);
+        request(
+            "DELETE",
+            API + "/repos/" + segment(owner) + "/" + segment(repo)
+                + "/contents/" + path(path),
+            token,
+            body);
     }
 
     BinaryContent getBinaryFile(
@@ -426,7 +501,7 @@ final class GitHubApi {
             bytes == null ? new byte[0] : bytes,
             Base64.NO_WRAP);
         JSONObject body = new JSONObject()
-            .put("message", message == null || message.isEmpty() ? "Медиа AndroidFT" : message)
+            .put("message", message == null || message.isEmpty() ? "Медиа Family Tree DS" : message)
             .put("content", encoded);
         JSONObject response = json(
             "PUT",
@@ -462,10 +537,10 @@ final class GitHubApi {
     ) throws Exception {
         JSONObject body = new JSONObject()
             .put("tag_name", tag)
-            .put("name", "AndroidFT · хранилище медиа")
+            .put("name", "Family Tree DS · хранилище медиа")
             .put(
                 "body",
-                "Служебное хранилище фото и вложений онлайн-дерева AndroidFT. "
+                "Служебное хранилище фото и вложений онлайн-дерева Family Tree DS. "
                     + "Не удаляйте и не переименовывайте файлы вручную.")
             .put("draft", false)
             .put("prerelease", true)

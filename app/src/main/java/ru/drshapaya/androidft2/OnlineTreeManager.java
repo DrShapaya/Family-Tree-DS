@@ -24,6 +24,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -111,9 +112,54 @@ final class OnlineTreeManager {
         }
     }
 
+    static final class BackupInfo {
+        final String path;
+        final String sha;
+        final long createdAt;
+        final long revision;
+        final int similarity;
+        final String currentHash;
+        final String mainSha;
+        final int addedItems;
+        final int removedItems;
+        final int changedItems;
+        final int mediaAdded;
+        final int mediaRemoved;
+
+        BackupInfo(
+            String path,
+            String sha,
+            long createdAt,
+            long revision,
+            int similarity,
+            String currentHash,
+            String mainSha,
+            int addedItems,
+            int removedItems,
+            int changedItems,
+            int mediaAdded,
+            int mediaRemoved
+        ) {
+            this.path = path == null ? "" : path;
+            this.sha = sha == null ? "" : sha;
+            this.createdAt = Math.max(0L, createdAt);
+            this.revision = Math.max(1L, revision);
+            this.similarity = Math.max(0, Math.min(100, similarity));
+            this.currentHash = currentHash == null ? "" : currentHash;
+            this.mainSha = mainSha == null ? "" : mainSha;
+            this.addedItems = Math.max(0, addedItems);
+            this.removedItems = Math.max(0, removedItems);
+            this.changedItems = Math.max(0, changedItems);
+            this.mediaAdded = Math.max(0, mediaAdded);
+            this.mediaRemoved = Math.max(0, mediaRemoved);
+        }
+    }
+
     private static final String TREE_PATH = "androidft/tree.json";
+    private static final String BACKUP_PATH_PREFIX = "androidft/backups";
     private static final long FOREGROUND_INTERVAL = 25_000L;
     private static final long PUSH_DEBOUNCE = 1_800L;
+    private static final long BACKUP_RETENTION_MS = 30L * 24L * 3600L * 1000L;
     private static final long JOIN_TIMEOUT = 150_000L;
     private static final long AUTH_NETWORK_RECOVERY_TIMEOUT = 120_000L;
     private static final long INVITATION_WINDOW = 7L * 24L * 3600L * 1000L;
@@ -566,7 +612,7 @@ final class OnlineTreeManager {
                     TREE_PATH,
                     document,
                     "",
-                    "Создано онлайн-дерево AndroidFT");
+                    "Создано онлайн-дерево Family Tree DS");
                 if (!sessionActive(generation)) return;
                 JSONObject gist = api.createInvitationGist(operationToken, treeId);
                 createdGistId = gist.optString("id", "");
@@ -584,6 +630,9 @@ final class OnlineTreeManager {
                     secret,
                     true,
                     uploaded.sha);
+                config.setLastBackup(
+                    OnlineTreeBackup.hashState(stateJson),
+                    System.currentTimeMillis());
                 config.clearPending();
                 dirty = false;
                 localChangePending = false;
@@ -720,6 +769,9 @@ final class OnlineTreeManager {
                     available.ownerAccount,
                     remote.sha);
                 config.setCanEdit(available.canEdit);
+                config.setLastBackup(
+                    OnlineTreeBackup.hashState(canonicalState),
+                    System.currentTimeMillis());
                 post(() -> listener.onEditingPermissionChanged(available.canEdit));
                 config.setLastRemote(remote.sha, remote.etag);
                 config.clearPending();
@@ -873,7 +925,7 @@ final class OnlineTreeManager {
                     Thread.sleep(4_000L);
                 }
                 throw new IllegalStateException(
-                    "Запрос отправлен. Глава должен открыть AndroidFT; затем повторите подключение.");
+                    "Запрос отправлен. Глава должен открыть Family Tree DS; затем повторите подключение.");
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             } catch (Exception error) {
@@ -906,6 +958,101 @@ final class OnlineTreeManager {
                 }
                 if (!sessionActive(generation)) return;
                 refreshStatus();
+                post(() -> callback.onSuccess(null));
+            } catch (Exception error) {
+                if (!sessionActive(generation)) return;
+                String message = friendlyError(error);
+                setError(error);
+                post(() -> callback.onError(message));
+            }
+        });
+    }
+
+    void listBackups(Callback<List<BackupInfo>> callback) {
+        if (!config.connected()) {
+            callback.onError("Онлайн-дерево не подключено");
+            return;
+        }
+        setStatus("Ищем резервные копии…");
+        long generation = sessionGeneration.get();
+        worker.execute(() -> {
+            try {
+                if (!sessionActive(generation)) return;
+                ensureIdentityVerified();
+                List<BackupInfo> backups = loadOnlineBackups(true);
+                if (!sessionActive(generation)) return;
+                refreshStatus();
+                post(() -> callback.onSuccess(backups));
+            } catch (Exception error) {
+                if (!sessionActive(generation)) return;
+                String message = friendlyError(error);
+                setError(error);
+                post(() -> callback.onError(message));
+            }
+        });
+    }
+
+    void restoreBackup(BackupInfo backup, Callback<Void> callback) {
+        if (!config.connected() || !canEdit()) {
+            callback.onError("Для восстановления нужны права на редактирование");
+            return;
+        }
+        if (backup == null || backup.mainSha.isEmpty()) {
+            callback.onError("Резервная копия повреждена");
+            return;
+        }
+        setStatus("Загружаем резервную копию…");
+        long generation = sessionGeneration.get();
+        worker.execute(() -> {
+            try {
+                if (!sessionActive(generation)) return;
+                ensureIdentityVerified();
+                GitHubApi.FileContent current = api.getFile(
+                    config.token(),
+                    config.owner(),
+                    config.repo(),
+                    TREE_PATH);
+                String documentText = api.getBlobText(
+                    config.token(),
+                    config.owner(),
+                    config.repo(),
+                    backup.mainSha);
+                JSONObject document = new JSONObject(documentText);
+                validateOnlineDocument(document, config.treeId());
+                JSONObject stateJson = document.optJSONObject("state");
+                if (stateJson == null) throw new IllegalStateException("Резервная копия повреждена");
+                TreeState restored = store.parse(stateJson.toString());
+                String restoredState = stateJson.toString();
+                syncMediaDown(restored, config.owner(), config.repo(), config.treeId());
+                String restoredDocument = onlineDocument(
+                    config.treeId(),
+                    restoredState,
+                    config.login(),
+                    Math.max(backup.revision, new JSONObject(current.text).optLong("revision", 0L)) + 1L);
+                GitHubApi.FileContent uploaded = api.putFile(
+                    config.token(),
+                    config.owner(),
+                    config.repo(),
+                    TREE_PATH,
+                    restoredDocument,
+                    current.sha,
+                    "Восстановлен онлайн-бэкап Family Tree DS");
+                if (!sessionActive(generation)) return;
+                config.writeBase(restoredState);
+                config.setLastRemote(uploaded.sha, uploaded.etag);
+                config.setLastBackup(
+                    OnlineTreeBackup.hashState(restoredState),
+                    System.currentTimeMillis());
+                config.clearPending();
+                config.setLocalEditPending(false);
+                pendingStateJson = "";
+                pendingMediaIds = new HashSet<>();
+                dirty = false;
+                localChangePending = false;
+                mediaAuditNeeded = true;
+                lastError = "";
+                refreshStatus();
+                deliverRemote(restored, "Онлайн-бэкап восстановлен");
                 post(() -> callback.onSuccess(null));
             } catch (Exception error) {
                 if (!sessionActive(generation)) return;
@@ -1346,6 +1493,7 @@ final class OnlineTreeManager {
             String remote = remoteObject.toString();
             String merged = local;
             String base = config.readBase();
+            long revision = remoteDocument.optLong("revision", 0L) + 1L;
             if (!base.isEmpty() && !sameJson(remote, base)) {
                 merged = OnlineTreeMerge.merge(
                     new JSONObject(base),
@@ -1356,7 +1504,7 @@ final class OnlineTreeManager {
                 config.treeId(),
                 merged,
                 config.login(),
-                remoteDocument.optLong("revision", 0L) + 1L);
+                revision);
             try {
                 GitHubApi.FileContent uploaded = api.putFile(
                     config.token(),
@@ -1365,8 +1513,9 @@ final class OnlineTreeManager {
                     TREE_PATH,
                     document,
                     remoteFile.sha,
-                    "Синхронизация AndroidFT");
+                    "Синхронизация Family Tree DS");
                 if (generation != sessionGeneration.get() || !config.connected()) return;
+                maybeStoreOnlineBackup(base, merged, revision, uploaded.sha);
                 config.writeBase(merged);
                 config.setLastRemote(uploaded.sha, uploaded.etag);
                 config.clearPending();
@@ -1385,6 +1534,188 @@ final class OnlineTreeManager {
                 if (conflict.status != 409 || attempt >= 3) throw conflict;
             }
         }
+    }
+
+    private void maybeStoreOnlineBackup(
+        String previousState,
+        String currentState,
+        long revision,
+        String mainSha
+    ) {
+        try {
+            JSONObject backup = OnlineTreeBackup.create(
+                config.treeId(),
+                previousState,
+                currentState,
+                revision,
+                mainSha,
+                config.login());
+            long now = System.currentTimeMillis();
+            if (!OnlineTreeBackup.shouldStore(
+                backup,
+                config.lastBackupAt(),
+                config.lastBackupHash(),
+                now)) {
+                return;
+            }
+            setStatus("Создаём резервную дельту…");
+            writeOnlineBackupWithRetry(backup, revision, now);
+            config.setLastBackup(backup.optString("currentHash", ""), now);
+            pruneOnlineBackups();
+        } catch (Exception error) {
+            DiagnosticsLogger.handled(context, "online-backup", error);
+        }
+    }
+
+    private void writeOnlineBackupWithRetry(JSONObject backup, long revision, long createdAt)
+        throws Exception {
+        Exception last = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                api.putFile(
+                    config.token(),
+                    config.owner(),
+                    config.repo(),
+                    backupPath(revision, createdAt, attempt),
+                    backup.toString(2),
+                    "",
+                    "Резервная дельта Family Tree DS");
+                return;
+            } catch (GitHubApi.ApiException apiError) {
+                last = apiError;
+                if (apiError.status != 409 && apiError.status != 422) throw apiError;
+            }
+        }
+        if (last != null) throw last;
+    }
+
+    private static String backupPath(long revision, long createdAt, int suffix) {
+        String stamp = new SimpleDateFormat("yyyy/MM/dd/HHmmss-SSS", Locale.US)
+            .format(new Date(Math.max(0L, createdAt)));
+        return BACKUP_PATH_PREFIX
+            + "/"
+            + stamp
+            + "-rev-"
+            + Math.max(1L, revision)
+            + (suffix <= 0 ? "" : "-" + suffix)
+            + ".json";
+    }
+
+    private List<BackupInfo> loadOnlineBackups(boolean prune) throws Exception {
+        List<GitHubApi.ContentItem> files = new ArrayList<>();
+        collectBackupFiles(BACKUP_PATH_PREFIX, files, 0);
+        List<BackupInfo> result = new ArrayList<>();
+        for (GitHubApi.ContentItem file : files) {
+            if (!file.path.endsWith(".json")) continue;
+            try {
+                GitHubApi.FileContent content = api.getFile(
+                    config.token(),
+                    config.owner(),
+                    config.repo(),
+                    file.path);
+                BackupInfo info = backupInfo(file.path, content.sha.isEmpty() ? file.sha : content.sha, content.text);
+                if (info != null) result.add(info);
+            } catch (Exception error) {
+                if (isTransientNetworkError(error)) throw error;
+                DiagnosticsLogger.handled(context, "online-backup-read", error);
+            }
+        }
+        Collections.sort(result, (a, b) -> Long.compare(b.createdAt, a.createdAt));
+        return prune ? pruneBackupList(result) : result;
+    }
+
+    private void pruneOnlineBackups() {
+        try {
+            loadOnlineBackups(true);
+        } catch (Exception error) {
+            DiagnosticsLogger.handled(context, "online-backup-prune", error);
+        }
+    }
+
+    private List<BackupInfo> pruneBackupList(List<BackupInfo> backups) {
+        List<BackupInfo> kept = new ArrayList<>();
+        Set<String> hashes = new HashSet<>();
+        long cutoff = System.currentTimeMillis() - BACKUP_RETENTION_MS;
+        for (BackupInfo backup : backups) {
+            boolean expired = backup.createdAt > 0L && backup.createdAt < cutoff;
+            boolean duplicate = !backup.currentHash.isEmpty() && !hashes.add(backup.currentHash);
+            if (expired || duplicate) {
+                deleteBackupQuietly(backup);
+            } else {
+                kept.add(backup);
+            }
+        }
+        return kept;
+    }
+
+    private void collectBackupFiles(
+        String directory,
+        List<GitHubApi.ContentItem> output,
+        int depth
+    ) throws Exception {
+        if (depth > 5) return;
+        List<GitHubApi.ContentItem> items;
+        try {
+            items = api.listDirectory(
+                config.token(),
+                config.owner(),
+                config.repo(),
+                directory);
+        } catch (GitHubApi.ApiException missing) {
+            if (missing.status == 404) return;
+            throw missing;
+        }
+        for (GitHubApi.ContentItem item : items) {
+            if ("dir".equals(item.type)) {
+                collectBackupFiles(item.path, output, depth + 1);
+            } else if ("file".equals(item.type) && item.path.endsWith(".json")) {
+                output.add(item);
+            }
+        }
+    }
+
+    private BackupInfo backupInfo(String path, String sha, String text) throws Exception {
+        JSONObject backup = new JSONObject(text == null ? "{}" : text);
+        if (!"ru.drshapaya.androidft.online-backup".equals(backup.optString("format", ""))
+            || backup.optInt("protocol", 0) != 1
+            || !config.treeId().equals(backup.optString("treeId", ""))) {
+            return null;
+        }
+        JSONObject summary = backup.optJSONObject("summary");
+        JSONObject media = backup.optJSONObject("media");
+        return new BackupInfo(
+            path,
+            sha,
+            backup.optLong("createdAt", 0L),
+            backup.optLong("revision", 1L),
+            backup.optInt("similarity", 0),
+            backup.optString("currentHash", ""),
+            backup.optString("mainSha", ""),
+            summary == null ? 0 : summary.optInt("addedItems", 0),
+            summary == null ? 0 : summary.optInt("removedItems", 0),
+            summary == null ? 0 : summary.optInt("changedItems", 0),
+            arrayLength(media, "added"),
+            arrayLength(media, "removed"));
+    }
+
+    private void deleteBackupQuietly(BackupInfo backup) {
+        if (backup == null || backup.path.isEmpty() || backup.sha.isEmpty()) return;
+        try {
+            api.deleteFile(
+                config.token(),
+                config.owner(),
+                config.repo(),
+                backup.path,
+                backup.sha,
+                "Очистка резервных дельт Family Tree DS");
+        } catch (Exception error) {
+            DiagnosticsLogger.handled(context, "online-backup-delete", error);
+        }
+    }
+
+    private static int arrayLength(JSONObject object, String key) {
+        JSONArray array = object == null ? null : object.optJSONArray(key);
+        return array == null ? 0 : array.length();
     }
 
     private void pullRemote(boolean announce) throws Exception {

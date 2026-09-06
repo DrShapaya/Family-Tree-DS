@@ -119,6 +119,24 @@ final class BirthdayWidgetRenderer {
         return birthday.person.name.trim();
     }
 
+    static String compactPersonName(
+        Context context,
+        BirthdayCalculator.Result birthday,
+        boolean photoVisible
+    ) {
+        String fullName = personName(context, birthday);
+        return photoVisible ? withoutPatronymic(fullName) : fullName;
+    }
+
+    static String withoutPatronymic(String fullName) {
+        if (fullName == null) return "";
+        String normalized = fullName.trim().replaceAll("\\s+", " ");
+        if (normalized.isEmpty()) return "";
+        String[] parts = normalized.split(" ");
+        if (parts.length < 3) return normalized;
+        return parts[0] + " " + parts[1];
+    }
+
     static String date(Context context, BirthdayCalculator.Result birthday) {
         if (birthday == null) {
             return AppLanguage.isEnglish(context)
@@ -128,8 +146,8 @@ final class BirthdayWidgetRenderer {
         String result = shortDate(context, birthday);
         if (birthday.age > 0) {
             result += AppLanguage.isEnglish(context)
-                ? " · turns " + birthday.age
-                : " · исполнится " + birthday.age;
+                ? ", age " + birthday.age
+                : ", возраст " + birthday.age;
         }
         return result;
     }
@@ -158,11 +176,9 @@ final class BirthdayWidgetRenderer {
     static String compactCountdown(Context context, BirthdayCalculator.Result birthday) {
         if (birthday == null) return AppLanguage.isEnglish(context) ? "No dates yet" : "Пока нет дат";
         if (birthday.daysUntil == 0) {
-            return AppLanguage.isEnglish(context) ? "Birthday today" : "День рождения сегодня";
+            return AppLanguage.isEnglish(context) ? "Today" : "Сегодня";
         }
-        return AppLanguage.isEnglish(context)
-            ? "In " + birthday.daysUntil + " " + daysWord(context, birthday.daysUntil)
-            : "Через " + birthday.daysUntil + " " + daysWord(context, birthday.daysUntil);
+        return birthday.daysUntil + " " + daysWord(context, birthday.daysUntil);
     }
 
     private static String daysWord(Context context, int days) {

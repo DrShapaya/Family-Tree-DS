@@ -1,10 +1,9 @@
 package ru.drshapaya.androidft2;
 
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.RectF;
 import android.view.Gravity;
 import android.view.View;
-import android.view.animation.AlphaAnimation;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -13,11 +12,17 @@ import android.widget.TextView;
 final class MainActivitySettings {
     private final MainActivity activity;
     private int trainingStep = -1;
-    private View trainingHighlight;
+    private int trainingGeneration;
+    private int targetPositionAttempts;
+    private boolean trainingStepConfirmed;
+    private TrainingSpotlightView trainingSpotlight;
     private LinearLayout trainingCard;
     private TextView trainingProgress;
     private TextView trainingTitle;
     private TextView trainingDetail;
+    private TextView trainingHint;
+    private Button trainingBack;
+    private Button trainingPrimary;
 
     MainActivitySettings(MainActivity activity) {
         this.activity = activity;
@@ -80,11 +85,7 @@ final class MainActivitySettings {
             : TreeLayoutEngine.CARD_H;
         float shift = oldHeight - newHeight;
         for (Person person : activity.state.people.values()) {
-            person.y = Math.max(
-                0f,
-                Math.min(
-                    activity.workspaceHeight - newHeight,
-                    person.y + shift));
+            person.y = person.y + shift;
         }
         activity.compactCards = makeCompact;
         activity.treeView.setCompactCards(activity.compactCards);
@@ -130,10 +131,10 @@ final class MainActivitySettings {
     }
 
     void startTraining() {
-        if (activity.editingBlocked()) {
-            activity.toast("Сначала отключите защиту правок");
-            return;
-        }
+        activity.getSharedPreferences("androidft-ui", MainActivity.MODE_PRIVATE)
+            .edit()
+            .putBoolean("training_offer_handled", true)
+            .apply();
         if (!activity.state.onboardingOffered) {
             activity.state.onboardingOffered = true;
             activity.saveOnly();
@@ -149,96 +150,165 @@ final class MainActivitySettings {
         }
         if (index < 0) index = 0;
         trainingStep = index;
+        trainingGeneration++;
+        targetPositionAttempts = 0;
+        trainingStepConfirmed = false;
         String[] step = MainActivity.TRAINING_STEPS[index];
         prepareTrainingStep(step[0]);
         ensureTrainingOverlay();
-        trainingProgress.setText("ОБУЧЕНИЕ  ·  ШАГ " + (index + 1) + " ИЗ " + MainActivity.TRAINING_STEPS.length);
+        String progress = AppLanguage.isEnglish(activity)
+            ? "TRAINING  ·  STEP " + (index + 1) + " OF " + MainActivity.TRAINING_STEPS.length
+            : "ОБУЧЕНИЕ  ·  ШАГ " + (index + 1) + " ИЗ " + MainActivity.TRAINING_STEPS.length;
+        LocalizedViews.setRaw(trainingProgress, progress);
         trainingTitle.setText(step[1]);
         trainingDetail.setText(step[2]);
-        activity.stage.post(() -> positionTrainingHighlight(step[0]));
+        configureTrainingActions(step[3]);
+        final int generation = trainingGeneration;
+        activity.stage.post(() -> positionTrainingTarget(step[0], step[3], generation));
     }
 
     void prepareTrainingStep(String id) {
-        if ("add-person".equals(id)) {
+        activity.resetTransientCanvasModes(false);
+        if ("more-overview".equals(id)) {
+            activity.showPanel("more");
+        } else {
             activity.showPanel("");
-        } else if ("parent-link".equals(id) && !"links".equals(activity.activePanel)) {
-            activity.showPanel("links");
-        } else if ("layout-tree".equals(id) && !"view".equals(activity.activePanel)) {
-            activity.showPanel("view");
         }
     }
 
     void onTrainingTargetActivated(String id) {
         if (trainingStep < 0 || trainingStep >= MainActivity.TRAINING_STEPS.length) return;
-        String expected = MainActivity.TRAINING_STEPS[trainingStep][0];
+        String[] current = MainActivity.TRAINING_STEPS[trainingStep];
+        String expected = current[0];
+        if (!"tap".equals(current[3])) return;
         if (!expected.equals(id)) return;
+        if (trainingStepConfirmed) return;
         final int completedStep = trainingStep;
-        if ("parent-link".equals(id)) {
-            activity.stage.postDelayed(() -> {
-                if (trainingStep != completedStep) return;
-                activity.resetTransientCanvasModes(false);
-                showTrainingStep(completedStep + 1);
-            }, 650);
-        } else {
-            showTrainingStep(completedStep + 1);
-        }
+        final int generation = trainingGeneration;
+        trainingStepConfirmed = true;
+        targetPositionAttempts = 0;
+        trainingSpotlight.disableTargetTap();
+        activity.stage.postDelayed(() -> {
+            if (trainingStep != completedStep || generation != trainingGeneration) return;
+            positionOpenedTrainingSection(id, generation);
+        }, 140L);
     }
 
     private void ensureTrainingOverlay() {
         if (activity.stage == null) return;
-        if (trainingHighlight == null) {
-            trainingHighlight = new View(activity);
-            trainingHighlight.setClickable(false);
-            trainingHighlight.setFocusable(false);
-            trainingHighlight.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            GradientDrawable ring = new GradientDrawable();
-            ring.setColor(Color.TRANSPARENT);
-            ring.setCornerRadius(activity.dp(14));
-            ring.setStroke(activity.dp(3), Color.rgb(24, 169, 153));
-            trainingHighlight.setBackground(ring);
-            trainingHighlight.setElevation(activity.dp(24));
-            AlphaAnimation pulse = new AlphaAnimation(0.38f, 1f);
-            pulse.setDuration(720);
-            pulse.setRepeatCount(AlphaAnimation.INFINITE);
-            pulse.setRepeatMode(AlphaAnimation.REVERSE);
-            trainingHighlight.startAnimation(pulse);
-            activity.stage.addView(trainingHighlight, new FrameLayout.LayoutParams(1, 1));
+        if (trainingSpotlight == null) {
+            trainingSpotlight = new TrainingSpotlightView(activity);
+            trainingSpotlight.setElevation(activity.dp(22));
+            activity.stage.addView(trainingSpotlight, new FrameLayout.LayoutParams(-1, -1));
         }
         if (trainingCard != null) {
+            trainingSpotlight.bringToFront();
             trainingCard.bringToFront();
             return;
         }
 
         trainingCard = new LinearLayout(activity);
         trainingCard.setOrientation(LinearLayout.VERTICAL);
-        trainingCard.setPadding(activity.dp(14), activity.dp(12), activity.dp(14), activity.dp(10));
-        trainingCard.setBackground(activity.panelBg(Color.rgb(252, 254, 254), activity.dp(14), Color.argb(110, 24, 169, 153)));
+        trainingCard.setPadding(activity.dp(16), activity.dp(12), activity.dp(16), activity.dp(12));
+        trainingCard.setBackground(activity.panelBg(Color.rgb(252, 254, 254), activity.dp(18), Color.argb(155, 24, 169, 153)));
         trainingCard.setElevation(activity.dp(26));
 
+        LinearLayout heading = new LinearLayout(activity);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
         trainingProgress = trainingText(10, Color.rgb(8, 122, 115), true);
-        trainingCard.addView(trainingProgress, new LinearLayout.LayoutParams(-1, activity.dp(20)));
+        heading.addView(trainingProgress, new LinearLayout.LayoutParams(0, activity.dp(32), 1));
+        Button close = activity.actionButton("Закрыть", v -> stopTraining(false));
+        close.setTextSize(10);
+        close.setElevation(0f);
+        close.setContentDescription(AppLanguage.text(activity, "Закрыть обучение"));
+        heading.addView(close, new LinearLayout.LayoutParams(activity.dp(82), activity.dp(32)));
+        trainingCard.addView(heading, new LinearLayout.LayoutParams(-1, activity.dp(32)));
+
         trainingTitle = trainingText(17, Color.rgb(28, 34, 38), true);
-        trainingCard.addView(trainingTitle, new LinearLayout.LayoutParams(-1, activity.dp(30)));
+        trainingCard.addView(trainingTitle, new LinearLayout.LayoutParams(-1, activity.dp(32)));
         trainingDetail = trainingText(12, Color.rgb(76, 87, 96), false);
         trainingDetail.setGravity(Gravity.TOP);
-        trainingDetail.setMaxLines(3);
-        trainingCard.addView(trainingDetail, new LinearLayout.LayoutParams(-1, activity.dp(50)));
+        trainingDetail.setMaxLines(4);
+        trainingDetail.setLineSpacing(activity.dp(2), 1f);
+        trainingCard.addView(trainingDetail, new LinearLayout.LayoutParams(-1, activity.dp(66)));
+
+        trainingHint = trainingText(11, Color.rgb(8, 122, 115), true);
+        trainingHint.setGravity(Gravity.CENTER_VERTICAL);
+        trainingHint.setPadding(activity.dp(10), 0, activity.dp(10), 0);
+        trainingHint.setBackground(activity.panelBg(Color.rgb(235, 248, 246), activity.dp(12), Color.argb(60, 24, 169, 153)));
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(-1, activity.dp(34));
+        hintParams.setMargins(0, activity.dp(2), 0, activity.dp(8));
+        trainingCard.addView(trainingHint, hintParams);
 
         LinearLayout footer = new LinearLayout(activity);
         footer.setOrientation(LinearLayout.HORIZONTAL);
         footer.setGravity(Gravity.CENTER_VERTICAL);
-        TextView action = trainingText(11, Color.rgb(8, 122, 115), true);
-        action.setText("↓  Нажмите подсвеченный элемент");
-        footer.addView(action, new LinearLayout.LayoutParams(0, activity.dp(36), 1));
-        Button close = activity.actionButton("Закрыть", v -> stopTraining(false));
-        close.setTextSize(11);
-        close.setElevation(0f);
-        footer.addView(close, new LinearLayout.LayoutParams(activity.dp(82), activity.dp(34)));
-        trainingCard.addView(footer, new LinearLayout.LayoutParams(-1, activity.dp(36)));
+        trainingBack = activity.actionButton("Назад", v -> showTrainingStep(trainingStep - 1));
+        trainingBack.setTextSize(11);
+        trainingBack.setElevation(0f);
+        footer.addView(trainingBack, new LinearLayout.LayoutParams(activity.dp(90), activity.dp(40)));
+        View spacer = new View(activity);
+        footer.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
+        trainingPrimary = activity.actionButton("Далее", v -> advanceTraining());
+        trainingPrimary.setTextSize(11);
+        trainingPrimary.setTextColor(Color.WHITE);
+        trainingPrimary.setBackground(activity.tealGradientBg(activity.dp(12)));
+        footer.addView(trainingPrimary, new LinearLayout.LayoutParams(activity.dp(112), activity.dp(40)));
+        trainingCard.addView(footer, new LinearLayout.LayoutParams(-1, activity.dp(40)));
 
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
         cardParams.setMargins(activity.dp(12), activity.dp(10), activity.dp(12), 0);
         activity.stage.addView(trainingCard, cardParams);
+        trainingSpotlight.bringToFront();
+        trainingCard.bringToFront();
+    }
+
+    private void configureTrainingActions(String mode) {
+        trainingBack.setVisibility(trainingStep == 0 ? View.INVISIBLE : View.VISIBLE);
+        if ("tap".equals(mode)) {
+            trainingHint.setText("Нажмите подсвеченную кнопку");
+            trainingPrimary.setText("Пропустить");
+        } else if ("finish".equals(mode)) {
+            trainingHint.setText("Обучение завершено — его всегда можно открыть снова через «Ещё»");
+            trainingPrimary.setText("Готово");
+        } else {
+            trainingHint.setText(trainingStep == 0 ? "Начнём с основных жестов" : "Посмотрите на подсвеченный элемент");
+            trainingPrimary.setText("Далее");
+        }
+    }
+
+    private void advanceTraining() {
+        if (trainingStep < 0 || trainingStep >= MainActivity.TRAINING_STEPS.length) return;
+        String mode = MainActivity.TRAINING_STEPS[trainingStep][3];
+        if ("finish".equals(mode)) stopTraining(true);
+        else showTrainingStep(trainingStep + 1);
+    }
+
+    private void positionOpenedTrainingSection(String id, int generation) {
+        if (trainingStep < 0 || generation != trainingGeneration || trainingSpotlight == null) return;
+        View target = activity.trainingOpenedTarget(id);
+        if (target == null || !target.isShown() || target.getWidth() <= 0 || target.getHeight() <= 0) {
+            targetPositionAttempts++;
+            if (targetPositionAttempts <= 15) {
+                activity.stage.postDelayed(() -> positionOpenedTrainingSection(id, generation), 100L);
+            } else {
+                trainingSpotlight.clearTarget();
+                trainingHint.setText("Раздел открыт. Осмотритесь и нажмите «Далее»");
+                trainingPrimary.setText("Далее");
+                positionTrainingCard(null);
+            }
+            return;
+        }
+        RectF bounds = targetBounds(target, activity.dp(4));
+        trainingSpotlight.showTarget(
+            bounds,
+            false,
+            AppLanguage.text(activity, "Раздел открыт"),
+            null);
+        trainingHint.setText("Раздел открыт. Осмотритесь и нажмите «Далее»");
+        trainingPrimary.setText("Далее");
+        positionTrainingCard(bounds);
+        trainingSpotlight.bringToFront();
         trainingCard.bringToFront();
     }
 
@@ -252,40 +322,78 @@ final class MainActivitySettings {
         return text;
     }
 
-    private void positionTrainingHighlight(String id) {
-        if (trainingStep < 0 || activity.stage == null || trainingHighlight == null) return;
-        View target = activity.trainingTarget(id);
-        if (target == null || !target.isShown() || target.getWidth() <= 0 || target.getHeight() <= 0) {
-            activity.stage.postDelayed(() -> {
-                if (trainingStep >= 0 && MainActivity.TRAINING_STEPS[trainingStep][0].equals(id)) {
-                    positionTrainingHighlight(id);
-                }
-            }, 120);
+    private void positionTrainingTarget(String id, String mode, int generation) {
+        if (trainingStep < 0 || generation != trainingGeneration || activity.stage == null || trainingSpotlight == null) return;
+        if (id == null || id.isEmpty()) {
+            trainingSpotlight.clearTarget();
+            positionTrainingCard(null);
             return;
         }
+        View target = activity.trainingTarget(id);
+        if (target == null || !target.isShown() || target.getWidth() <= 0 || target.getHeight() <= 0) {
+            targetPositionAttempts++;
+            if (targetPositionAttempts <= 15) {
+                activity.stage.postDelayed(() -> positionTrainingTarget(id, mode, generation), 100L);
+            } else {
+                trainingSpotlight.clearTarget();
+                trainingHint.setText("Элемент сейчас недоступен — перейдите к следующему шагу");
+                trainingPrimary.setText("Далее");
+                positionTrainingCard(null);
+            }
+            return;
+        }
+        RectF bounds = targetBounds(target, activity.dp(6));
+        boolean interactive = "tap".equals(mode);
+        String targetLabel = AppLanguage.text(
+            activity,
+            interactive ? "Нажмите здесь" : "finish".equals(mode) ? "Это меню" : "Обратите внимание");
+        trainingSpotlight.showTarget(bounds, interactive, targetLabel, target::performClick);
+        positionTrainingCard(bounds);
+        trainingSpotlight.bringToFront();
+        trainingCard.bringToFront();
+    }
+
+    private RectF targetBounds(View target, int inset) {
         int[] stageLocation = new int[2];
         int[] targetLocation = new int[2];
         activity.stage.getLocationOnScreen(stageLocation);
         target.getLocationOnScreen(targetLocation);
-        int inset = activity.dp(5);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            target.getWidth() + inset * 2,
-            target.getHeight() + inset * 2);
-        params.leftMargin = targetLocation[0] - stageLocation[0] - inset;
-        params.topMargin = targetLocation[1] - stageLocation[1] - inset;
-        trainingHighlight.setLayoutParams(params);
-        trainingHighlight.setVisibility(View.VISIBLE);
-        trainingHighlight.bringToFront();
-        trainingCard.bringToFront();
+        return new RectF(
+            targetLocation[0] - stageLocation[0] - inset,
+            targetLocation[1] - stageLocation[1] - inset,
+            targetLocation[0] - stageLocation[0] + target.getWidth() + inset,
+            targetLocation[1] - stageLocation[1] + target.getHeight() + inset);
+    }
+
+    private void positionTrainingCard(RectF target) {
+        if (trainingCard == null || activity.stage == null) return;
+        int width = Math.max(activity.dp(280), activity.stage.getWidth() - activity.dp(24));
+        trainingCard.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int cardHeight = trainingCard.getMeasuredHeight();
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
+        params.leftMargin = activity.dp(12);
+        params.rightMargin = activity.dp(12);
+        if (target == null || target.isEmpty()) {
+            params.topMargin = Math.max(activity.dp(12), (activity.stage.getHeight() - cardHeight) / 2);
+        } else if (target.centerY() > activity.stage.getHeight() / 2f) {
+            params.topMargin = activity.dp(12);
+        } else {
+            params.topMargin = Math.max(activity.dp(12), activity.stage.getHeight() - cardHeight - activity.dp(86));
+        }
+        trainingCard.setLayoutParams(params);
     }
 
     private void stopTraining(boolean completed) {
+        if (trainingStep < 0 && trainingSpotlight == null && trainingCard == null) return;
         trainingStep = -1;
+        trainingGeneration++;
+        trainingStepConfirmed = false;
         activity.resetTransientCanvasModes(false);
-        if (trainingHighlight != null) {
-            trainingHighlight.clearAnimation();
-            if (trainingHighlight.getParent() == activity.stage) activity.stage.removeView(trainingHighlight);
-            trainingHighlight = null;
+        if (trainingSpotlight != null) {
+            if (trainingSpotlight.getParent() == activity.stage) activity.stage.removeView(trainingSpotlight);
+            trainingSpotlight = null;
         }
         if (trainingCard != null) {
             if (trainingCard.getParent() == activity.stage) activity.stage.removeView(trainingCard);
@@ -294,11 +402,26 @@ final class MainActivitySettings {
         trainingProgress = null;
         trainingTitle = null;
         trainingDetail = null;
+        trainingHint = null;
+        trainingBack = null;
+        trainingPrimary = null;
+        activity.showPanel("");
         if (completed) {
             activity.state.onboardingCompleted = true;
             activity.saveOnly();
             activity.toast("Готово — вы освоили основные действия");
         }
+    }
+
+    boolean handleTrainingBack() {
+        if (trainingStep < 0) return false;
+        if (trainingStep > 0) showTrainingStep(trainingStep - 1);
+        else stopTraining(false);
+        return true;
+    }
+
+    void close() {
+        stopTraining(false);
     }
 
     static String normalizeTheme(String value) {

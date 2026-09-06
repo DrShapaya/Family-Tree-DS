@@ -160,12 +160,12 @@ final class MainActivityEditor {
         LinearLayout photoEditor = new LinearLayout(activity);
         photoEditor.setOrientation(LinearLayout.VERTICAL);
         photoEditor.setPadding(dp(14), dp(14), dp(14), dp(14));
-        photoEditor.setBackground(panelBg(Color.rgb(235, 249, 247), dp(14), Color.argb(82, 24, 169, 153)));
+        photoEditor.setBackground(softAccentGradientBg(dp(14)));
         LinearLayout photoTop = new LinearLayout(activity);
         photoTop.setOrientation(LinearLayout.HORIZONTAL);
         photoTop.setGravity(Gravity.CENTER_VERTICAL);
         FrameLayout avatar = new FrameLayout(activity);
-        avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
+        avatar.setBackground(ovalBg(person.color, avatarRingColor(person.color), 3));
         avatar.setClipToOutline(true);
         TextView initials = editorText(initials(person.name), 24, Color.WHITE, true);
         initials.setGravity(Gravity.CENTER);
@@ -208,7 +208,12 @@ final class MainActivityEditor {
         loadPhoto.setCompoundDrawablePadding(dp(7));
         loadPhoto.setSingleLine(true);
         loadPhoto.setTextSize(12);
-        tintDrawables(loadPhoto, Color.rgb(8, 122, 115));
+        loadPhoto.setTextColor(AppThemePalette.secondary());
+        loadPhoto.setBackground(panelBg(
+            AppThemePalette.secondarySurface(),
+            dp(10),
+            AppThemePalette.alpha(AppThemePalette.secondaryBright(), 72)));
+        tintDrawables(loadPhoto, AppThemePalette.secondary());
         photoButtons.addView(loadPhoto, new LinearLayout.LayoutParams(0, dp(46), 1));
         Button removePhoto = actionButton("Убрать", v -> {
             if ((person.photoMediaId == null || person.photoMediaId.isEmpty())
@@ -395,8 +400,24 @@ final class MainActivityEditor {
         memoryPanel.addView(memoryActions, formFieldParams());
         memoryForm.addView(memoryPanel, editorBlockParams());
 
-        profileForm.addView(editorSectionHeading("ОФОРМЛЕНИЕ", "Цвет и положение на дереве"), editorBlockParams());
+        LinearLayout colorDisclosure = new LinearLayout(activity);
+        colorDisclosure.setOrientation(LinearLayout.VERTICAL);
         LinearLayout colorPanel = editorSectionPanel("ЦВЕТ КАРТОЧКИ");
+        colorPanel.setVisibility(View.GONE);
+        LinearLayout colorHeading = new LinearLayout(activity);
+        colorHeading.setOrientation(LinearLayout.HORIZONTAL);
+        colorHeading.setGravity(Gravity.CENTER_VERTICAL);
+        colorHeading.setPadding(0, 0, dp(6), 0);
+        colorHeading.addView(editorSectionHeading("ОФОРМЛЕНИЕ", "Цвет карточки"), new LinearLayout.LayoutParams(0, -2, 1));
+        TextView colorArrow = editorText("⌄", 20, AppThemePalette.secondary(), true);
+        colorArrow.setGravity(Gravity.CENTER);
+        colorHeading.addView(colorArrow, new LinearLayout.LayoutParams(dp(34), dp(56)));
+        colorDisclosure.addView(colorHeading, new LinearLayout.LayoutParams(-1, -2));
+        colorHeading.setOnClickListener(v -> {
+            boolean expand = colorPanel.getVisibility() != View.VISIBLE;
+            colorPanel.setVisibility(expand ? View.VISIBLE : View.GONE);
+            LocalizedViews.setRaw(colorArrow, expand ? "⌃" : "⌄");
+        });
         TextView colorHint = editorText(
             "Передвигайте ползунок — выбранный цвет сразу появится на карточке.",
             11,
@@ -437,7 +458,7 @@ final class MainActivityEditor {
             person.manualColor = TreeState.colorString(color);
             person.color = color;
             cardColorPreview.setBackground(colorSwatchBg(color, dp(999)));
-            avatar.setBackground(ovalBg(color, Color.WHITE, 3));
+            avatar.setBackground(ovalBg(color, avatarRingColor(color), 3));
             saveOnly();
             activity.treeView.invalidate();
         });
@@ -449,7 +470,7 @@ final class MainActivityEditor {
             person.color = TreeState.displayColor(person, activity.state.people.size());
             cardColorSlider.setColor(person.color);
             cardColorPreview.setBackground(colorSwatchBg(person.color, dp(999)));
-            avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
+            avatar.setBackground(ovalBg(person.color, avatarRingColor(person.color), 3));
             saveOnly();
             activity.treeView.invalidate();
         });
@@ -462,7 +483,7 @@ final class MainActivityEditor {
             person.color = TreeState.displayColor(person, activity.state.people.size());
             cardColorSlider.setColor(person.color);
             cardColorPreview.setBackground(colorSwatchBg(person.color, dp(999)));
-            avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
+            avatar.setBackground(ovalBg(person.color, avatarRingColor(person.color), 3));
             saveOnly();
             activity.treeView.invalidate();
         });
@@ -470,7 +491,10 @@ final class MainActivityEditor {
         surnameColor.setCompoundDrawablePadding(dp(8));
         tintDrawables(surnameColor, Color.rgb(8, 122, 115));
         colorPanel.addView(surnameColor, formFieldParams());
-        profileForm.addView(colorPanel, editorBlockParams());
+        LinearLayout.LayoutParams colorPanelParams = new LinearLayout.LayoutParams(-1, -2);
+        colorPanelParams.setMargins(0, dp(8), 0, 0);
+        colorDisclosure.addView(colorPanel, colorPanelParams);
+        profileForm.addView(colorDisclosure, editorBlockParams());
 
         CheckBox pinned = new LocalizedCheckBox(activity);
         pinned.setText("Закрепить карточку");
@@ -558,7 +582,6 @@ final class MainActivityEditor {
         delete.setCompoundDrawablePadding(dp(8));
         tintDrawables(delete, Color.rgb(197, 83, 75));
         delete.setBackground(panelBg(Color.rgb(255, 247, 244), dp(8), Color.argb(72, 197, 83, 75)));
-        profileForm.addView(editorSectionHeading("ОПАСНАЯ ЗОНА", "Удаление человека нельзя отменить после закрытия приложения"), editorBlockParams());
         profileForm.addView(delete, new LinearLayout.LayoutParams(-1, dp(48)));
 
         final boolean[] undoRecorded = {false};
@@ -596,7 +619,7 @@ final class MainActivityEditor {
                     LocalizedViews.setRaw(title, person.name);
                 }
                 LocalizedViews.setRaw(initials, initials(person.name));
-                avatar.setBackground(ovalBg(person.color, Color.WHITE, 3));
+                avatar.setBackground(ovalBg(person.color, avatarRingColor(person.color), 3));
                 ageValue.setText(editorAgeLabel(person));
                 birthdayValue.setText(editorBirthdayLabel(person));
                 saveOnly();
@@ -797,13 +820,27 @@ final class MainActivityEditor {
         for (int i = 0; i < pages.length; i++) {
             boolean active = i == index;
             pages[i].setVisibility(active ? View.VISIBLE : View.GONE);
-            int tabColor = active ? Color.rgb(8, 122, 115) : Color.rgb(76, 83, 88);
+            int tabColor = active ? editorTabAccent(i) : editorTabIdleColor(i);
             tabs[i].setTextColor(tabColor);
             tintDrawables(tabs[i], tabColor);
             tabs[i].setBackground(active
-                ? panelBg(Color.WHITE, dp(8), Color.argb(72, 24, 169, 153))
+                ? editorTabBackground(i)
                 : new ColorDrawable(Color.TRANSPARENT));
         }
+    }
+
+    private int editorTabAccent(int index) {
+        return AppThemePalette.secondary();
+    }
+
+    private int editorTabIdleColor(int index) {
+        if (index == 1) return AppThemePalette.text(Color.rgb(91, 80, 112));
+        if (index == 2) return AppThemePalette.text(Color.rgb(91, 80, 112));
+        return Color.rgb(76, 83, 88);
+    }
+
+    private android.graphics.drawable.GradientDrawable editorTabBackground(int index) {
+        return softAccentGradientBg(dp(8));
     }
 
     private LinearLayout editorSectionHeading(String title, String detail) {
@@ -1081,13 +1118,17 @@ final class MainActivityEditor {
         metric.setOrientation(LinearLayout.HORIZONTAL);
         metric.setGravity(Gravity.CENTER_VERTICAL);
         metric.setPadding(dp(10), dp(7), dp(10), dp(7));
-        metric.setBackground(panelBg(Color.WHITE, dp(10), Color.rgb(217, 224, 229)));
+        boolean birthday = caption != null && caption.contains("ДО ДНЯ");
+        int accent = birthday ? AppThemePalette.secondary() : AppThemePalette.primary();
+        int surface = birthday ? AppThemePalette.secondarySurface() : AppThemePalette.primarySurface();
+        int bright = birthday ? AppThemePalette.secondaryBright() : AppThemePalette.primaryBright();
+        metric.setBackground(panelBg(surface, dp(10), AppThemePalette.alpha(bright, 54)));
 
         FrameLayout iconPlate = new FrameLayout(activity);
-        iconPlate.setBackground(ovalBg(Color.rgb(232, 248, 246), Color.TRANSPARENT, 0));
+        iconPlate.setBackground(ovalBg(AppThemePalette.alpha(bright, 32), Color.TRANSPARENT, 0));
         ImageView icon = new ImageView(activity);
         icon.setImageResource("ВОЗРАСТ".equals(caption) ? R.drawable.ic_field_person : R.drawable.ic_field_calendar);
-        icon.setColorFilter(activity.uiColor(Color.rgb(8, 122, 115)));
+        icon.setColorFilter(accent);
         iconPlate.addView(icon, new FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER));
         metric.addView(iconPlate, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
@@ -1105,8 +1146,17 @@ final class MainActivityEditor {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(14), dp(12), dp(14), dp(12));
         panel.setElevation(0f);
-        panel.setBackground(panelBg(Color.WHITE, dp(12), Color.rgb(217, 224, 229)));
-        panel.addView(editorText(title, 12, Color.rgb(28, 34, 38), true), new LinearLayout.LayoutParams(-1, dp(28)));
+        boolean memory = title != null && title.startsWith("ЗАПИСИ");
+        boolean relationEditor = "ДОБАВИТЬ В СЕМЬЮ".equals(title) || "СВЯЗИ".equals(title);
+        panel.setBackground(memory
+            ? softAccentGradientBg(dp(12))
+            : relationEditor
+                ? panelBg(AppThemePalette.secondarySurface(), dp(12), AppThemePalette.alpha(AppThemePalette.secondaryBright(), 58))
+                : panelBg(Color.WHITE, dp(12), Color.rgb(217, 224, 229)));
+        int titleColor = memory
+            ? AppThemePalette.secondary()
+            : relationEditor ? AppThemePalette.secondary() : Color.rgb(28, 34, 38);
+        panel.addView(editorText(title, 12, titleColor, true), new LinearLayout.LayoutParams(-1, dp(28)));
         return panel;
     }
 
@@ -1142,6 +1192,20 @@ final class MainActivityEditor {
         bg.setColor(color);
         bg.setStroke(dp(strokeDp), strokeColor);
         return bg;
+    }
+
+    private int avatarRingColor(int color) {
+        int mixed = blend(color, Color.WHITE, AppThemePalette.isDark() ? 0.20f : 0.06f);
+        return AppThemePalette.alpha(mixed, AppThemePalette.isDark() ? 210 : 176);
+    }
+
+    private static int blend(int a, int b, float amount) {
+        int ar = Color.red(a), ag = Color.green(a), ab = Color.blue(a);
+        int br = Color.red(b), bg = Color.green(b), bb = Color.blue(b);
+        return Color.rgb(
+            (int) (ar + (br - ar) * amount),
+            (int) (ag + (bg - ag) * amount),
+            (int) (ab + (bb - ab) * amount));
     }
 
     private LinearLayout.LayoutParams editorBlockParams() {
@@ -1946,6 +2010,7 @@ final class MainActivityEditor {
     private android.graphics.drawable.GradientDrawable panelBg(int color, int radius, int stroke) { return activity.panelBg(color, radius, stroke); }
     private android.graphics.drawable.GradientDrawable colorSwatchBg(int color, int radius) { return activity.colorSwatchBg(color, radius); }
     private android.graphics.drawable.GradientDrawable tealGradientBg(int radius) { return activity.tealGradientBg(radius); }
+    private android.graphics.drawable.GradientDrawable softAccentGradientBg(int radius) { return activity.softAccentGradientBg(radius); }
     private android.widget.Button iconButton(int iconRes, android.view.View.OnClickListener listener) { return activity.iconButton(iconRes, listener); }
     private android.widget.Button iconButton(int iconRes, android.view.View.OnClickListener listener, int textColor) { return activity.iconButton(iconRes, listener, textColor); }
     private android.widget.Button actionButton(String text, android.view.View.OnClickListener listener) { return activity.actionButton(text, listener); }

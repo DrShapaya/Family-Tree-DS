@@ -1449,6 +1449,83 @@ public final class TreeLayoutEngineTest {
         assertNoOverlaps(first);
     }
 
+    @Test
+    public void manualArrangeKeepsPinnedCardAtSavedPosition() {
+        TreeState state = mirroredThreeGenerationTree();
+        Person pinned = state.people.get("leftParent1");
+        pinned.x = 2200f;
+        pinned.y = 1560f;
+        pinned.pinned = true;
+
+        TreeLayoutEngine.rebuildStepwise(state);
+
+        assertEquals(2200f, pinned.x, EPSILON);
+        assertEquals(1560f, pinned.y, EPSILON);
+    }
+
+    @Test
+    public void selectedArrangeKeepsOutsideCardsInPlace() {
+        TreeState state = parentsAndTwoChildren();
+        positionedPerson(state, "outside", "Отдельная карточка", 3200f, 2200f);
+        state.people.get("father").x = 400f;
+        state.people.get("father").y = 400f;
+        state.people.get("mother").x = 520f;
+        state.people.get("mother").y = 400f;
+        state.people.get("childA").x = 460f;
+        state.people.get("childA").y = 520f;
+        state.people.get("childB").x = 500f;
+        state.people.get("childB").y = 520f;
+
+        boolean arranged = TreeLayoutEngine.rebuildSelected(
+            state,
+            java.util.Arrays.asList("father", "mother", "childA", "childB"),
+            "childA",
+            null);
+
+        assertTrue(arranged);
+        assertEquals(3200f, state.people.get("outside").x, EPSILON);
+        assertEquals(2200f, state.people.get("outside").y, EPSILON);
+        assertNoOverlaps(state);
+        assertOnGrid(state);
+    }
+
+    @Test
+    public void selectedArrangeMovesWholeBlockAroundOutsideObstacle() {
+        java.util.List<String> selected = java.util.Arrays.asList(
+            "father", "mother", "childA", "childB");
+
+        TreeState probe = parentsAndTwoChildren();
+        probe.people.get("father").x = 400f;
+        probe.people.get("father").y = 400f;
+        probe.people.get("mother").x = 520f;
+        probe.people.get("mother").y = 400f;
+        probe.people.get("childA").x = 460f;
+        probe.people.get("childA").y = 520f;
+        probe.people.get("childB").x = 500f;
+        probe.people.get("childB").y = 520f;
+        assertTrue(TreeLayoutEngine.rebuildSelected(probe, selected, "childA", null));
+        float obstacleX = probe.people.get("father").x;
+        float obstacleY = probe.people.get("father").y;
+
+        TreeState state = parentsAndTwoChildren();
+        state.people.get("father").x = 400f;
+        state.people.get("father").y = 400f;
+        state.people.get("mother").x = 520f;
+        state.people.get("mother").y = 400f;
+        state.people.get("childA").x = 460f;
+        state.people.get("childA").y = 520f;
+        state.people.get("childB").x = 500f;
+        state.people.get("childB").y = 520f;
+        positionedPerson(state, "outside", "Неподвижная карточка", obstacleX, obstacleY);
+
+        assertTrue(TreeLayoutEngine.rebuildSelected(state, selected, "childA", null));
+
+        assertEquals(obstacleX, state.people.get("outside").x, EPSILON);
+        assertEquals(obstacleY, state.people.get("outside").y, EPSILON);
+        assertNoOverlaps(state);
+        assertOnGrid(state);
+    }
+
     @Test(timeout = 3000L)
     public void manualArrangeBuildsLargeTreeQuicklyWithoutOverlaps() {
         TreeState state = mirroredThreeGenerationTree();

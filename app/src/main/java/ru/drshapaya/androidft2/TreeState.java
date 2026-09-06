@@ -29,6 +29,8 @@ final class TreeState {
     String selectedId = "";
     String theme = "light";
     int printScale = 100;
+    float uiScale = 1f;
+    float fontScale = 1f;
     boolean editLocked = false;
     boolean historyHidden = true;
     boolean inspectorHidden = false;
@@ -41,8 +43,6 @@ final class TreeState {
     boolean compactCards = false;
     boolean focusTree = false;
     boolean autoArrangeOnAdd = false;
-    boolean workspaceBoundsVisible = true;
-    String workspaceBoundsStyle = "soft";
     int workspaceWidth = 24000;
     int workspaceHeight = 16000;
     String parentLineMode = "smart";

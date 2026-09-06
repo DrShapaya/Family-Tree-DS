@@ -1,10 +1,11 @@
 <resources>
-    <string name="app_name">FamilyTree</string>
+    <string name="app_name">Family Tree DS</string>
     <string name="birthday_widget_description">Ближайший день рождения родственника</string>
     <string name="birthday_widget_preview_person_name">Имя</string>
-    <string name="birthday_widget_preview_subtitle">Через 7 дней</string>
+    <string name="birthday_widget_preview_subtitle">7 дней</string>
     <string name="birthday_widget_preview_name">Ближайший день рождения</string>
     <string name="birthday_widget_preview_date">21 августа</string>
+    <string name="birthday_widget_preview_date_age">21 августа, возраст 36</string>
     <string name="birthday_widget_preview_number">7</string>
     <string name="birthday_widget_preview_days">дней</string>
     <string name="birthday_widget_photo_description">Фотография родственника</string>
