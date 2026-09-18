@@ -22,7 +22,7 @@
       "amount": 42,
       "currency": "RUB",
       "color": "#E8789D",
-      "showHeart": true,
+      "showHeart": false,
       "order": 1
     }
   ]
