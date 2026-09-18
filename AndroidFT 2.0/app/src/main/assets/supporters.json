@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "fundraiser": {
+    "title": "Сбор на сервер",
+    "description": "",
+    "goal": 30000,
+    "raised": 0,
+    "currency": "RUB"
+  },
+  "displayLimit": 5,
+  "supporters": [
+    {
+      "name": "Тест",
+      "amount": 67,
+      "currency": "RUB",
+      "color": "#8B7CFF",
+      "showHeart": false,
+      "order": 0
+    }
+  ]
+}
