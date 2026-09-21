@@ -1,13 +1,13 @@
 {
   "version": 2,
+  "displayLimit": 5,
   "fundraiser": {
     "title": "Сбор на сервер",
-    "description": "",
+    "description": "Помогите Family Tree DS работать быстрее и надёжнее для всех.",
     "goal": 30000,
     "raised": 0,
     "currency": "RUB"
   },
-  "displayLimit": 5,
   "supporters": [
     {
       "name": "Тест",
