@@ -1,0 +1,20 @@
+<!-- Soft smoke icon for smoke themes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M5,19c2.5,-1.2 2.5,-3.6 0.5,-5.1C3.2,12.2 4.7,9 8,8.3c-0.2,-2.1 1.3,-3.8 3.2,-4.3 2.5,-0.6 4.7,1.2 4.8,3.7 2.4,0.2 4,2 4,4.2 0,1.6 -0.8,2.9 -2.1,3.7"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,21c2.2,-1.1 4.4,-1.1 6.6,0 2.2,1.1 4.4,1.1 6.6,0"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.8" />
+</vector>

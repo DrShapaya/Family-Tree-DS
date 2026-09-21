@@ -1,0 +1,21 @@
+<!-- Paint can and brush for blue link styles. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M5,10H15V20H5Z M5,10C5,8.3 7.2,7 10,7S15,8.3 15,10 M7,14H13"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M16,4L20,8M15,5L17,3L21,7L19,9M16,8L13,11"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+</vector>

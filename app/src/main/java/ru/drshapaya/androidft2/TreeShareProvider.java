@@ -13,7 +13,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 
 public final class TreeShareProvider extends ContentProvider {
-    static final String AUTHORITY = "ru.drshapaya.familytree.share";
+    static final String AUTHORITY = BuildConfig.APPLICATION_ID + ".share";
 
     static Uri uriFor(String filename) {
         return new Uri.Builder()

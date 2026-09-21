@@ -12,45 +12,70 @@ import android.widget.TextView;
 
 final class MainActivityHeader {
     private final MainActivity activity;
+    private LinearLayout actionOverlay;
 
     MainActivityHeader(MainActivity activity) {
         this.activity = activity;
     }
 
     View buildHeader() {
+        boolean landscape = activity.isLandscapeLayout();
         LinearLayout header = new LinearLayout(activity);
         header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10));
-        header.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
-        header.setElevation(activity.dp(5));
-        header.setOnApplyWindowInsetsListener((view, insets) -> {
-            int topInset = insets == null ? 0 : insets.getSystemWindowInsetTop();
-            view.setPadding(activity.dp(12), Math.max(activity.dp(30), activity.dp(10) + topInset), activity.dp(12), activity.dp(10));
-            return insets;
-        });
-        header.post(header::requestApplyInsets);
+        header.setPadding(0, 0, 0, 0);
+        header.setBackgroundColor(Color.TRANSPARENT);
+        // The canvas must continue directly under the white brand block;
+        // action controls are overlaid on the canvas below and must not cast
+        // an opaque separator band.
+        header.setElevation(0f);
 
         LinearLayout brand = new LinearLayout(activity);
         brand.setGravity(Gravity.CENTER_VERTICAL);
+        brand.setPadding(
+            activity.dp(12),
+            activity.dp(landscape ? 1 : 6),
+            activity.dp(12),
+            activity.dp(landscape ? 4 : 8));
+        brand.setBackgroundColor(Color.WHITE);
         header.addView(brand, new LinearLayout.LayoutParams(-1, -2));
         activity.headerBrand = brand;
+
+        header.setOnApplyWindowInsetsListener((view, insets) -> {
+            int topInset = insets == null ? 0 : insets.getSystemWindowInsetTop();
+            int topPadding = activity.dp(landscape ? 1 : 6);
+            int bottomPadding = activity.dp(landscape ? 4 : 8);
+            brand.setPadding(
+                activity.dp(12),
+                Math.max(topPadding, topPadding + topInset),
+                activity.dp(12),
+                bottomPadding);
+            return insets;
+        });
+        header.post(header::requestApplyInsets);
 
         ImageView icon = new ImageView(activity);
         icon.setImageResource(R.drawable.app_icon);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         icon.setBackground(activity.panelBg(Color.rgb(17, 169, 213), activity.dp(10), Color.TRANSPARENT));
         icon.setClipToOutline(true);
-        brand.addView(icon, new LinearLayout.LayoutParams(activity.dp(34), activity.dp(34)));
+        activity.headerIdentityIcon = icon;
+        brand.addView(icon, new LinearLayout.LayoutParams(
+            activity.dp(landscape ? 38 : 34),
+            activity.dp(landscape ? 38 : 34)));
 
         LinearLayout texts = new LinearLayout(activity);
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.setPadding(activity.dp(9), 0, 0, 0);
-        brand.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
+        activity.headerIdentityTexts = texts;
+        brand.addView(texts, new LinearLayout.LayoutParams(
+            landscape ? activity.dp(214) : 0,
+            -2,
+            landscape ? 0 : 1));
 
         TextView title = new LocalizedTextView(activity);
         title.setText("Семейное древо");
         title.setTextColor(Color.rgb(28, 34, 38));
-        title.setTextSize(20);
+        title.setTextSize(landscape ? 17 : 20);
         title.setTypeface(activity.uiBold());
         title.setSingleLine(true);
         title.setIncludeFontPadding(false);
@@ -58,33 +83,37 @@ final class MainActivityHeader {
 
         activity.stats = new LocalizedTextView(activity);
         activity.stats.setTextColor(Color.rgb(101, 113, 122));
-        activity.stats.setTextSize(13);
+        activity.stats.setTextSize(landscape ? 10 : 13);
         activity.stats.setTypeface(activity.ui());
         activity.stats.setIncludeFontPadding(false);
         texts.addView(activity.stats);
 
-        activity.treeQualityButton = activity.actionButton("Оценка дерева", v -> activity.showTreeQualityDialog());
+        activity.treeQualityButton = activity.actionButton("0%", v -> activity.showTreeQualityDialog());
         activity.treeQualityButton.setTextSize(9);
-        activity.treeQualityButton.setSingleLine(false);
-        activity.treeQualityButton.setGravity(Gravity.CENTER);
-        activity.treeQualityButton.setPadding(activity.dp(7), activity.dp(3), activity.dp(7), activity.dp(3));
+        activity.treeQualityButton.setSingleLine(true);
+        activity.treeQualityButton.setGravity(Gravity.CENTER_VERTICAL);
+        activity.treeQualityButton.setPadding(activity.dp(7), 0, activity.dp(7), 0);
         activity.treeQualityButton.setCompoundDrawablesWithIntrinsicBounds(
-            0,
             R.drawable.ic_menu_shield,
             0,
+            0,
             0);
-        activity.treeQualityButton.setCompoundDrawablePadding(activity.dp(2));
+        activity.treeQualityButton.setCompoundDrawablePadding(activity.dp(4));
         activity.treeQualityButton.setTextColor(AppThemePalette.secondary());
         activity.tintDrawables(activity.treeQualityButton, AppThemePalette.secondary());
-        activity.treeQualityButton.setBackground(activity.softAccentGradientBg(activity.dp(10)));
-        LinearLayout.LayoutParams qualityParams = new LinearLayout.LayoutParams(activity.dp(112), activity.dp(56));
+        activity.treeQualityButton.setBackground(activity.qualityGradientBg(activity.dp(10)));
+        LinearLayout.LayoutParams qualityParams = new LinearLayout.LayoutParams(
+            activity.dp(landscape ? 78 : 82),
+            activity.dp(landscape ? 42 : 44));
         qualityParams.setMargins(activity.dp(8), 0, 0, 0);
-        brand.addView(activity.treeQualityButton, qualityParams);
 
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, activity.dp(10), 0, 0);
-        header.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        // Match the trailing edge of the 52dp side rail (8dp from the screen).
+        row.setPadding(activity.dp(12), 0, activity.dp(8), 0);
+        row.setBackgroundColor(Color.TRANSPARENT);
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, activity.dp(60));
+        rowParams.setMargins(0, 0, 0, 0);
 
         activity.search = new LocalizedEditText(activity);
         activity.search.setSingleLine(true);
@@ -109,16 +138,49 @@ final class MainActivityHeader {
             activity.clearSearchFocus();
             return true;
         });
-        row.addView(activity.search, new LinearLayout.LayoutParams(0, activity.dp(44), 1));
+        // Keep the weighted slot in the action row while the field is hidden;
+        // this leaves undo/redo pinned to the right like the reference layout.
+        activity.search.setVisibility(View.INVISIBLE);
+
+        activity.searchToggleButton = activity.iconButton(
+            R.drawable.ic_menu_search,
+            v -> activity.toggleSearchField(),
+            Color.rgb(8, 122, 115));
+        activity.searchToggleButton.setContentDescription(activity.tr("Поиск"));
+        activity.searchToggleButton.setBackground(activity.panelBg(Color.WHITE, activity.dp(11), Color.rgb(217, 224, 229)));
+        LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(0, activity.dp(52), 1);
+        searchParams.setMargins(activity.dp(7), 0, 0, 0);
 
         activity.undoBtn = activity.iconButton(R.drawable.ic_menu_undo, v -> activity.undo());
         activity.redoBtn = activity.iconButton(R.drawable.ic_menu_redo, v -> activity.redo());
-        row.addView(activity.undoBtn, activity.smallActionParams());
-        row.addView(activity.redoBtn, activity.smallActionParams());
-        Button saveButton = activity.iconButton(R.drawable.ic_menu_save, v -> activity.saveToast("Дерево сохранено"), Color.WHITE);
-        saveButton.setBackground(activity.panelBg(Color.rgb(24, 169, 153), activity.dp(8), Color.TRANSPARENT));
-        row.addView(saveButton, activity.smallActionParams());
-        activity.headerSaveButton = saveButton;
+        LinearLayout.LayoutParams undoParams = new LinearLayout.LayoutParams(activity.dp(52), activity.dp(52));
+        undoParams.setMargins(activity.dp(7), 0, 0, 0);
+        LinearLayout.LayoutParams redoParams = new LinearLayout.LayoutParams(activity.dp(52), activity.dp(52));
+        redoParams.setMargins(activity.dp(7), 0, 0, 0);
+        if (landscape) {
+            LinearLayout controls = new LinearLayout(activity);
+            controls.setOrientation(LinearLayout.HORIZONTAL);
+            controls.setGravity(Gravity.CENTER_VERTICAL);
+            controls.setBackgroundColor(Color.TRANSPARENT);
+            activity.landscapeHeaderControls = controls;
+            activity.searchToggleButton.setVisibility(View.VISIBLE);
+            controls.addView(
+                activity.searchToggleButton,
+                new LinearLayout.LayoutParams(activity.dp(52), activity.dp(52)));
+            controls.addView(activity.search, searchParams);
+            controls.addView(activity.undoBtn, undoParams);
+            controls.addView(activity.redoBtn, redoParams);
+            controls.addView(activity.treeQualityButton, qualityParams);
+            brand.addView(controls, new LinearLayout.LayoutParams(0, -2, 1));
+        } else {
+            // Keep the tree score in the brand row, aligned with the title,
+            // while undo/redo stay at the far right of the action rail below.
+            brand.addView(activity.treeQualityButton, qualityParams);
+            row.addView(activity.searchToggleButton, new LinearLayout.LayoutParams(activity.dp(52), activity.dp(52)));
+            row.addView(activity.search, searchParams);
+            row.addView(activity.undoBtn, undoParams);
+            row.addView(activity.redoBtn, redoParams);
+        }
 
         activity.searchSuggestionsScroll = new HorizontalScrollView(activity);
         activity.searchSuggestionsScroll.setHorizontalScrollBarEnabled(false);
@@ -131,17 +193,33 @@ final class MainActivityHeader {
         activity.searchSuggestionsScroll.addView(
             activity.searchSuggestions,
             new HorizontalScrollView.LayoutParams(-2, activity.dp(42)));
-        header.addView(activity.searchSuggestionsScroll, new LinearLayout.LayoutParams(-1, activity.dp(42)));
+        actionOverlay = new LinearLayout(activity);
+        actionOverlay.setOrientation(LinearLayout.VERTICAL);
+        actionOverlay.setBackgroundColor(Color.TRANSPARENT);
+        actionOverlay.setClipChildren(false);
+        actionOverlay.setClipToPadding(false);
+        if (!landscape) actionOverlay.addView(row, rowParams);
+        actionOverlay.addView(activity.searchSuggestionsScroll, new LinearLayout.LayoutParams(-1, activity.dp(42)));
         return header;
+    }
+
+    View buildActionOverlay() {
+        return actionOverlay;
     }
 
     LinearLayout buildZoomRail() {
         LinearLayout rail = new LinearLayout(activity);
         rail.setOrientation(LinearLayout.VERTICAL);
-        rail.setPadding(activity.dp(5), activity.dp(5), activity.dp(5), activity.dp(5));
-        rail.setBackground(activity.panelBg(Color.argb(235, 248, 251, 252), activity.dp(8), Color.argb(31, 63, 82, 94)));
+        // A one-dp optical correction compensates for the rail outline: measured button
+        // gaps on the emulator become equal instead of 13 px on the left and 19 px right.
+        rail.setPadding(activity.dp(6), activity.dp(5), activity.dp(4), activity.dp(5));
+        rail.setBackground(activity.panelBg(
+            Color.argb(235, 248, 251, 252), activity.dp(8), Color.argb(31, 63, 82, 94)));
         rail.setElevation(activity.dp(6));
-        rail.addView(activity.iconButton(R.drawable.ic_nav_card, v -> activity.openPersonEditor()), activity.railButtonParams(false));
+
+        Button card = activity.iconButton(
+            R.drawable.ic_nav_card, v -> activity.openPersonEditor(), Color.rgb(106, 74, 177));
+        rail.addView(card, activity.railButtonParams(false));
         rail.addView(activity.iconButton(R.drawable.ic_menu_fit, v -> activity.treeView.fit()), activity.railButtonParams(false));
         activity.lockRailButton = activity.iconButton(
             activity.editingBlocked() ? R.drawable.ic_menu_lock : R.drawable.ic_menu_unlock,

@@ -14,8 +14,10 @@ import android.widget.RemoteViews;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class BirthdayWidgetProvider extends AppWidgetProvider {
     static final String EXTRA_PERSON_ID = "birthday_widget_person_id";
@@ -29,6 +31,9 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
         thread.setPriority(Thread.NORM_PRIORITY - 1);
         return thread;
     });
+    private static final AtomicLong UPDATE_SEQUENCE = new AtomicLong();
+    private static final ConcurrentHashMap<Integer, Long> LATEST_UPDATES =
+        new ConcurrentHashMap<>();
 
     int presetSize() {
         return SIZE_REGULAR;
@@ -78,7 +83,11 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
     ) {
         Context appContext = context.getApplicationContext();
         int[] ids = appWidgetIds == null ? new int[0] : appWidgetIds.clone();
+        long updateRevision = UPDATE_SEQUENCE.incrementAndGet();
+        for (int appWidgetId : ids) LATEST_UPDATES.put(appWidgetId, updateRevision);
+        Bundle safeOptions = optionsOverride == null ? null : new Bundle(optionsOverride);
         UPDATER.execute(() -> {
+            if (!hasLatestUpdate(ids, updateRevision)) return;
             TreeState state;
             try {
                 state = new TreeStore(appContext).load();
@@ -87,9 +96,10 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
                 state = new TreeState();
             }
             for (int appWidgetId : ids) {
+                if (!isLatestUpdate(appWidgetId, updateRevision)) continue;
                 try {
-                    Bundle options = optionsOverride != null && ids.length == 1
-                        ? optionsOverride
+                    Bundle options = safeOptions != null && ids.length == 1
+                        ? safeOptions
                         : manager.getAppWidgetOptions(appWidgetId);
                     int fallbackWidth = presetSize == SIZE_COMPACT
                         ? 180
@@ -113,9 +123,23 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
                     manager.updateAppWidget(appWidgetId, views);
                 } catch (Exception error) {
                     DiagnosticsLogger.handled(appContext, "widget.update", error);
+                } finally {
+                    LATEST_UPDATES.remove(appWidgetId, updateRevision);
                 }
             }
         });
+    }
+
+    private static boolean hasLatestUpdate(int[] appWidgetIds, long revision) {
+        for (int appWidgetId : appWidgetIds) {
+            if (isLatestUpdate(appWidgetId, revision)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isLatestUpdate(int appWidgetId, long revision) {
+        Long latest = LATEST_UPDATES.get(appWidgetId);
+        return latest != null && latest == revision;
     }
 
     private static void bindViews(

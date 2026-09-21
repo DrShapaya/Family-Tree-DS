@@ -191,6 +191,31 @@ public final class SmartPeopleSearchTest {
         assertTrue(query.kinshipSummary.contains("мать"));
     }
 
+    @Test
+    public void findsByGivenNameOrPatronymicRegardlessOfNameOrder() {
+        TreeState state = new TreeState();
+        Person target = person("target", "Иванов Сергей Петрович", "1980");
+        Person other = person("other", "Сидоров Алексей Николаевич", "1981");
+        state.people.put(target.id, target);
+        state.people.put(other.id, other);
+
+        assertTrue(matches(state, SmartPeopleSearch.parse(state, "Сергей", target.id), target));
+        assertTrue(matches(state, SmartPeopleSearch.parse(state, "Петрович", target.id), target));
+        assertFalse(matches(state, SmartPeopleSearch.parse(state, "Петрович", target.id), other));
+    }
+
+    @Test
+    public void toleratesSmallTyposButRejectsUnrelatedText() {
+        TreeState state = new TreeState();
+        Person target = person("target", "Иванов Сергей Петрович", "1980");
+        state.people.put(target.id, target);
+
+        assertTrue(matches(state, SmartPeopleSearch.parse(state, "Сергеи", target.id), target));
+        assertTrue(matches(state, SmartPeopleSearch.parse(state, "Сиргеи", target.id), target));
+        assertTrue(SmartPeopleSearch.suggestionScore(target.name, "Петровичь") > 0);
+        assertFalse(matches(state, SmartPeopleSearch.parse(state, "Кузнецов", target.id), target));
+    }
+
     private static boolean matches(TreeState state, SmartPeopleSearch.Query query, Person person) {
         return SmartPeopleSearch.matches(
             state,

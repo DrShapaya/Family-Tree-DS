@@ -51,6 +51,7 @@ final class MainActivityPeople {
     private final MainActivity activity;
     private LinearLayout panel;
     private LinearLayout content;
+    private LinearLayout sidebarContent;
     private EditText query;
     private Button listTab;
     private Button photoTab;
@@ -60,12 +61,15 @@ final class MainActivityPeople {
     private Button clearQueryButton;
     private Button searchActionsButton;
     private TextView peopleSubtitle;
+    private TextView resultSubtitle;
     private HorizontalScrollView smartSuggestionsScroll;
     private LinearLayout smartSuggestions;
     private String tab = "list";
     private String genderFilter = "all";
     private String lifeFilter = "all";
     private String photoFilter = "all";
+    private String armedFilterChip = "";
+    private final Map<String, TextView> activeFilterChips = new LinkedHashMap<>();
     private String sort = "surname";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Collator peopleCollator = createPeopleCollator();
@@ -92,10 +96,23 @@ final class MainActivityPeople {
     }
 
     View buildPanel() {
+        boolean landscape = activity.isLandscapeLayout();
         panel = new LinearLayout(activity);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(14), dp(12), dp(14), dp(8));
+        panel.setOrientation(landscape ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        panel.setPadding(
+            dp(14),
+            landscape ? activity.statusBarHeight() + dp(4) : dp(12),
+            dp(14),
+            dp(8));
         panel.setBackgroundColor(AppThemePalette.surface(Color.rgb(243, 247, 248)));
+
+        LinearLayout menuColumn = panel;
+        if (landscape) {
+            menuColumn = new LinearLayout(activity);
+            menuColumn.setOrientation(LinearLayout.VERTICAL);
+            menuColumn.setPadding(0, 0, dp(12), 0);
+            panel.addView(menuColumn, new LinearLayout.LayoutParams(dp(286), -1));
+        }
 
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -121,7 +138,7 @@ final class MainActivityPeople {
         peopleSubtitle.setGravity(Gravity.CENTER_VERTICAL);
         heading.addView(peopleSubtitle, new LinearLayout.LayoutParams(-1, dp(22)));
         header.addView(heading, new LinearLayout.LayoutParams(0, dp(54), 1));
-        panel.addView(header, new LinearLayout.LayoutParams(-1, dp(68)));
+        menuColumn.addView(header, new LinearLayout.LayoutParams(-1, dp(68)));
 
         LinearLayout tabs = new LinearLayout(activity);
         tabs.setPadding(dp(5), dp(5), dp(5), dp(5));
@@ -136,11 +153,31 @@ final class MainActivityPeople {
         tabs.addView(photoTab, photoTabParams);
         LinearLayout.LayoutParams tabsParams = new LinearLayout.LayoutParams(-1, dp(62));
         tabsParams.setMargins(0, dp(10), 0, dp(12));
-        panel.addView(tabs, tabsParams);
+        menuColumn.addView(tabs, tabsParams);
 
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        panel.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        if (landscape) {
+            ScrollView sidebarScroll = new ScrollView(activity);
+            sidebarScroll.setFillViewport(true);
+            sidebarScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+            sidebarContent = new LinearLayout(activity);
+            sidebarContent.setOrientation(LinearLayout.VERTICAL);
+            sidebarScroll.addView(sidebarContent, new ScrollView.LayoutParams(-1, -2));
+            menuColumn.addView(sidebarScroll, new LinearLayout.LayoutParams(-1, 0, 1));
+
+            View divider = new View(activity);
+            divider.setBackgroundColor(AppThemePalette.stroke(Color.rgb(217, 224, 229)));
+            LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(dp(1), -1);
+            dividerParams.setMargins(0, 0, dp(13), 0);
+            panel.addView(divider, dividerParams);
+
+            content.setPadding(0, 0, 0, 0);
+            panel.addView(content, new LinearLayout.LayoutParams(0, -1, 1));
+        } else {
+            sidebarContent = null;
+            panel.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        }
         panel.setVisibility(View.GONE);
         return panel;
     }
@@ -193,6 +230,8 @@ final class MainActivityPeople {
     private void renderList() {
         if (pendingFilter != null) mainHandler.removeCallbacks(pendingFilter);
         content.removeAllViews();
+        boolean landscape = activity.isLandscapeLayout() && sidebarContent != null;
+        if (landscape) sidebarContent.removeAllViews();
         LinearLayout controls = new LinearLayout(activity);
         controls.setOrientation(LinearLayout.VERTICAL);
         controls.setPadding(dp(8), dp(8), dp(8), dp(6));
@@ -238,16 +277,45 @@ final class MainActivityPeople {
         LinearLayout firstActions = new LinearLayout(activity);
         firstActions.setGravity(Gravity.CENTER_VERTICAL);
         addActionButton(firstActions, filterButton, 0, 3);
-        addActionButton(firstActions, sortButton, 3, 3);
-        addActionButton(firstActions, relationSearchButton, 3, 0);
+        addActionButton(firstActions, sortButton, 3, activity.isLandscapeLayout() ? 0 : 3);
+        if (!activity.isLandscapeLayout()) {
+            addActionButton(firstActions, relationSearchButton, 3, 0);
+        }
         controls.addView(firstActions, new LinearLayout.LayoutParams(-1, dp(54)));
-        content.addView(controls, new LinearLayout.LayoutParams(-1, -2));
+        if (activity.isLandscapeLayout()) {
+            LinearLayout secondActions = new LinearLayout(activity);
+            secondActions.setGravity(Gravity.CENTER_VERTICAL);
+            addActionButton(secondActions, relationSearchButton, 0, 0);
+            controls.addView(secondActions, new LinearLayout.LayoutParams(-1, dp(54)));
+        }
+        LinearLayout controlsHost = landscape ? sidebarContent : content;
+        controlsHost.addView(controls, new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout chips = new LinearLayout(activity);
         chips.setOrientation(LinearLayout.HORIZONTAL);
         chips.setPadding(dp(4), dp(4), 0, dp(2));
         addActiveChips(chips);
-        if (chips.getChildCount() > 0) content.addView(chips, new LinearLayout.LayoutParams(-1, dp(36)));
+        if (chips.getChildCount() > 0) {
+            controlsHost.addView(chips, new LinearLayout.LayoutParams(-1, dp(36)));
+        }
+
+        if (landscape) {
+            LinearLayout listHeader = new LinearLayout(activity);
+            listHeader.setGravity(Gravity.CENTER_VERTICAL);
+            listHeader.setPadding(dp(8), 0, dp(8), 0);
+            TextView listTitle = text("Список людей", 19, AppThemePalette.secondary(), true);
+            listTitle.setGravity(Gravity.CENTER_VERTICAL);
+            listHeader.addView(listTitle, new LinearLayout.LayoutParams(0, -1, 1));
+            if (activity.focusTree) {
+                listHeader.addView(landscapeCloseButton(), new LinearLayout.LayoutParams(dp(58), dp(50)));
+            }
+            resultSubtitle = null;
+            LinearLayout.LayoutParams listHeaderParams = new LinearLayout.LayoutParams(-1, dp(50));
+            listHeaderParams.setMargins(0, 0, 0, dp(2));
+            content.addView(listHeader, listHeaderParams);
+        } else {
+            resultSubtitle = null;
+        }
 
         ScrollView scroll = new ScrollView(activity);
         LinearLayout rows = new LinearLayout(activity);
@@ -341,27 +409,14 @@ final class MainActivityPeople {
         boolean trailingSpace = suggestionInput.endsWith(" ");
         String[] tokens = normalizedInput.split("\\s+");
 
-        if (tokens.length == 1 && !trailingSpace) {
-            for (Person person : sortedPeople()) {
-                String surname = surnameDisplayOf(person);
-                if (surname.isEmpty() || !normalizeSearch(surname).startsWith(tokens[0])) continue;
-                addSuggestion(result, seen, normalizedInput, commandPrefix, capitalize(surname), capitalize(surname) + " ", "", limit);
-                if (result.size() >= limit) return result;
-            }
-        }
-
-        for (Person person : sortedPeople()) {
+        List<Person> rankedPeople = sortedPeople();
+        rankedPeople.sort((first, second) -> Integer.compare(
+            SmartPeopleSearch.suggestionScore(displayName(second), normalizedInput),
+            SmartPeopleSearch.suggestionScore(displayName(first), normalizedInput)));
+        for (Person person : rankedPeople) {
             String name = displayName(person);
-            String normalizedName = normalizeSearch(name);
-            if (!normalizedName.startsWith(normalizedInput)) continue;
-            String label = progressiveNameSuggestion(name, tokens.length, trailingSpace);
-            if (normalizeSearch(label).equals(normalizedInput) && nameParts(name).length > nameParts(label).length) {
-                label = displayNameFromParts(nameParts(name), nameParts(name).length);
-            }
-            String apply = label;
-            if (nameParts(name).length > nameParts(label).length) apply += " ";
-            String personId = normalizeSearch(label).equals(normalizedName) ? person.id : "";
-            addSuggestion(result, seen, normalizedInput, commandPrefix, label, apply, personId, limit);
+            if (SmartPeopleSearch.suggestionScore(name, normalizedInput) <= 0) continue;
+            addSuggestion(result, seen, normalizedInput, commandPrefix, name, name, person.id, limit);
             if (result.size() >= limit) return result;
         }
 
@@ -399,7 +454,9 @@ final class MainActivityPeople {
         int limit
     ) {
         String key = normalizeSearch(label);
-        if (result.size() >= limit || key.isEmpty() || key.equals(normalizedInput) || !seen.add(key)) return;
+        if (result.size() >= limit || key.isEmpty()
+            || key.equals(normalizedInput) && (personId == null || personId.isEmpty())
+            || !seen.add(key)) return;
         result.add(new SearchSuggestion(label, prefix + apply, personId));
     }
 
@@ -469,20 +526,54 @@ final class MainActivityPeople {
     }
 
     private void addActiveChips(LinearLayout chips) {
-        if (!"all".equals(genderFilter)) chips.addView(chip("male".equals(genderFilter) ? "Мужчины" : "Женщины"));
-        if (!"all".equals(lifeFilter)) chips.addView(chip("living".equals(lifeFilter) ? "Живые" : "Умершие"));
-        if (!"all".equals(photoFilter)) chips.addView(chip("with".equals(photoFilter) ? "С фото" : "Без фото"));
+        activeFilterChips.clear();
+        if (!"all".equals(genderFilter)) chips.addView(chip(
+            "gender", "male".equals(genderFilter) ? "Мужчины" : "Женщины",
+            () -> genderFilter = "all"));
+        if (!"all".equals(lifeFilter)) chips.addView(chip(
+            "life", "living".equals(lifeFilter) ? "Живые" : "Умершие",
+            () -> lifeFilter = "all"));
+        if (!"all".equals(photoFilter)) chips.addView(chip(
+            "photo", "with".equals(photoFilter) ? "С фото" : "Без фото",
+            () -> photoFilter = "all"));
     }
 
-    private TextView chip(String label) {
-        TextView chip = text(label, 10, Color.rgb(8, 122, 115), true);
+    private TextView chip(String key, String label, Runnable remove) {
+        TextView chip = text("", 10, Color.rgb(8, 122, 115), true);
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(dp(12), 0, dp(12), 0);
-        chip.setBackground(activity.panelBg(Color.rgb(232, 248, 246), dp(999), Color.argb(64, 24, 169, 153)));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(28));
         params.setMargins(0, 0, dp(7), 0);
         chip.setLayoutParams(params);
+        chip.setTag(label);
+        activeFilterChips.put(key, chip);
+        styleFilterChip(key, chip);
+        chip.setOnClickListener(v -> {
+            if (key.equals(armedFilterChip)) {
+                remove.run();
+                armedFilterChip = "";
+                refresh();
+                return;
+            }
+            armedFilterChip = key;
+            for (Map.Entry<String, TextView> entry : activeFilterChips.entrySet()) {
+                styleFilterChip(entry.getKey(), entry.getValue());
+            }
+        });
         return chip;
+    }
+
+    private void styleFilterChip(String key, TextView chip) {
+        String label = chip.getTag() instanceof String ? (String) chip.getTag() : "";
+        boolean armed = key.equals(armedFilterChip);
+        chip.setText(armed ? label + "  ×" : label);
+        chip.setTextColor(armed ? Color.WHITE : Color.rgb(8, 122, 115));
+        chip.setBackground(armed
+            ? activity.panelBg(Color.rgb(205, 73, 66), dp(999), Color.rgb(177, 51, 47))
+            : activity.panelBg(Color.rgb(232, 248, 246), dp(999), Color.argb(64, 24, 169, 153)));
+        chip.setContentDescription(activity.tr(armed
+            ? label + ". Нажмите ещё раз, чтобы отключить фильтр"
+            : label + ". Нажмите, чтобы подготовить отключение фильтра"));
     }
 
     private void fillPeopleRows(LinearLayout rows) {
@@ -502,6 +593,9 @@ final class MainActivityPeople {
             }
         }
         Collections.sort(people, personComparator());
+        if (resultSubtitle != null) {
+            LocalizedViews.setRaw(resultSubtitle, peopleCountText(people.size()));
+        }
         if (!smart.kinshipSummary.isEmpty()) {
             rows.addView(kinshipPreviewCard(smart));
         }
@@ -526,18 +620,27 @@ final class MainActivityPeople {
     }
 
     private boolean matches(Person person, SmartPeopleSearch.Query smart, Calendar now) {
-        if ("male".equals(genderFilter) && !PersonGender.MALE.equals(person.gender)) return false;
-        if ("female".equals(genderFilter) && !PersonGender.FEMALE.equals(person.gender)) return false;
+        return matches(person, smart, now, genderFilter, lifeFilter, photoFilter);
+    }
+
+    private boolean matches(Person person, SmartPeopleSearch.Query smart, Calendar now,
+                            String gender, String life, String photo) {
+        if ("male".equals(gender) && !PersonGender.MALE.equals(person.gender)) return false;
+        if ("female".equals(gender) && !PersonGender.FEMALE.equals(person.gender)) return false;
         boolean dead = value(person.diedYear).length() > 0 || value(person.died).length() > 0;
-        if ("living".equals(lifeFilter) && dead) return false;
-        if ("dead".equals(lifeFilter) && !dead) return false;
+        if ("living".equals(life) && dead) return false;
+        if ("dead".equals(life) && !dead) return false;
         boolean hasPhoto = hasPhoto(person);
-        if ("with".equals(photoFilter) && !hasPhoto) return false;
-        if ("without".equals(photoFilter) && hasPhoto) return false;
+        if ("with".equals(photo) && !hasPhoto) return false;
+        if ("without".equals(photo) && hasPhoto) return false;
         return SmartPeopleSearch.matches(activity.state, smart, person, this::hasPhoto, now);
     }
 
     private String currentSearchSummary() {
+        return currentSearchSummary(genderFilter, lifeFilter, photoFilter);
+    }
+
+    private String currentSearchSummary(String gender, String life, String photo) {
         if (activity.state == null) return "Люди → все записи → показать 0 " + peopleWord(0);
         String rawQuery = query == null ? "" : query.getText().toString().trim();
         SmartPeopleSearch.Query smart = SmartPeopleSearch.parse(activity.state, rawQuery, activity.state.selectedId);
@@ -551,7 +654,7 @@ final class MainActivityPeople {
         } else {
             Calendar now = Calendar.getInstance();
             for (Person person : activity.state.people.values()) {
-                if (matches(person, smart, now)) count++;
+                if (matches(person, smart, now, gender, life, photo)) count++;
             }
         }
         return smart != null && smart.active
@@ -559,8 +662,11 @@ final class MainActivityPeople {
             : "Люди → все записи → показать " + count + " " + peopleWord(count);
     }
 
-    private View filterSummaryCard() {
-        TextView summary = text(currentSearchSummary(), 11, AppThemePalette.secondary(), true);
+    private TextView filterSummaryCard(String[] pending) {
+        TextView summary = text(pending == null
+            ? currentSearchSummary()
+            : currentSearchSummary(pending[0], pending[1], pending[2]),
+            11, AppThemePalette.secondary(), true);
         summary.setGravity(Gravity.CENTER_VERTICAL);
         summary.setPadding(dp(12), 0, dp(12), 0);
         summary.setSingleLine(false);
@@ -685,37 +791,37 @@ final class MainActivityPeople {
         Dialog dialog = styledChoiceDialog("Фильтры", "Выберите, кого показывать в списке", R.drawable.ic_menu_filter);
         LinearLayout host = dialogHost(dialog);
         String[] pending = {genderFilter, lifeFilter, photoFilter};
-        host.addView(filterSummaryCard());
+        TextView summary = filterSummaryCard(pending);
+        Runnable updateSummary = () -> summary.setText(currentSearchSummary(pending[0], pending[1], pending[2]));
+        host.addView(summary);
         host.addView(choiceSection("Пол", new String[]{"Все", "Мужчины", "Женщины"}, pending[0],
-            new String[]{"all", "male", "female"}, value -> pending[0] = value));
+            new String[]{"all", "male", "female"}, value -> { pending[0] = value; updateSummary.run(); }));
         host.addView(choiceSection("Статус", new String[]{"Все", "Живые", "Умершие"}, pending[1],
-            new String[]{"all", "living", "dead"}, value -> pending[1] = value));
+            new String[]{"all", "living", "dead"}, value -> { pending[1] = value; updateSummary.run(); }));
         host.addView(choiceSection("Фотография", new String[]{"Любые", "С фото", "Без фото"}, pending[2],
-            new String[]{"all", "with", "without"}, value -> pending[2] = value));
+            new String[]{"all", "with", "without"}, value -> { pending[2] = value; updateSummary.run(); }));
         host.addView(menuAction("Данные", "Заполненность даты рождения", R.drawable.ic_menu_data_object, () -> {
-            dialog.dismiss();
             showDataFilters();
         }));
         host.addView(menuAction("Даты", "День, месяц, год и ближайшие дни рождения", R.drawable.ic_field_calendar, () -> {
-            dialog.dismiss();
             showDateFilters();
         }));
         host.addView(menuAction("Место", "Выбрать из мест, которые есть в дереве", R.drawable.ic_field_location, () -> {
-            dialog.dismiss();
             showPlaceFilters();
         }));
         host.addView(menuAction("Родство", "Предки, потомки, родственники и связь двух людей", R.drawable.ic_menu_route, () -> {
-            dialog.dismiss();
             showRelationFilters();
         }));
         host.addView(dialogActions("Сбросить", () -> {
             genderFilter = lifeFilter = photoFilter = "all";
+            armedFilterChip = "";
             refresh();
             dialog.dismiss();
         }, "Применить", () -> {
             genderFilter = pending[0];
             lifeFilter = pending[1];
             photoFilter = pending[2];
+            armedFilterChip = "";
             refresh();
             dialog.dismiss();
         }));
@@ -1223,11 +1329,24 @@ final class MainActivityPeople {
 
     private void renderPhotoHome() {
         content.removeAllViews();
+        boolean landscape = activity.isLandscapeLayout() && sidebarContent != null;
+        if (landscape) sidebarContent.removeAllViews();
+        if (landscape && activity.focusTree) {
+            LinearLayout closeRow = new LinearLayout(activity);
+            closeRow.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+            closeRow.setPadding(0, 0, dp(8), 0);
+            closeRow.addView(landscapeCloseButton(), new LinearLayout.LayoutParams(dp(58), dp(50)));
+            content.addView(closeRow, new LinearLayout.LayoutParams(-1, dp(50)));
+        }
+        resultSubtitle = null;
         TextView intro = text("Фотографии дерева", 13, Color.rgb(28, 34, 38), true);
         intro.setGravity(Gravity.CENTER_VERTICAL);
-        content.addView(intro, new LinearLayout.LayoutParams(-1, dp(34)));
         TextView hint = text("Автоматические коллекции и ваши семейные альбомы", 10, Color.rgb(101, 113, 122), false);
-        content.addView(hint, new LinearLayout.LayoutParams(-1, dp(30)));
+        hint.setSingleLine(false);
+        hint.setMaxLines(2);
+        LinearLayout photoHeadingHost = landscape ? sidebarContent : content;
+        photoHeadingHost.addView(intro, new LinearLayout.LayoutParams(-1, dp(34)));
+        photoHeadingHost.addView(hint, new LinearLayout.LayoutParams(-1, dp(42)));
 
         ScrollView scroll = new ScrollView(activity);
         LinearLayout body = new LinearLayout(activity);
@@ -1252,6 +1371,19 @@ final class MainActivityPeople {
                 body.addView(albumCard(entry.getKey(), people));
             }
         }
+    }
+
+    private View landscapeCloseButton() {
+        Button close = activity.iconButton(
+            R.drawable.ic_menu_close,
+            v -> activity.showPanel(""),
+            Color.rgb(83, 94, 103));
+        close.setContentDescription(activity.tr("Закрыть список людей"));
+        close.setBackground(activity.panelBg(
+            Color.WHITE,
+            dp(10),
+            Color.rgb(205, 214, 220)));
+        return close;
     }
 
     private View collectionCard(String title, String detail, int iconRes, int color, Runnable action) {

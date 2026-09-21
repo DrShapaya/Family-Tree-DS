@@ -1151,7 +1151,7 @@ final class MainActivityEditor {
         panel.setBackground(memory
             ? softAccentGradientBg(dp(12))
             : relationEditor
-                ? panelBg(AppThemePalette.secondarySurface(), dp(12), AppThemePalette.alpha(AppThemePalette.secondaryBright(), 58))
+                ? softAccentGradientBg(dp(12))
                 : panelBg(Color.WHITE, dp(12), Color.rgb(217, 224, 229)));
         int titleColor = memory
             ? AppThemePalette.secondary()

@@ -1,0 +1,14 @@
+<!-- Folded paper icon for the paper canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,3H14L19,8V21H6Z M14,3V8H19 M9,12H16 M9,16H16"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+</vector>

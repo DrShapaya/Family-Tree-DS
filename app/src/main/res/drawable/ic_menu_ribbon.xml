@@ -1,0 +1,21 @@
+<!-- Two interwoven strips for ribbon links. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,5C9,5 15,19 20,19M4,19C9,19 15,5 20,5"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.2" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,8C9,8 15,16 20,16M4,16C9,16 15,8 20,8"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.1" />
+</vector>

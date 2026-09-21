@@ -13,6 +13,7 @@ local.properties
 # Signing credentials and keys
 keystore.properties
 github.properties
+appmetrica.properties
 *.jks
 *.keystore
 

@@ -180,12 +180,18 @@ final class SmartPeopleSearch {
         for (Person person : state.people.values()) {
             String name = normalizePersonKey(person.name);
             int score = personMatchScore(name, needle);
+            if (score <= 0) score = fuzzyTokenScore(name, needle);
             if (score > bestScore) {
                 bestScore = score;
                 best = person;
             }
         }
         return bestScore <= 0 ? null : best;
+    }
+
+    /** Scores a name or other short label for autocomplete, including small typos. */
+    static int suggestionScore(String candidate, String query) {
+        return fuzzyTokenScore(normalize(candidate), normalize(query));
     }
 
     private static void parseKinship(TreeState state, Query query) {
@@ -495,7 +501,66 @@ final class SmartPeopleSearch {
         if (normalizedHaystack.contains(normalizedNeedle)) return true;
         String compactHaystack = normalizePersonKey(normalizedHaystack);
         String compactNeedle = normalizePersonKey(normalizedNeedle);
-        return personMatchScore(compactHaystack, compactNeedle) > 0;
+        if (personMatchScore(compactHaystack, compactNeedle) > 0) return true;
+        return fuzzyTokenScore(normalizedHaystack, normalizedNeedle) > 0;
+    }
+
+    private static int fuzzyTokenScore(String haystack, String needle) {
+        if (haystack.isEmpty() || needle.isEmpty()) return 0;
+        if (haystack.equals(needle)) return 1200;
+        if (haystack.contains(needle)) return 900 + needle.length();
+        String[] candidates = haystack.split("\\s+");
+        String[] requested = needle.split("\\s+");
+        int total = 0;
+        for (String wanted : requested) {
+            if (wanted.isEmpty()) continue;
+            int best = 0;
+            for (String candidate : candidates) {
+                if (candidate.isEmpty()) continue;
+                if (candidate.equals(wanted)) {
+                    best = Math.max(best, 180 + wanted.length());
+                    continue;
+                }
+                if (candidate.startsWith(wanted) || wanted.startsWith(candidate)) {
+                    int common = Math.min(candidate.length(), wanted.length());
+                    if (common >= 2) best = Math.max(best, 130 + common);
+                    continue;
+                }
+                int longest = Math.max(candidate.length(), wanted.length());
+                int tolerance = longest >= 10 ? 3 : longest >= 6 ? 2 : longest >= 4 ? 1 : 0;
+                if (tolerance == 0) continue;
+                int distance = editDistance(candidate, wanted, tolerance);
+                if (distance <= tolerance) {
+                    best = Math.max(best, 95 + Math.min(candidate.length(), wanted.length()) - distance * 12);
+                }
+            }
+            if (best == 0) return 0;
+            total += best;
+        }
+        return total;
+    }
+
+    private static int editDistance(String first, String second, int limit) {
+        if (Math.abs(first.length() - second.length()) > limit) return limit + 1;
+        int[] previous = new int[second.length() + 1];
+        int[] current = new int[second.length() + 1];
+        for (int j = 0; j <= second.length(); j++) previous[j] = j;
+        for (int i = 1; i <= first.length(); i++) {
+            current[0] = i;
+            int rowMin = current[0];
+            for (int j = 1; j <= second.length(); j++) {
+                int cost = first.charAt(i - 1) == second.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(
+                    Math.min(current[j - 1] + 1, previous[j] + 1),
+                    previous[j - 1] + cost);
+                rowMin = Math.min(rowMin, current[j]);
+            }
+            if (rowMin > limit) return limit + 1;
+            int[] swap = previous;
+            previous = current;
+            current = swap;
+        }
+        return previous[second.length()];
     }
 
     private static int personMatchScore(String name, String needle) {

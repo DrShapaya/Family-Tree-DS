@@ -11,31 +11,51 @@ final class MainActivityPanels {
 
     void showPanel(String panel) {
         activity.activePanel = panel == null ? "" : panel;
-        boolean fullScreenTab = "settings".equals(activity.activePanel)
-            || "people".equals(activity.activePanel);
+        activity.setHeaderActionsDimmed(
+            "more".equals(activity.activePanel)
+                && !(activity.isLandscapeLayout() && activity.focusTree));
+        boolean landscapePeople = activity.isLandscapeLayout()
+            && "people".equals(activity.activePanel);
+        boolean fullScreenTab = "people".equals(activity.activePanel)
+            || (!activity.isLandscapeLayout() && "settings".equals(activity.activePanel));
+        activity.updateLandscapePanelHostVisibility();
+        if (activity.landscapeFullPanelHost != null) {
+            activity.landscapeFullPanelHost.setVisibility(
+                landscapePeople ? View.VISIBLE : View.GONE);
+        }
+        if (activity.stage != null) {
+            activity.stage.setVisibility(landscapePeople ? View.GONE : View.VISIBLE);
+        }
         if (activity.appHeader != null) {
             activity.appHeader.setVisibility(fullScreenTab ? View.GONE : View.VISIBLE);
+        }
+        if (activity.actionOverlay != null) {
+            activity.actionOverlay.setVisibility(fullScreenTab ? View.GONE : View.VISIBLE);
         }
         if (activity.treeView != null) activity.treeView.setVisibility(fullScreenTab ? View.GONE : View.VISIBLE);
         if (activity.zoomRail != null) activity.zoomRail.setVisibility(fullScreenTab ? View.GONE : View.VISIBLE);
         activity.updateAddPersonButtonVisibility();
         activity.refreshLockUi();
         if ("guides".equals(activity.activePanel)) activity.refreshGuidePanelIfVisible();
-        if (activity.cardPanel != null) activity.cardPanel.setVisibility("card".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
-        if (activity.linksPanel != null) activity.linksPanel.setVisibility("links".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
-        if (activity.guidePanel != null) activity.guidePanel.setVisibility("guides".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
-        if (activity.filesPanel != null) activity.filesPanel.setVisibility("files".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
-        if (activity.viewPanel != null) activity.viewPanel.setVisibility("view".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
-        if (activity.branchPanel != null) activity.branchPanel.setVisibility("branch".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
-        if (activity.settingsPanel != null) activity.settingsPanel.setVisibility("settings".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
+        activity.setAdaptivePanelVisibility(activity.cardPanel, "card".equals(activity.activePanel));
+        activity.setAdaptivePanelVisibility(activity.linksPanel, "links".equals(activity.activePanel));
+        activity.setAdaptivePanelVisibility(activity.guidePanel, "guides".equals(activity.activePanel));
+        activity.setAdaptivePanelVisibility(activity.filesPanel, "files".equals(activity.activePanel));
+        activity.setAdaptivePanelVisibility(activity.viewPanel, "view".equals(activity.activePanel));
+        if (activity.landscapeTreePanelCloseButton != null) {
+            activity.landscapeTreePanelCloseButton.setVisibility(
+                "view".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
+        }
+        activity.setAdaptivePanelVisibility(activity.branchPanel, "branch".equals(activity.activePanel));
+        activity.setAdaptivePanelVisibility(activity.settingsPanel, "settings".equals(activity.activePanel));
         if (activity.peoplePanel != null) {
-            activity.peoplePanel.setVisibility("people".equals(activity.activePanel) ? View.VISIBLE : View.GONE);
+            activity.setAdaptivePanelVisibility(activity.peoplePanel, "people".equals(activity.activePanel));
             if ("people".equals(activity.activePanel) && activity.peopleModule != null) activity.peopleModule.refresh();
         }
         if (activity.morePanel != null) {
             boolean moreVisible = "more".equals(activity.activePanel);
-            activity.morePanel.setVisibility(moreVisible ? View.VISIBLE : View.GONE);
-            if (moreVisible) activity.morePanel.bringToFront();
+            activity.setAdaptivePanelVisibility(activity.morePanel, moreVisible);
+            if (moreVisible) activity.bringAdaptivePanelToFront(activity.morePanel);
         }
         activity.styleNav(activity.treeNav, "view".equals(activity.activePanel)
             || "branch".equals(activity.activePanel)
@@ -47,6 +67,7 @@ final class MainActivityPanels {
         activity.styleNav(activity.moreNav, "more".equals(activity.activePanel)
             || "files".equals(activity.activePanel)
             || "settings".equals(activity.activePanel));
+        activity.applyFocusTreeUi();
         activity.updateHistoryPanel();
         activity.updateBranchStatusPanel();
         activity.updateSelectionToolbar();

@@ -279,6 +279,7 @@ final class MainActivityOnline {
     private void retrySync() {
         manager.syncNow(new OnlineTreeManager.Callback<Void>() {
             @Override public void onSuccess(Void result) {
+                AnalyticsReporter.onlineAction("online_sync_completed", activity.state);
                 activity.toast("Синхронизация завершена");
                 renderDashboard();
             }
@@ -445,6 +446,7 @@ final class MainActivityOnline {
         manager.completeBrowserSignIn(callbackUri, new OnlineTreeManager.Callback<String>() {
             @Override public void onSuccess(String login) {
                 progress.dismiss();
+                AnalyticsReporter.event("github_sign_in_completed", "method", "browser");
                 activity.toast("GitHub подключён: @" + login);
                 openDashboard();
                 if (!openPendingInvitation()) discoverOnlineTrees(true);
@@ -493,6 +495,7 @@ final class MainActivityOnline {
                 progress.dismiss();
                 if (loginCodeDialog != null) loginCodeDialog.dismiss();
                 loginCodeDialog = null;
+                AnalyticsReporter.event("github_sign_in_completed", "method", "device_code");
                 activity.toast("Выполнен вход: @" + login);
                 renderDashboard();
                 if (!openPendingInvitation()) discoverOnlineTrees(true);
@@ -564,6 +567,7 @@ final class MainActivityOnline {
                     new OnlineTreeManager.Callback<String>() {
                         @Override public void onSuccess(String key) {
                             progress.dismiss();
+                            AnalyticsReporter.onlineAction("online_tree_created", activity.state);
                             activity.toast("Онлайн-дерево создано");
                             renderDashboard();
                         }
@@ -621,6 +625,7 @@ final class MainActivityOnline {
                     manager.joinTree(key, new OnlineTreeManager.Callback<Void>() {
                         @Override public void onSuccess(Void result) {
                             progress.dismiss();
+                            AnalyticsReporter.onlineAction("online_tree_joined", activity.state);
                             activity.toast("Дерево подключено");
                             renderDashboard();
                         }
@@ -755,6 +760,7 @@ final class MainActivityOnline {
         manager.restoreOnlineTree(tree, new OnlineTreeManager.Callback<Void>() {
             @Override public void onSuccess(Void result) {
                 progress.dismiss();
+                AnalyticsReporter.onlineAction("online_tree_restored", activity.state);
                 activity.toast("Онлайн-дерево загружено");
                 renderDashboard();
             }
@@ -839,6 +845,7 @@ final class MainActivityOnline {
             @Override public void onSuccess(Void result) {
                 progress.dismiss();
                 if (listDialog != null) listDialog.dismiss();
+                AnalyticsReporter.onlineAction("online_backup_restored", activity.state);
                 activity.toast("Онлайн-бэкап восстановлен");
                 renderDashboard();
             }

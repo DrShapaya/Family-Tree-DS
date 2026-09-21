@@ -5,14 +5,18 @@ import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ContentValues;
 import android.content.Intent;
-import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.pdf.PdfDocument;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.ClipDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.util.Base64;
@@ -22,6 +26,9 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -69,18 +76,47 @@ final class MainActivityFiles {
         "Для больших экранов и печати",
         "Предельная детализация, файл будет большим"
     };
+    private static final float[] PNG_FONT_SCALES = {0.92f, 0.96f, 1.00f, 1.06f, 1.10f};
 
     private final MainActivity activity;
     private String pendingPdfPage = "A4";
     private boolean pendingPdfLandscape = true;
     private int pendingPdfScale = 100;
     private boolean pendingPdfMonochrome = false;
+    private String pendingPdfFrame = RewardCatalog.STANDARD;
     private int pendingPngQuality = 2;
-    private int pendingTileDetail = 4;
-    private int pendingTileSize = 2048;
+    private TreeImageExport pendingImageExport;
+    private Dialog pngDialog;
+    private Dialog exportMenuDialog;
+    private Dialog pdfDialog;
+    private boolean pendingPdfFit = true;
+
+    private static final class ExportStyleChoice {
+        final String id;
+        final String title;
+        final int price;
+        final boolean owned;
+
+        ExportStyleChoice(String id, String title, int price, boolean owned) {
+            this.id = id;
+            this.title = title;
+            this.price = price;
+            this.owned = owned;
+        }
+    }
 
     MainActivityFiles(MainActivity activity) {
         this.activity = activity;
+    }
+
+    void close() {
+        if (exportMenuDialog != null) exportMenuDialog.dismiss();
+        if (pdfDialog != null) pdfDialog.dismiss();
+        if (pngDialog != null) pngDialog.dismiss();
+        if (pendingImageExport != null) {
+            pendingImageExport.close();
+            pendingImageExport = null;
+        }
     }
 
     void openImport() {
@@ -100,6 +136,10 @@ final class MainActivityFiles {
 
     void showExportMenu() {
         Dialog dialog = new Dialog(activity);
+        exportMenuDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (exportMenuDialog == dialog) exportMenuDialog = null;
+        });
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout shell = new LinearLayout(activity);
         shell.setOrientation(LinearLayout.VERTICAL);
@@ -111,13 +151,19 @@ final class MainActivityFiles {
 
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = versionText("Экспорт дерева", 20, Color.rgb(28, 34, 38), true);
+        TextView title = versionText("Экспорт дерева", 21, Color.rgb(28, 34, 38), true);
         header.addView(title, new LinearLayout.LayoutParams(0, activity.dp(48), 1));
         Button close = activity.actionButton("Закрыть", v -> dialog.dismiss());
         header.addView(close, new LinearLayout.LayoutParams(activity.dp(90), activity.dp(42)));
         shell.addView(header);
 
-        shell.addView(exportCaption("ДЛЯ ПЕРЕНОСА"));
+        TextView intro = versionText(
+            "Выберите формат файла или откройте точные настройки печати.",
+            11, Color.rgb(83, 94, 103), false);
+        intro.setPadding(activity.dp(4), 0, activity.dp(4), activity.dp(6));
+        shell.addView(intro);
+
+        shell.addView(exportCaption("Резервная копия"));
         shell.addView(exportOption(
             "Family Tree DS (.ftree)",
             "Полная копия с фото и вложениями",
@@ -129,52 +175,30 @@ final class MainActivityFiles {
                     "family-tree-" + dateStamp() + ".ftree");
             }));
 
-        shell.addView(exportCaption("ОБМЕН ДАННЫМИ"));
-        shell.addView(exportOption(
-            "JSON",
-            "Структура дерева без бинарных файлов",
-            () -> {
-                dialog.dismiss();
-                openExport(
-                    MainActivity.REQ_EXPORT_JSON,
-                    "application/json",
-                    "family-tree-" + dateStamp() + ".json");
-            }));
-        shell.addView(exportOption(
-            "GEDCOM",
-            "Для других генеалогических программ",
-            () -> {
-                dialog.dismiss();
-                openExport(
-                    MainActivity.REQ_EXPORT_GEDCOM,
-                    "text/plain",
-                    "family-tree-" + dateStamp() + ".ged");
-            }));
+        shell.addView(exportCaption("Форматы экспорта"));
+        LinearLayout advanced = new LinearLayout(activity);
+        advanced.setOrientation(LinearLayout.VERTICAL);
+        advanced.setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(3));
+        advanced.setBackground(activity.panelBg(
+            Color.rgb(243, 248, 248), activity.dp(12), Color.rgb(205, 226, 224)));
+        advanced.addView(exportOption("JSON", "Структура дерева без фото и вложений", () -> {
+            dialog.dismiss();
+            openExport(MainActivity.REQ_EXPORT_JSON, "application/json", "family-tree-" + dateStamp() + ".json");
+        }));
+        advanced.addView(exportOption("GEDCOM", "Для других генеалогических программ", () -> {
+            dialog.dismiss();
+            openExport(MainActivity.REQ_EXPORT_GEDCOM, "text/plain", "family-tree-" + dateStamp() + ".ged");
+        }));
+        advanced.addView(exportOption("PDF", "Дерево целиком на странице или печать по листам", () -> {
+            dialog.dismiss();
+            showPdfSettings();
+        }));
+        shell.addView(advanced);
 
-        shell.addView(exportCaption("ИЗОБРАЖЕНИЕ И ПЕЧАТЬ"));
-        shell.addView(exportOption(
-            "PNG для просмотра",
-            "Одно изображение безопасного размера",
-            () -> {
-                dialog.dismiss();
-                showPngSettings();
-            }));
-        shell.addView(exportOption(
-            "PDF для печати",
-            "Постраничный A4/A3 с векторным текстом и линиями",
-            () -> {
-                dialog.dismiss();
-                showPdfSettings();
-            }));
-        shell.addView(exportOption(
-            "PNG по частям",
-            "Высокое разрешение, безопасные тайлы внутри ZIP",
-            () -> {
-                dialog.dismiss();
-                showTileSettings();
-            }));
-
-        dialog.setContentView(shell);
+        ScrollView menuScroll = new ScrollView(activity);
+        menuScroll.setFillViewport(true);
+        menuScroll.addView(shell);
+        dialog.setContentView(menuScroll);
         dialog.setCanceledOnTouchOutside(true);
         dialog.show();
         Window window = dialog.getWindow();
@@ -193,23 +217,38 @@ final class MainActivityFiles {
     }
 
     private TextView exportCaption(String value) {
-        TextView caption = versionText(value, 10, Color.rgb(8, 122, 115), true);
-        caption.setPadding(activity.dp(4), activity.dp(14), activity.dp(4), activity.dp(6));
+        TextView caption = versionText(value, 11, Color.rgb(8, 122, 115), true);
+        caption.setPadding(activity.dp(4), activity.dp(13), activity.dp(4), activity.dp(7));
         return caption;
     }
 
     private View exportOption(String title, String detail, Runnable action) {
         LinearLayout row = new LinearLayout(activity);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(activity.dp(13), activity.dp(10), activity.dp(13), activity.dp(10));
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(activity.dp(10), activity.dp(9), activity.dp(10), activity.dp(9));
         row.setBackground(activity.panelBg(
             Color.WHITE,
-            activity.dp(10),
+            activity.dp(12),
             Color.rgb(217, 224, 229)));
-        TextView name = versionText(title + "  ›", 14, Color.rgb(28, 34, 38), true);
+
+        String badgeText = title.startsWith("Family") ? "FT" : title.replaceAll("[^A-Za-z]", "");
+        if (badgeText.length() > 4) badgeText = badgeText.substring(0, 4);
+        TextView badge = versionText(badgeText, badgeText.length() > 3 ? 9 : 11, Color.WHITE, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setBackground(activity.tealGradientBg(activity.dp(11)));
+        row.addView(badge, new LinearLayout.LayoutParams(activity.dp(46), activity.dp(46)));
+
+        LinearLayout copy = new LinearLayout(activity);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(activity.dp(11), 0, activity.dp(8), 0);
+        TextView name = versionText(title, 14, Color.rgb(28, 34, 38), true);
         TextView description = versionText(detail, 11, Color.rgb(83, 94, 103), false);
-        row.addView(name, new LinearLayout.LayoutParams(-1, activity.dp(25)));
-        row.addView(description, new LinearLayout.LayoutParams(-1, activity.dp(22)));
+        copy.addView(name, new LinearLayout.LayoutParams(-1, -2));
+        copy.addView(description, new LinearLayout.LayoutParams(-1, -2));
+        row.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView arrow = versionText("›", 28, Color.rgb(8, 122, 115), false);
+        arrow.setGravity(Gravity.CENTER);
+        row.addView(arrow, new LinearLayout.LayoutParams(activity.dp(28), activity.dp(46)));
         row.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, 0, 0, activity.dp(7));
@@ -219,12 +258,37 @@ final class MainActivityFiles {
 
     private void showPdfSettings() {
         Dialog dialog = settingsDialog("PDF для печати");
+        pdfDialog = dialog;
+        dialog.setOnDismissListener(ignored -> {
+            if (pdfDialog == dialog) pdfDialog = null;
+        });
         LinearLayout shell = settingsShell(dialog);
         if (shell == null) return;
+        RewardWallet wallet = new RewardWallet(activity);
+        pendingPdfFrame = wallet.selected(RewardCatalog.EXPORT_FRAMES);
+        TextView summary = versionText("", 12, Color.rgb(55, 77, 82), false);
+        summary.setPadding(activity.dp(12), activity.dp(10), activity.dp(12), activity.dp(10));
+        summary.setBackground(activity.panelBg(
+            Color.rgb(235, 248, 246), activity.dp(10), Color.rgb(183, 224, 217)));
+        Runnable updatePdf = () -> {
+            if (pendingPdfFit) summary.setText("1 страница · дерево целиком, без обрезки. Для большого дерева текст можно увеличить в PDF.");
+            else {
+                TreeDocumentRenderer renderer = new TreeDocumentRenderer(activity, activity.state, activity.store.mediaStore());
+                RectF bounds = renderer.bounds();
+                renderer.clear();
+                float w = "A3".equals(pendingPdfPage) ? 842 : 595;
+                float h = "A3".equals(pendingPdfPage) ? 1191 : 842;
+                float scaleValue = 0.55f * pendingPdfScale / 100f;
+                int cols = Math.max(1, (int) Math.ceil(bounds.width() * scaleValue / ((pendingPdfLandscape ? h : w) - 56)));
+                int rows = Math.max(1, (int) Math.ceil(bounds.height() * scaleValue / ((pendingPdfLandscape ? w : h) - 74)));
+                summary.setText(cols + " × " + rows + " листов · " + ((long) cols * rows) + " страниц");
+            }
+        };
         Button page = settingButton("Формат: " + pendingPdfPage);
         page.setOnClickListener(v -> {
             pendingPdfPage = "A4".equals(pendingPdfPage) ? "A3" : "A4";
             page.setText("Формат: " + pendingPdfPage);
+            updatePdf.run();
         });
         Button orientation = settingButton(
             "Ориентация: " + (pendingPdfLandscape ? "альбомная" : "книжная"));
@@ -232,11 +296,21 @@ final class MainActivityFiles {
             pendingPdfLandscape = !pendingPdfLandscape;
             orientation.setText(
                 "Ориентация: " + (pendingPdfLandscape ? "альбомная" : "книжная"));
+            updatePdf.run();
         });
         Button scale = settingButton("Масштаб: " + pendingPdfScale + "%");
         scale.setOnClickListener(v -> {
-            pendingPdfScale = pendingPdfScale == 75 ? 100 : pendingPdfScale == 100 ? 125 : 75;
+            pendingPdfScale = pendingPdfScale >= 100 ? 25 : pendingPdfScale + 25;
             scale.setText("Масштаб: " + pendingPdfScale + "%");
+            updatePdf.run();
+        });
+        scale.setVisibility(pendingPdfFit ? View.GONE : View.VISIBLE);
+        Button fit = settingButton(pendingPdfFit ? "Размещение: целиком на странице" : "Размещение: по листам");
+        fit.setOnClickListener(v -> {
+            pendingPdfFit = !pendingPdfFit;
+            fit.setText(pendingPdfFit ? "Размещение: целиком на странице" : "Размещение: по листам");
+            scale.setVisibility(pendingPdfFit ? View.GONE : View.VISIBLE);
+            updatePdf.run();
         });
         Button color = settingButton(
             "Режим: " + (pendingPdfMonochrome ? "экономичный" : "цветной"));
@@ -244,10 +318,17 @@ final class MainActivityFiles {
             pendingPdfMonochrome = !pendingPdfMonochrome;
             color.setText("Режим: " + (pendingPdfMonochrome ? "экономичный" : "цветной"));
         });
+        shell.addView(exportCaption("Страница"));
         shell.addView(page);
         shell.addView(orientation);
+        shell.addView(exportCaption("Размещение"));
+        shell.addView(fit);
         shell.addView(scale);
+        shell.addView(exportCaption("Оформление"));
         shell.addView(color);
+        shell.addView(exportFrameButton(wallet, () -> pendingPdfFrame, value -> pendingPdfFrame = value, null));
+        shell.addView(summary);
+        updatePdf.run();
         Button save = activity.actionButton("Сохранить PDF", v -> {
             dialog.dismiss();
             openExport(
@@ -255,6 +336,8 @@ final class MainActivityFiles {
                 "application/pdf",
                 "family-tree-" + dateStamp() + ".pdf");
         });
+        save.setTextColor(Color.WHITE);
+        save.setBackground(activity.tealGradientBg(activity.dp(11)));
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, activity.dp(48));
         saveParams.setMargins(0, activity.dp(12), 0, 0);
         shell.addView(save, saveParams);
@@ -262,157 +345,622 @@ final class MainActivityFiles {
         configureSettingsDialog(dialog);
     }
 
-    private void showPngSettings() {
-        Dialog dialog = settingsDialog("PNG для просмотра");
+    void showPngSettings() {
+        if (pngDialog != null) pngDialog.dismiss();
+        if (activity.state.people.isEmpty()) {
+            activity.toast("Добавьте людей в дерево перед экспортом");
+            return;
+        }
+        TreeImageExport export = new TreeImageExport(activity);
+        Dialog dialog = settingsDialog("Экспорт PNG");
+        LinearLayout shell = settingsShell(dialog);
+        if (shell == null) { export.close(); return; }
+        pngDialog = dialog;
+        ExportPreviewView preview = new ExportPreviewView(activity, export);
+        int previewHeight = Math.min(
+            activity.dp(315),
+            Math.round(activity.getResources().getDisplayMetrics().heightPixels * 0.3375f));
+        shell.addView(preview, new LinearLayout.LayoutParams(-1, previewHeight));
+        ScrollView scroll = new ScrollView(activity);
+        scroll.setClipToPadding(false);
+        scroll.setPadding(0, activity.dp(7), 0, 0);
+        LinearLayout controls = new LinearLayout(activity);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(controls);
+        TextView hint = versionText("Двумя пальцами — масштаб и перемещение предпросмотра.",
+            11, Color.rgb(83, 94, 103), false);
+        hint.setPadding(activity.dp(4), activity.dp(7), activity.dp(4), activity.dp(7));
+        controls.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+        TextView resolution = versionText("", 11, Color.rgb(8, 122, 115), true);
+        resolution.setPadding(
+            activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(8));
+        resolution.setMaxLines(3);
+        resolution.setGravity(Gravity.CENTER_VERTICAL);
+        resolution.setBackground(activity.panelBg(
+            Color.rgb(239, 249, 248), activity.dp(9), Color.rgb(194, 226, 222)));
+        Button reset = settingButton("Область изображения\nВсё дерево");
+        reset.setTextSize(11);
+        reset.setGravity(Gravity.CENTER);
+        reset.setPadding(activity.dp(8), 0, activity.dp(8), 0);
+        LinearLayout overview = new LinearLayout(activity);
+        overview.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams resolutionParams = new LinearLayout.LayoutParams(0, activity.dp(72), 1.45f);
+        resolutionParams.setMargins(0, activity.dp(8), activity.dp(6), activity.dp(8));
+        overview.addView(resolution, resolutionParams);
+        LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(0, activity.dp(72), 1f);
+        resetParams.setMargins(activity.dp(6), activity.dp(8), 0, activity.dp(8));
+        overview.addView(reset, resetParams);
+        controls.addView(overview, new LinearLayout.LayoutParams(-1, activity.dp(88)));
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        Button save = activity.actionButton("Сохранить PNG", null);
+        save.setTextColor(Color.WHITE);
+        save.setBackground(activity.tealGradientBg(activity.dp(11)));
+        shell.addView(save, new LinearLayout.LayoutParams(-1, activity.dp(48)));
+        TextView cuts = versionText("", 12, Color.rgb(55, 77, 82), false);
+        Runnable update = () -> {
+            int q = pendingPngQuality;
+            ExportLayout layout = export.layout(PNG_QUALITY_SCALES[q], PNG_QUALITY_MAX_PIXELS[q]);
+            boolean split = layout.columns * layout.rows > 1;
+            int partCount = layout.columns * layout.rows;
+            resolution.setText("Разрешение: " + formatPixels(layout.width) + " × "
+                + formatPixels(layout.height) + " px\n"
+                + "Частей: " + partCount + "\n"
+                + "≈ " + formatBytes(estimatePngBytes(layout, export, split)));
+            reset.setText("Область изображения\n" + (sameRect(export.crop, export.extent)
+                ? "Всё дерево"
+                : "Выбранная область"));
+            cuts.setText("Разрезы:\nПо вертикали — " + export.verticalCuts
+                + "\nПо горизонтали — " + export.horizontalCuts
+                + "\n" + layout.columns + " × " + layout.rows + " частей"
+                + (split ? "\nСохранение: ZIP" : "\nСохранение: один PNG"));
+            save.setText(split ? "Сохранить части PNG в ZIP" : "Сохранить PNG");
+            preview.invalidate();
+        };
+        Runnable refresh = () -> {
+            int q = pendingPngQuality;
+            try {
+                preview.refresh(PNG_QUALITY_SCALES[q], PNG_QUALITY_MAX_PIXELS[q]);
+                save.setEnabled(true);
+                update.run();
+            }
+            catch (RuntimeException | OutOfMemoryError error) {
+                save.setEnabled(false);
+                activity.toast("Не удалось обновить предпросмотр. Уменьшите объём дерева.");
+                DiagnosticsLogger.handled(activity, "export.preview", error);
+            }
+        };
+        preview.setOnCropChanged(update);
+        reset.setOnClickListener(v -> { export.resetCrop(); update.run(); });
+        controls.addView(exportCaption("Качество"));
+        TextView quality = versionText(
+            PNG_QUALITY_NAMES[pendingPngQuality] + " · " + PNG_QUALITY_HINTS[pendingPngQuality],
+            13, Color.rgb(28, 34, 38), true);
+        quality.setPadding(activity.dp(4), activity.dp(4), activity.dp(4), 0);
+        controls.addView(quality);
+        SeekBar qualitySlider = new SeekBar(activity);
+        qualitySlider.setMax(PNG_QUALITY_NAMES.length - 1);
+        qualitySlider.setProgress(pendingPngQuality);
+        qualitySlider.setContentDescription("Качество PNG");
+        qualitySlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar bar, int progress, boolean user) {
+                pendingPngQuality = progress;
+                quality.setText(PNG_QUALITY_NAMES[progress] + " · " + PNG_QUALITY_HINTS[progress]);
+                update.run();
+                preview.removeCallbacks(refresh);
+                preview.postDelayed(refresh, 120);
+            }
+            public void onStartTrackingTouch(SeekBar bar) {}
+            public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        styleExportSlider(qualitySlider);
+        controls.addView(magnetSlider(qualitySlider), new LinearLayout.LayoutParams(-1, activity.dp(44)));
+
+        TextView font = versionText("Размер шрифта: " + Math.round(export.fontScale * 100) + "%", 13, Color.rgb(28, 34, 38), false);
+        font.setPadding(activity.dp(4), activity.dp(4), activity.dp(4), 0);
+        controls.addView(font);
+        SeekBar fontSlider = new SeekBar(activity);
+        fontSlider.setMax(PNG_FONT_SCALES.length - 1);
+        fontSlider.setProgress(nearestFontScaleIndex(export.fontScale));
+        fontSlider.setContentDescription("Размер шрифта от 92 до 110 процентов");
+        Runnable fontRefresh = refresh;
+        fontSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar bar, int progress, boolean user) {
+                export.fontScale = PNG_FONT_SCALES[progress];
+                font.setText("Размер шрифта: " + Math.round(export.fontScale * 100) + "%");
+                preview.removeCallbacks(fontRefresh);
+                preview.postDelayed(fontRefresh, 120);
+            }
+            public void onStartTrackingTouch(SeekBar bar) {}
+            public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        styleExportSlider(fontSlider);
+        controls.addView(magnetSlider(fontSlider), new LinearLayout.LayoutParams(-1, activity.dp(44)));
+
+        controls.addView(exportCaption("Разрезы"));
+        LinearLayout cutRow = new LinearLayout(activity);
+        cutRow.setGravity(Gravity.CENTER_VERTICAL);
+        ExportCutGrid cutGrid = new ExportCutGrid(activity, export, update);
+        cutRow.addView(cutGrid, new LinearLayout.LayoutParams(activity.dp(174), activity.dp(116)));
+        cuts.setPadding(activity.dp(16), 0, 0, 0);
+        cuts.setTextSize(12);
+        cuts.setTextColor(Color.rgb(55, 77, 82));
+        cutRow.addView(cuts, new LinearLayout.LayoutParams(0, -2, 1));
+        controls.addView(cutRow);
+        RewardWallet wallet = new RewardWallet(activity);
+        controls.addView(exportStyleStrip(
+            "Фон PNG", backgroundChoices(wallet),
+            () -> export.background, value -> export.background = value, refresh));
+        LinearLayout toggleGrid = new LinearLayout(activity);
+        toggleGrid.setOrientation(LinearLayout.VERTICAL);
+        addExportToggleRow(toggleGrid,
+            exportToggle("Сетка", export.grid, value -> { export.grid = value; refresh.run(); }),
+            exportToggle("Линии поколений", export.generations, value -> { export.generations = value; refresh.run(); }));
+        addExportToggleRow(toggleGrid,
+            exportToggle("Компактные карточки", export.compact, value -> { export.compact = value; refresh.run(); }),
+            exportToggle("Ровные линии", export.straight, value -> { export.straight = value; refresh.run(); }));
+        addExportToggleRow(toggleGrid,
+            exportToggle("Детали карточек", export.details, value -> { export.details = value; refresh.run(); }),
+            null);
+        controls.addView(toggleGrid, new LinearLayout.LayoutParams(-1, -2));
+        controls.addView(exportStyleStrip(
+            "Рамка PNG/PDF", frameChoices(wallet),
+            () -> export.frame, value -> export.frame = value, refresh));
+        boolean[] saving = {false};
+        save.setOnClickListener(v -> {
+            preview.removeCallbacks(fontRefresh);
+            export.apply();
+            if (pendingImageExport != null) pendingImageExport.close();
+            pendingImageExport = export;
+            boolean split = export.verticalCuts + export.horizontalCuts > 0;
+            try {
+                openExport(split ? MainActivity.REQ_EXPORT_TILES : MainActivity.REQ_EXPORT_PNG,
+                    split ? "application/zip" : "image/png", "family-tree-" + dateStamp() + (split ? ".zip" : ".png"));
+                saving[0] = true;
+                dialog.dismiss();
+            } catch (RuntimeException error) {
+                pendingImageExport = null;
+                activity.toast("Не удалось открыть выбор файла");
+            }
+        });
+        dialog.setOnDismissListener(ignored -> {
+            if (pngDialog == dialog) pngDialog = null;
+            preview.removeCallbacks(fontRefresh);
+            preview.release();
+            if (!saving[0]) export.close();
+        });
+        dialog.show();
+        configureSettingsDialog(dialog);
+        android.graphics.Rect available = new android.graphics.Rect();
+        activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(available);
+        if (dialog.getWindow() != null) dialog.getWindow().setLayout(
+            Math.min(activity.getResources().getDisplayMetrics().widthPixels - activity.dp(12), activity.dp(720)),
+            Math.max(1, available.height() - activity.dp(32)));
+        preview.post(refresh);
+    }
+
+    private List<ExportStyleChoice> backgroundChoices(RewardWallet wallet) {
+        List<ExportStyleChoice> choices = new ArrayList<>();
+        choices.add(new ExportStyleChoice("white", "Белый", 0, true));
+        choices.add(new ExportStyleChoice(
+            RewardCatalog.STANDARD, "Стандартное полотно", 0, true));
+        for (RewardCatalog.Item item : RewardCatalog.itemsFor(RewardCatalog.CANVAS_BACKGROUNDS)) {
+            choices.add(new ExportStyleChoice(item.id, item.title, item.price, wallet.owns(item.id)));
+        }
+        return choices;
+    }
+
+    private List<ExportStyleChoice> frameChoices(RewardWallet wallet) {
+        List<ExportStyleChoice> choices = new ArrayList<>();
+        choices.add(new ExportStyleChoice(RewardCatalog.STANDARD, "Без рамки", 0, true));
+        for (RewardCatalog.Item item : RewardCatalog.itemsFor(RewardCatalog.EXPORT_FRAMES)) {
+            choices.add(new ExportStyleChoice(item.id, item.title, item.price, wallet.owns(item.id)));
+        }
+        return choices;
+    }
+
+    private View exportStyleStrip(
+        String title,
+        List<ExportStyleChoice> choices,
+        java.util.function.Supplier<String> selected,
+        java.util.function.Consumer<String> changed,
+        Runnable refreshed
+    ) {
+        LinearLayout section = new LinearLayout(activity);
+        section.setOrientation(LinearLayout.VERTICAL);
+        TextView caption = exportCaption(title);
+        section.addView(caption, new LinearLayout.LayoutParams(-1, activity.dp(38)));
+
+        HorizontalScrollView scroll = new HorizontalScrollView(activity);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setClipToPadding(false);
+        LinearLayout cards = new LinearLayout(activity);
+        cards.setPadding(activity.dp(2), 0, activity.dp(2), activity.dp(5));
+        List<View> cardViews = new ArrayList<>();
+        for (ExportStyleChoice choice : choices) {
+            LinearLayout card = new LinearLayout(activity);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setPadding(activity.dp(10), activity.dp(8), activity.dp(10), activity.dp(7));
+            card.setContentDescription(choice.title);
+            TextView name = versionText(choice.title, 11, Color.rgb(28, 34, 38), true);
+            name.setMaxLines(2);
+            name.setGravity(Gravity.CENTER_VERTICAL);
+            card.addView(name, new LinearLayout.LayoutParams(-1, 0, 1));
+            TextView state = versionText("", 9, Color.rgb(83, 94, 103), false);
+            state.setMaxLines(1);
+            state.setGravity(Gravity.CENTER_VERTICAL);
+            card.addView(state, new LinearLayout.LayoutParams(-1, activity.dp(20)));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(activity.dp(148), activity.dp(78));
+            params.setMargins(0, 0, activity.dp(8), 0);
+            cards.addView(card, params);
+            cardViews.add(card);
+            card.setOnClickListener(v -> {
+                if (!choice.owned) {
+                    showWorkshopUnlockPrompt(choice.title, choice.price);
+                    return;
+                }
+                changed.accept(choice.id);
+                if (refreshed != null) refreshed.run();
+                for (int i = 0; i < choices.size(); i++) {
+                    styleExportChoice(cardViews.get(i), choices.get(i), selected.get());
+                }
+            });
+            card.setTag(state);
+        }
+        scroll.addView(cards, new HorizontalScrollView.LayoutParams(-2, activity.dp(83)));
+        section.addView(scroll, new LinearLayout.LayoutParams(-1, activity.dp(88)));
+        for (int i = 0; i < choices.size(); i++) {
+            styleExportChoice(cardViews.get(i), choices.get(i), selected.get());
+        }
+        return section;
+    }
+
+    private void styleExportChoice(View view, ExportStyleChoice choice, String selectedId) {
+        if (!(view instanceof ViewGroup)) return;
+        boolean current = choice.id.equals(selectedId);
+        int fill;
+        int stroke;
+        if (current) {
+            fill = Color.rgb(232, 248, 246);
+            stroke = Color.rgb(24, 169, 153);
+        } else if (choice.owned) {
+            fill = Color.WHITE;
+            stroke = Color.rgb(211, 224, 227);
+        } else {
+            fill = Color.rgb(248, 244, 252);
+            stroke = Color.rgb(215, 191, 232);
+        }
+        view.setBackground(activity.panelBg(fill, activity.dp(12), stroke));
+        View stateView = view.getTag() instanceof View ? (View) view.getTag() : null;
+        if (stateView instanceof TextView) {
+            TextView state = (TextView) stateView;
+            state.setText(current
+                ? "✓ Выбрано"
+                : choice.owned ? "Открыто" : "🔒 " + choice.price + " жет.");
+            state.setTextColor(current
+                ? Color.rgb(8, 122, 115)
+                : choice.owned ? Color.rgb(83, 94, 103) : Color.rgb(122, 66, 158));
+        }
+    }
+
+    private void showWorkshopUnlockPrompt(String title, int price) {
+        Dialog dialog = settingsDialog("Оформление закрыто");
+        LinearLayout shell = settingsShell(dialog);
+        if (shell == null) return;
+        LinearLayout message = new LinearLayout(activity);
+        message.setOrientation(LinearLayout.VERTICAL);
+        message.setGravity(Gravity.CENTER);
+        message.setPadding(activity.dp(18), activity.dp(16), activity.dp(18), activity.dp(16));
+        message.setBackground(activity.softAccentGradientBg(activity.dp(16)));
+        LinearLayout titleRow = new LinearLayout(activity);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER);
+        ImageView lock = new ImageView(activity);
+        lock.setImageResource(R.drawable.ic_menu_lock);
+        lock.setColorFilter(Color.rgb(122, 66, 158));
+        lock.setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6));
+        titleRow.addView(lock, new LinearLayout.LayoutParams(activity.dp(34), activity.dp(34)));
+        TextView name = versionText("«" + title + "»", 16, Color.rgb(48, 35, 70), true);
+        name.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-2, activity.dp(34));
+        nameParams.setMargins(activity.dp(6), 0, 0, 0);
+        titleRow.addView(name, nameParams);
+        message.addView(titleRow, new LinearLayout.LayoutParams(-1, activity.dp(38)));
+        TextView explanation = versionText(
+            "Эта рамка доступна в Мастерской за " + price + " жетонов.",
+            12, Color.rgb(83, 72, 101), false);
+        explanation.setGravity(Gravity.CENTER);
+        explanation.setPadding(activity.dp(4), 0, activity.dp(4), 0);
+        message.addView(explanation, new LinearLayout.LayoutParams(-1, activity.dp(42)));
+        LinearLayout.LayoutParams messageParams = new LinearLayout.LayoutParams(-1, activity.dp(104));
+        messageParams.setMargins(0, activity.dp(6), 0, activity.dp(12));
+        shell.addView(message, messageParams);
+
+        LinearLayout actions = new LinearLayout(activity);
+        Button later = activity.actionButton("Позже", v -> dialog.dismiss());
+        LinearLayout.LayoutParams laterParams = new LinearLayout.LayoutParams(0, activity.dp(48), 1);
+        laterParams.setMargins(0, 0, activity.dp(5), 0);
+        actions.addView(later, laterParams);
+        Button workshop = activity.actionButton("В мастерскую", v -> {
+            dialog.dismiss();
+            if (pngDialog != null) pngDialog.dismiss();
+            activity.openWorkshop();
+        });
+        workshop.setTextColor(Color.WHITE);
+        workshop.setBackground(activity.tealGradientBg(activity.dp(12)));
+        LinearLayout.LayoutParams workshopParams = new LinearLayout.LayoutParams(0, activity.dp(48), 1.25f);
+        workshopParams.setMargins(activity.dp(5), 0, 0, 0);
+        actions.addView(workshop, workshopParams);
+        shell.addView(actions, new LinearLayout.LayoutParams(-1, activity.dp(48)));
+        dialog.show();
+        configureSettingsDialog(dialog);
+    }
+
+    private void styleExportSlider(SeekBar slider) {
+        slider.setPadding(activity.dp(18), activity.dp(7), activity.dp(18), activity.dp(7));
+        slider.setSplitTrack(false);
+        GradientDrawable track = new GradientDrawable();
+        track.setColor(Color.rgb(221, 235, 234));
+        track.setCornerRadius(activity.dp(99));
+        track.setSize(-1, activity.dp(18));
+        GradientDrawable progress = new GradientDrawable(
+            GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{Color.rgb(8, 132, 122), Color.rgb(91, 70, 194)});
+        progress.setCornerRadius(activity.dp(99));
+        progress.setSize(-1, activity.dp(18));
+        LayerDrawable drawable = new LayerDrawable(new Drawable[]{
+            track,
+            new ClipDrawable(progress, Gravity.LEFT, ClipDrawable.HORIZONTAL),
+            new MagnetDotsDrawable()
+        });
+        drawable.setId(0, android.R.id.background);
+        drawable.setId(1, android.R.id.progress);
+        drawable.setLayerGravity(0, Gravity.CENTER_VERTICAL);
+        drawable.setLayerGravity(1, Gravity.CENTER_VERTICAL);
+        drawable.setLayerGravity(2, Gravity.CENTER_VERTICAL);
+        drawable.setLayerHeight(0, activity.dp(18));
+        drawable.setLayerHeight(1, activity.dp(18));
+        drawable.setLayerHeight(2, activity.dp(18));
+        slider.setProgressDrawable(drawable);
+        GradientDrawable thumb = new GradientDrawable();
+        thumb.setShape(GradientDrawable.OVAL);
+        thumb.setColor(Color.WHITE);
+        thumb.setStroke(activity.dp(2), Color.rgb(8, 132, 122));
+        thumb.setSize(activity.dp(22), activity.dp(22));
+        slider.setThumb(thumb);
+        slider.setThumbOffset(activity.dp(11));
+    }
+
+    private FrameLayout magnetSlider(SeekBar slider) {
+        FrameLayout frame = new FrameLayout(activity);
+        frame.addView(slider, new FrameLayout.LayoutParams(-1, -1));
+        return frame;
+    }
+
+    private final class MagnetDotsDrawable extends Drawable {
+        private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+        @Override public void draw(Canvas canvas) {
+            android.graphics.Rect bounds = getBounds();
+            float radius = activity.dp(3);
+            float left = bounds.left + radius;
+            float width = Math.max(1f, bounds.width() - radius * 2f);
+            float y = bounds.exactCenterY();
+            for (int i = 0; i < 5; i++) {
+                float x = left + width * i / 4f;
+                dotPaint.setStyle(Paint.Style.FILL);
+                dotPaint.setColor(Color.rgb(250, 252, 253));
+                canvas.drawCircle(x, y, radius, dotPaint);
+                dotPaint.setStyle(Paint.Style.STROKE);
+                dotPaint.setStrokeWidth(activity.dp(1));
+                dotPaint.setColor(Color.rgb(91, 70, 194));
+                canvas.drawCircle(x, y, radius, dotPaint);
+            }
+        }
+
+        @Override public void setAlpha(int alpha) { dotPaint.setAlpha(alpha); }
+        @Override public void setColorFilter(android.graphics.ColorFilter colorFilter) {
+            dotPaint.setColorFilter(colorFilter);
+        }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
+    private static int nearestFontScaleIndex(float scale) {
+        int nearest = 0;
+        float distance = Float.MAX_VALUE;
+        for (int i = 0; i < PNG_FONT_SCALES.length; i++) {
+            float next = Math.abs(PNG_FONT_SCALES[i] - scale);
+            if (next < distance) { nearest = i; distance = next; }
+        }
+        return nearest;
+    }
+
+    private static boolean sameRect(RectF first, RectF second) {
+        return Math.abs(first.left - second.left) < 0.5f
+            && Math.abs(first.top - second.top) < 0.5f
+            && Math.abs(first.right - second.right) < 0.5f
+            && Math.abs(first.bottom - second.bottom) < 0.5f;
+    }
+
+    private static long estimatePngBytes(ExportLayout layout, TreeImageExport export, boolean split) {
+        long pixels = Math.max(1L, (long) layout.width * layout.height);
+        double bytesPerPixel = 0.42d;
+        if (!"white".equals(export.background)) bytesPerPixel += 0.22d;
+        if (export.grid) bytesPerPixel += 0.10d;
+        if (!RewardCatalog.STANDARD.equals(export.frame)) bytesPerPixel += 0.12d;
+        if (export.details) bytesPerPixel += 0.08d;
+        long estimate = Math.max(16_384L, (long) (pixels * bytesPerPixel));
+        return split ? Math.round(estimate * 1.04d) : estimate;
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes < 1024L * 1024L) return Math.max(1L, bytes / 1024L) + " КБ";
+        return String.format(Locale.US, "%.1f МБ", bytes / (1024d * 1024d));
+    }
+
+    private View exportToggle(String title, boolean checked,
+                              java.util.function.Consumer<Boolean> changed) {
+        LinearLayout row = new LinearLayout(activity);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(activity.dp(10), activity.dp(3), activity.dp(5), activity.dp(3));
+        row.setBackground(activity.panelBg(
+            checked ? Color.rgb(239, 249, 248) : Color.WHITE,
+            activity.dp(13),
+            checked ? Color.rgb(176, 221, 216) : Color.rgb(220, 230, 231)));
+        TextView label = versionText(
+            AppLanguage.text(activity, title), 11, Color.rgb(28, 34, 38), true);
+        label.setMaxLines(2);
+        label.setGravity(Gravity.CENTER);
+        label.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+        row.addView(label, new LinearLayout.LayoutParams(0, -1, 1));
+        android.widget.Switch toggle = new android.widget.Switch(activity);
+        toggle.setContentDescription(AppLanguage.text(activity, title));
+        toggle.setChecked(checked);
+        toggle.setShowText(false);
+        toggle.setOnCheckedChangeListener((button, value) -> {
+            row.setBackground(activity.panelBg(
+                value ? Color.rgb(239, 249, 248) : Color.WHITE,
+                activity.dp(13),
+                value ? Color.rgb(176, 221, 216) : Color.rgb(220, 230, 231)));
+            changed.accept(value);
+        });
+        row.addView(toggle, new LinearLayout.LayoutParams(activity.dp(50), activity.dp(48)));
+        row.setOnClickListener(v -> toggle.setChecked(!toggle.isChecked()));
+        return row;
+    }
+
+    private void addExportToggleRow(LinearLayout grid, View first, View second) {
+        LinearLayout row = new LinearLayout(activity);
+        LinearLayout.LayoutParams firstParams = new LinearLayout.LayoutParams(0, activity.dp(56), 1);
+        firstParams.setMargins(0, 0, activity.dp(4), activity.dp(7));
+        row.addView(first, firstParams);
+        if (second != null) {
+            LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, activity.dp(56), 1);
+            secondParams.setMargins(activity.dp(4), 0, 0, activity.dp(7));
+            row.addView(second, secondParams);
+        } else {
+            View spacer = new View(activity);
+            LinearLayout.LayoutParams spacerParams = new LinearLayout.LayoutParams(0, activity.dp(56), 1);
+            spacerParams.setMargins(activity.dp(4), 0, 0, activity.dp(7));
+            row.addView(spacer, spacerParams);
+        }
+        grid.addView(row, new LinearLayout.LayoutParams(-1, activity.dp(63)));
+    }
+
+    private Button exportFrameButton(
+        RewardWallet wallet,
+        java.util.function.Supplier<String> selected,
+        java.util.function.Consumer<String> changed,
+        Runnable refreshed
+    ) {
+        List<ExportStyleChoice> choices = frameChoices(wallet);
+        String currentName = "Без рамки";
+        for (ExportStyleChoice choice : choices) {
+            if (choice.id.equals(selected.get())) { currentName = choice.title; break; }
+        }
+        Button button = settingButton("Рамка: " + currentName);
+        button.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_frame, 0, 0, 0);
+        button.setCompoundDrawablePadding(activity.dp(8));
+        button.setOnClickListener(v -> showPdfFramePicker(choices, selected, changed, refreshed, button));
+        return button;
+    }
+
+    private void showPdfFramePicker(
+        List<ExportStyleChoice> choices,
+        java.util.function.Supplier<String> selected,
+        java.util.function.Consumer<String> changed,
+        Runnable refreshed,
+        Button sourceButton
+    ) {
+        Dialog dialog = settingsDialog("Рамка PDF");
         LinearLayout shell = settingsShell(dialog);
         if (shell == null) return;
 
-        LinearLayout qualityCard = new LinearLayout(activity);
-        qualityCard.setOrientation(LinearLayout.VERTICAL);
-        qualityCard.setPadding(
-            activity.dp(14),
-            activity.dp(12),
-            activity.dp(14),
-            activity.dp(12));
-        qualityCard.setBackground(activity.panelBg(
-            Color.rgb(238, 249, 247),
-            activity.dp(14),
-            Color.argb(72, 24, 169, 153)));
+        TextView intro = versionText(
+            "Выберите оформление границ страницы. Закрытые варианты можно открыть в Мастерской.",
+            12, Color.rgb(83, 72, 101), false);
+        intro.setGravity(Gravity.CENTER_VERTICAL);
+        intro.setPadding(activity.dp(14), activity.dp(10), activity.dp(14), activity.dp(10));
+        intro.setBackground(activity.softAccentGradientBg(activity.dp(14)));
+        LinearLayout.LayoutParams introParams = new LinearLayout.LayoutParams(-1, activity.dp(64));
+        introParams.setMargins(0, activity.dp(4), 0, activity.dp(10));
+        shell.addView(intro, introParams);
 
-        TextView level = versionText("", 11, Color.rgb(45, 112, 105), true);
-        TextView qualityName = versionText("", 18, Color.rgb(28, 34, 38), true);
-        qualityName.setPadding(0, activity.dp(2), 0, activity.dp(8));
-        TextView resolutionCaption = versionText(
-            "Итоговое разрешение",
-            11,
-            Color.rgb(83, 94, 103),
-            false);
-        TextView resolution = versionText("", 22, Color.rgb(8, 122, 115), true);
-        resolution.setPadding(0, activity.dp(1), 0, activity.dp(2));
-        TextView hint = versionText("", 11, Color.rgb(83, 94, 103), false);
+        ScrollView scroll = new ScrollView(activity);
+        LinearLayout list = new LinearLayout(activity);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(0, 0, 0, activity.dp(4));
+        for (ExportStyleChoice choice : choices) {
+            boolean current = choice.id.equals(selected.get());
+            LinearLayout row = new LinearLayout(activity);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(activity.dp(10), activity.dp(7), activity.dp(10), activity.dp(7));
+            row.setBackground(activity.panelBg(
+                current ? Color.rgb(241, 234, 250) : Color.WHITE,
+                activity.dp(14),
+                current ? Color.rgb(154, 112, 190) : Color.rgb(219, 225, 230)));
 
-        qualityCard.addView(level);
-        qualityCard.addView(qualityName);
-        qualityCard.addView(resolutionCaption);
-        qualityCard.addView(resolution);
-        qualityCard.addView(hint);
+            ImageView icon = new ImageView(activity);
+            icon.setImageResource(exportFrameIcon(choice.id));
+            icon.setColorFilter(current ? Color.rgb(102, 55, 142) : Color.rgb(91, 70, 194));
+            icon.setPadding(activity.dp(9), activity.dp(9), activity.dp(9), activity.dp(9));
+            icon.setBackground(activity.panelBg(
+                current ? Color.rgb(226, 211, 241) : Color.rgb(244, 239, 250),
+                activity.dp(12), Color.TRANSPARENT));
+            row.addView(icon, new LinearLayout.LayoutParams(activity.dp(46), activity.dp(46)));
 
-        SeekBar slider = new SeekBar(activity);
-        slider.setMax(PNG_QUALITY_NAMES.length - 1);
-        slider.setProgress(Math.max(0, Math.min(PNG_QUALITY_NAMES.length - 1, pendingPngQuality)));
-        slider.setSplitTrack(false);
-        slider.setProgressTintList(ColorStateList.valueOf(Color.rgb(24, 169, 153)));
-        slider.setThumbTintList(ColorStateList.valueOf(Color.rgb(8, 122, 115)));
-        LinearLayout.LayoutParams sliderParams =
-            new LinearLayout.LayoutParams(-1, activity.dp(44));
-        sliderParams.setMargins(0, activity.dp(8), 0, 0);
-        qualityCard.addView(slider, sliderParams);
-
-        LinearLayout marks = new LinearLayout(activity);
-        marks.setOrientation(LinearLayout.HORIZONTAL);
-        for (int index = 0; index < PNG_QUALITY_NAMES.length; index++) {
-            TextView mark = versionText(
-                String.valueOf(index + 1),
+            LinearLayout copy = new LinearLayout(activity);
+            copy.setOrientation(LinearLayout.VERTICAL);
+            copy.setGravity(Gravity.CENTER_VERTICAL);
+            copy.setPadding(activity.dp(12), 0, activity.dp(8), 0);
+            TextView name = versionText(choice.title, 13, Color.rgb(37, 39, 47), true);
+            copy.addView(name, new LinearLayout.LayoutParams(-1, activity.dp(24)));
+            TextView state = versionText(
+                current ? "Выбрано" : choice.owned ? "Нажмите, чтобы выбрать" : "Закрыто · " + choice.price + " жет.",
                 10,
-                Color.rgb(83, 94, 103),
-                true);
+                current ? Color.rgb(102, 55, 142) : choice.owned
+                    ? Color.rgb(83, 94, 103) : Color.rgb(143, 78, 126),
+                current);
+            copy.addView(state, new LinearLayout.LayoutParams(-1, activity.dp(21)));
+            row.addView(copy, new LinearLayout.LayoutParams(0, activity.dp(48), 1));
+
+            TextView mark = versionText(current ? "✓" : choice.owned ? "›" : "🔒", 18,
+                current ? Color.rgb(102, 55, 142) : Color.rgb(112, 122, 129), true);
             mark.setGravity(Gravity.CENTER);
-            marks.addView(mark, new LinearLayout.LayoutParams(0, activity.dp(20), 1));
+            row.addView(mark, new LinearLayout.LayoutParams(activity.dp(34), activity.dp(46)));
+            row.setContentDescription(choice.title + ". " + state.getText());
+            row.setOnClickListener(v -> {
+                if (!choice.owned) {
+                    showWorkshopUnlockPrompt(choice.title, choice.price);
+                    return;
+                }
+                changed.accept(choice.id);
+                sourceButton.setText("Рамка: " + choice.title);
+                dialog.dismiss();
+                if (refreshed != null) refreshed.run();
+            });
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, activity.dp(68));
+            rowParams.setMargins(0, 0, 0, activity.dp(8));
+            list.addView(row, rowParams);
         }
-        qualityCard.addView(marks);
-        shell.addView(qualityCard);
-
-        updatePngQualityPreview(level, qualityName, resolution, hint);
-        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                pendingPngQuality = progress;
-                updatePngQualityPreview(level, qualityName, resolution, hint);
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
-        });
-
-        Button save = activity.actionButton("Сохранить PNG", v -> {
-            dialog.dismiss();
-            openExport(
-                MainActivity.REQ_EXPORT_PNG,
-                "image/png",
-                "family-tree-" + dateStamp() + ".png");
-        });
-        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, activity.dp(48));
-        saveParams.setMargins(0, activity.dp(12), 0, 0);
-        shell.addView(save, saveParams);
+        scroll.addView(list);
+        int listHeight = Math.max(
+            activity.dp(190),
+            Math.min(activity.dp(320),
+                activity.getResources().getDisplayMetrics().heightPixels - activity.dp(250)));
+        shell.addView(scroll, new LinearLayout.LayoutParams(-1, listHeight));
         dialog.show();
         configureSettingsDialog(dialog);
     }
 
-    private void updatePngQualityPreview(
-        TextView level,
-        TextView qualityName,
-        TextView resolution,
-        TextView hint
-    ) {
-        int index = Math.max(0, Math.min(PNG_QUALITY_NAMES.length - 1, pendingPngQuality));
-        int[] size = activity.treeView.estimateRenderBitmapSize(
-            PNG_QUALITY_SCALES[index],
-            PNG_QUALITY_MAX_PIXELS[index]);
-        long pixels = (long) size[0] * size[1];
-        level.setText("КАЧЕСТВО " + (index + 1) + " ИЗ " + PNG_QUALITY_NAMES.length);
-        qualityName.setText(PNG_QUALITY_NAMES[index]);
-        resolution.setText(formatPixels(size[0]) + " × " + formatPixels(size[1]) + " px");
-        hint.setText(
-            PNG_QUALITY_HINTS[index]
-                + " · "
-                + String.format(Locale.US, "%.1f", pixels / 1_000_000d).replace('.', ',')
-                + " Мп");
+    private int exportFrameIcon(String id) {
+        if (id.contains("fire")) return R.drawable.ic_menu_fire;
+        if (id.contains("botanical")) return R.drawable.ic_menu_leaf;
+        return R.drawable.ic_menu_frame;
     }
 
     private static String formatPixels(int value) {
         return String.format(Locale.US, "%,d", Math.max(0, value)).replace(',', ' ');
-    }
-
-    private void showTileSettings() {
-        Dialog dialog = settingsDialog("PNG по частям");
-        LinearLayout shell = settingsShell(dialog);
-        if (shell == null) return;
-        Button detail = settingButton("Детализация: " + pendingTileDetail + "×");
-        detail.setOnClickListener(v -> {
-            pendingTileDetail = pendingTileDetail == 4 ? 6 : pendingTileDetail == 6 ? 8 : 4;
-            detail.setText("Детализация: " + pendingTileDetail + "×");
-        });
-        Button tile = settingButton("Тайл: " + pendingTileSize + " px");
-        tile.setOnClickListener(v -> {
-            pendingTileSize = pendingTileSize == 2048 ? 3072 : 2048;
-            tile.setText("Тайл: " + pendingTileSize + " px");
-        });
-        shell.addView(detail);
-        shell.addView(tile);
-        TextView hint = versionText(
-            "Результат — один ZIP с PNG-фрагментами, обзорной картой и manifest.json.",
-            11,
-            Color.rgb(83, 94, 103),
-            false);
-        hint.setPadding(activity.dp(4), activity.dp(10), activity.dp(4), 0);
-        shell.addView(hint);
-        Button save = activity.actionButton("Сохранить ZIP", v -> {
-            dialog.dismiss();
-            openExport(
-                MainActivity.REQ_EXPORT_TILES,
-                "application/zip",
-                "family-tree-tiles-" + dateStamp() + ".zip");
-        });
-        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(-1, activity.dp(48));
-        saveParams.setMargins(0, activity.dp(12), 0, 0);
-        shell.addView(save, saveParams);
-        dialog.show();
-        configureSettingsDialog(dialog);
     }
 
     private Dialog settingsDialog(String titleValue) {
@@ -451,6 +999,9 @@ final class MainActivityFiles {
     private Button settingButton(String value) {
         Button button = activity.actionButton(value, null);
         button.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        button.setTextColor(Color.rgb(28, 92, 88));
+        button.setBackground(activity.panelBg(
+            Color.WHITE, activity.dp(10), Color.rgb(199, 220, 222)));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, activity.dp(46));
         params.setMargins(0, 0, 0, activity.dp(7));
         button.setLayoutParams(params);
@@ -640,7 +1191,10 @@ final class MainActivityFiles {
     }
 
     void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (resultCode != Activity.RESULT_OK || data == null) return;
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            releasePendingImageExport(requestCode);
+            return;
+        }
         if (requestCode == MainActivity.REQ_MEMORY_FILE
             || requestCode == MainActivity.REQ_MEMORY_PHOTO) {
             List<Uri> uris = new ArrayList<>();
@@ -655,7 +1209,10 @@ final class MainActivityFiles {
             if (!uris.isEmpty()) importMemoryFilesFromUris(uris);
             return;
         }
-        if (data.getData() == null) return;
+        if (data.getData() == null) {
+            releasePendingImageExport(requestCode);
+            return;
+        }
         Uri uri = data.getData();
         if (requestCode == MainActivity.REQ_IMPORT) importFromUri(uri);
         if (requestCode == MainActivity.REQ_EXPORT_FTREE) exportTreePackageToUri(uri);
@@ -669,7 +1226,18 @@ final class MainActivityFiles {
 
     void handleIncomingIntent(Intent intent) {
         if (intent == null || intent.getData() == null) return;
-        if (Intent.ACTION_VIEW.equals(intent.getAction())) importFromUri(intent.getData());
+        if (Intent.ACTION_VIEW.equals(intent.getAction())) {
+            Uri uri = intent.getData();
+            intent.setData(null);
+            importFromUri(uri);
+        }
+    }
+
+    private void releasePendingImageExport(int requestCode) {
+        if (requestCode != MainActivity.REQ_EXPORT_PNG
+            && requestCode != MainActivity.REQ_EXPORT_TILES) return;
+        if (pendingImageExport != null) pendingImageExport.close();
+        pendingImageExport = null;
     }
 
     void importFromUri(Uri uri) {
@@ -798,6 +1366,7 @@ final class MainActivityFiles {
         activity.bindState();
         activity.treeView.post(() -> activity.treeView.fit());
         DiagnosticsLogger.breadcrumb(activity, "import.finish");
+        AnalyticsReporter.treeImported(activity.state);
         activity.toast("Дерево импортировано");
     }
 
@@ -810,7 +1379,9 @@ final class MainActivityFiles {
             intent = new Intent(
                 Intent.ACTION_PICK,
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-            intent.setType("image/*");
+            intent.setDataAndType(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                "image/*");
         }
         activity.startActivityForResult(intent, MainActivity.REQ_PHOTO);
     }
@@ -916,7 +1487,9 @@ final class MainActivityFiles {
             intent = new Intent(
                 Intent.ACTION_PICK,
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-            intent.setType("image/*");
+            intent.setDataAndType(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                "image/*");
         }
         activity.startActivityForResult(intent, MainActivity.REQ_MEMORY_PHOTO);
     }
@@ -1025,6 +1598,7 @@ final class MainActivityFiles {
                     ? exportGedcomText(exportState)
                     : activity.store.exportText(exportState);
                 output.write(text.getBytes(StandardCharsets.UTF_8));
+                AnalyticsReporter.treeExported("gedcom".equals(kind) ? "gedcom" : "json", exportState);
                 activity.runOnUiThread(() -> activity.toast("Файл экспортирован"));
             } catch (Exception error) {
                 DiagnosticsLogger.handled(activity, "export.text", error);
@@ -1047,6 +1621,7 @@ final class MainActivityFiles {
                     activity.store,
                     output,
                     exportState.readerMode ? "view" : "copy");
+                AnalyticsReporter.treeExported("ftree", exportState);
                 activity.runOnUiThread(() -> activity.toast(".ftree экспортирован"));
                 DiagnosticsLogger.breadcrumb(activity, "export.ftree.finish");
             } catch (Exception error) {
@@ -1057,44 +1632,98 @@ final class MainActivityFiles {
         }, "tree-package-export").start();
     }
 
-    void exportPngToUri(Uri uri) {
-        if (uri == null) return;
-        final Bitmap bitmap;
-        try {
-            DiagnosticsLogger.breadcrumb(activity, "export.png.render");
-            int quality = Math.max(
-                0,
-                Math.min(PNG_QUALITY_NAMES.length - 1, pendingPngQuality));
-            bitmap = activity.treeView.renderBitmap(
-                PNG_QUALITY_SCALES[quality],
-                PNG_QUALITY_MAX_PIXELS[quality]);
-            exportPngBitmapInBackground(uri, bitmap);
-        } catch (OutOfMemoryError error) {
-            DiagnosticsLogger.handled(activity, "export.png.oom", error);
-            activity.toast("PNG не создан: дереву не хватает доступной памяти");
-        } catch (Exception error) {
-            activity.toast("PNG не создан: " + error.getMessage());
-        }
-    }
+    void exportPngToUri(Uri uri) { exportImageToUri(uri, false); }
 
-    private void exportPngBitmapInBackground(Uri uri, Bitmap bitmap) {
-        activity.toast("Сжатие PNG…");
+    void exportTilesToUri(Uri uri) { exportImageToUri(uri, true); }
+
+    private void exportImageToUri(Uri uri, boolean split) {
+        if (uri == null) return;
+        TreeImageExport export = pendingImageExport;
+        pendingImageExport = null;
+        if (export == null) {
+            activity.toast("Откройте предпросмотр PNG и выберите параметры ещё раз");
+            return;
+        }
+        ExportLayout layout = export.layout(PNG_QUALITY_SCALES[pendingPngQuality],
+            PNG_QUALITY_MAX_PIXELS[pendingPngQuality]);
+        activity.toast(split ? "Создание частей PNG…" : "Создание PNG…");
         new Thread(() -> {
             try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
-                if (output == null) throw new IllegalStateException("Файл не создан");
-                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 96, output)) {
-                    throw new IOException("кодировщик PNG завершился с ошибкой");
+                if (output == null) throw new IOException("Файл не создан");
+                if (split) writeImageArchive(export, layout, output);
+                else {
+                    Bitmap bitmap = imageOnUi(() -> export.tile(layout, 0, 0));
+                    try { compressPng(bitmap, output); }
+                    finally { bitmap.recycle(); }
                 }
-                DiagnosticsLogger.breadcrumb(activity, "export.png.finish");
-                activity.runOnUiThread(() -> activity.toast("PNG экспортирован"));
-            } catch (Exception error) {
-                DiagnosticsLogger.handled(activity, "export.png", error);
-                activity.runOnUiThread(() ->
-                    activity.toast("PNG не создан: " + safeError(error)));
+                AnalyticsReporter.treeExported(split ? "png_tiles_zip" : "png", export.state);
+                activity.runOnUiThread(() -> activity.toast(split ? "Архив PNG экспортирован" : "PNG экспортирован"));
+            } catch (Exception | OutOfMemoryError error) {
+                DiagnosticsLogger.handled(activity, "export.image", error);
+                activity.runOnUiThread(() -> activity.toast("PNG не создан: " + safeError(error)));
             } finally {
-                bitmap.recycle();
+                activity.runOnUiThread(export::close);
             }
-        }, "tree-png-encoder").start();
+        }, "tree-image-export").start();
+    }
+
+    private Bitmap imageOnUi(java.util.concurrent.Callable<Bitmap> render) throws Exception {
+        java.util.concurrent.FutureTask<Bitmap> task = new java.util.concurrent.FutureTask<>(render);
+        activity.runOnUiThread(task);
+        return task.get();
+    }
+
+    private static void compressPng(Bitmap bitmap, OutputStream output) throws IOException {
+        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+            throw new IOException("Не удалось закодировать PNG");
+    }
+
+    private void writeImageArchive(TreeImageExport export, ExportLayout layout, OutputStream output) throws Exception {
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            zip.setLevel(0);
+            org.json.JSONArray tiles = new org.json.JSONArray();
+            for (int row = 0; row < layout.rows; row++) {
+                for (int column = 0; column < layout.columns; column++) {
+                    final int r = row, c = column;
+                    Bitmap bitmap = imageOnUi(() -> export.tile(layout, c, r));
+                    String name = String.format(Locale.US, "tiles/tile-r%02d-c%02d.png", row + 1, column + 1);
+                    try {
+                        zip.putNextEntry(new ZipEntry(name));
+                        compressPng(bitmap, zip);
+                        zip.closeEntry();
+                        tiles.put(new JSONObject().put("file", name).put("x", layout.x(column))
+                            .put("y", layout.y(row)).put("width", bitmap.getWidth()).put("height", bitmap.getHeight()));
+                    } finally { bitmap.recycle(); }
+                }
+            }
+            ExportLayout overviewLayout = new ExportLayout(export.crop.width(), export.crop.height(),
+                Math.min(1400f / export.crop.width(), 1400f / export.crop.height()), 2_000_000L, 0, 0);
+            Bitmap overview = imageOnUi(() -> export.tile(overviewLayout, 0, 0));
+            try {
+                android.graphics.Canvas canvas = new android.graphics.Canvas(overview);
+                Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
+                line.setColor(Color.rgb(0, 126, 116)); line.setStrokeWidth(2f);
+                for (int col = 1; col < layout.columns; col++) {
+                    float x = overview.getWidth() * layout.x(col) / (float) layout.width;
+                    canvas.drawLine(x, 0, x, overview.getHeight(), line);
+                }
+                for (int row = 1; row < layout.rows; row++) {
+                    float y = overview.getHeight() * layout.y(row) / (float) layout.height;
+                    canvas.drawLine(0, y, overview.getWidth(), y, line);
+                }
+                zip.putNextEntry(new ZipEntry("overview.png"));
+                compressPng(overview, zip); zip.closeEntry();
+            } finally { overview.recycle(); }
+            JSONObject manifest = new JSONObject().put("format", "ru.drshapaya.familytree.tiles")
+                .put("version", 2).put("width", layout.width).put("height", layout.height)
+                .put("columns", layout.columns).put("rows", layout.rows)
+                .put("verticalCuts", export.verticalCuts).put("horizontalCuts", export.horizontalCuts)
+                .put("left", export.crop.left).put("top", export.crop.top)
+                .put("right", export.crop.right).put("bottom", export.crop.bottom)
+                .put("tiles", tiles);
+            zip.putNextEntry(new ZipEntry("manifest.json"));
+            zip.write(manifest.toString(2).getBytes(StandardCharsets.UTF_8)); zip.closeEntry();
+        }
     }
 
     void exportPdfToUri(Uri uri) {
@@ -1104,6 +1733,10 @@ final class MainActivityFiles {
         boolean landscape = pendingPdfLandscape;
         int requestedScale = pendingPdfScale;
         boolean monochrome = pendingPdfMonochrome;
+        boolean fitPage = pendingPdfFit;
+        String frame = RewardCatalog.belongsToCategory(pendingPdfFrame, RewardCatalog.EXPORT_FRAMES)
+            ? pendingPdfFrame
+            : new RewardWallet(activity).selected(RewardCatalog.EXPORT_FRAMES);
         activity.toast("Создание PDF…");
         DiagnosticsLogger.breadcrumb(activity, "export.pdf.start");
         new Thread(() -> {
@@ -1115,7 +1748,8 @@ final class MainActivityFiles {
                     pageSize,
                     landscape,
                     requestedScale,
-                    monochrome);
+                    monochrome, fitPage, frame);
+                AnalyticsReporter.treeExported("pdf", exportState);
                 DiagnosticsLogger.breadcrumb(activity, "export.pdf.finish");
                 activity.runOnUiThread(() -> activity.toast("PDF экспортирован"));
             } catch (Exception error) {
@@ -1136,7 +1770,7 @@ final class MainActivityFiles {
         String pageSize,
         boolean landscape,
         int requestedScale,
-        boolean monochrome
+        boolean monochrome, boolean fitPage, String frame
     ) throws Exception {
         int portraitWidth = "A3".equals(pageSize) ? 842 : 595;
         int portraitHeight = "A3".equals(pageSize) ? 1191 : 842;
@@ -1144,19 +1778,20 @@ final class MainActivityFiles {
         int pageHeight = landscape ? portraitWidth : portraitHeight;
         float margin = 28f;
         float footer = 18f;
-        float renderScale = 0.55f * Math.max(50, Math.min(150, requestedScale)) / 100f;
+        float renderScale = 0.55f * Math.max(25, Math.min(100, requestedScale)) / 100f;
         float contentWidth = pageWidth - margin * 2f;
         float contentHeight = pageHeight - margin * 2f - footer;
-        float pageWorldWidth = contentWidth / renderScale;
-        float pageWorldHeight = contentHeight / renderScale;
 
         TreeDocumentRenderer renderer = new TreeDocumentRenderer(
             activity,
             exportState,
             activity.store.mediaStore());
         RectF bounds = renderer.bounds();
-        int columns = Math.max(1, (int) Math.ceil(bounds.width() / pageWorldWidth));
-        int rows = Math.max(1, (int) Math.ceil(bounds.height() / pageWorldHeight));
+        if (fitPage) renderScale = ExportLayout.fitPdfScale(bounds.width(), bounds.height(), contentWidth, contentHeight);
+        float pageWorldWidth = contentWidth / renderScale;
+        float pageWorldHeight = contentHeight / renderScale;
+        int columns = fitPage ? 1 : Math.max(1, (int) Math.ceil(bounds.width() / pageWorldWidth));
+        int rows = fitPage ? 1 : Math.max(1, (int) Math.ceil(bounds.height() / pageWorldHeight));
         long pageCount = (long) columns * rows;
         if (pageCount > 120L) {
             renderer.clear();
@@ -1177,6 +1812,7 @@ final class MainActivityFiles {
                         pageHeight,
                         number).create();
                     PdfDocument.Page page = document.startPage(info);
+                    page.getCanvas().drawColor(Color.WHITE);
                     RectF world = new RectF(
                         bounds.left + column * pageWorldWidth,
                         bounds.top + row * pageWorldHeight,
@@ -1187,7 +1823,15 @@ final class MainActivityFiles {
                         margin,
                         pageWidth - margin,
                         pageHeight - margin - footer);
+                    if (fitPage) {
+                        world.set(bounds);
+                        float w = bounds.width() * renderScale, h = bounds.height() * renderScale;
+                        target.set(margin + (contentWidth - w) / 2f, margin + (contentHeight - h) / 2f,
+                            margin + (contentWidth + w) / 2f, margin + (contentHeight + h) / 2f);
+                    }
                     renderer.render(page.getCanvas(), world, target, renderScale, monochrome);
+                    ExportDecoration.draw(page.getCanvas(), new RectF(8, 8, pageWidth - 8,
+                        pageHeight - margin), frame, monochrome);
                     String caption = "Family Tree DS " + MainActivity.VERSION_NAME
                         + " · " + number + "/" + pageCount
                         + (AppLanguage.isEnglish(activity)
@@ -1206,141 +1850,6 @@ final class MainActivityFiles {
         } finally {
             document.close();
             renderer.clear();
-        }
-    }
-
-    void exportTilesToUri(Uri uri) {
-        if (uri == null) return;
-        TreeState exportState = TreeStateCopier.copy(activity.state);
-        int detail = pendingTileDetail;
-        int tileSize = pendingTileSize;
-        activity.toast("Создание PNG-тайлов…");
-        DiagnosticsLogger.breadcrumb(activity, "export.tiles.start");
-        new Thread(() -> {
-            try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
-                if (output == null) throw new IOException("Файл не создан");
-                writeTileArchive(exportState, output, detail, tileSize);
-                DiagnosticsLogger.breadcrumb(activity, "export.tiles.finish");
-                activity.runOnUiThread(() -> activity.toast("Архив PNG-тайлов экспортирован"));
-            } catch (Exception error) {
-                DiagnosticsLogger.handled(activity, "export.tiles", error);
-                activity.runOnUiThread(() ->
-                    activity.toast("Тайлы не созданы: " + safeError(error)));
-            } catch (OutOfMemoryError error) {
-                DiagnosticsLogger.handled(activity, "export.tiles.oom", error);
-                activity.runOnUiThread(() ->
-                    activity.toast("Тайлы не созданы: недостаточно памяти"));
-            }
-        }, "tree-tile-export").start();
-    }
-
-    private void writeTileArchive(
-        TreeState exportState,
-        OutputStream output,
-        int detail,
-        int tileSize
-    ) throws Exception {
-        float renderScale = Math.max(2f, Math.min(8f, detail));
-        int safeTileSize = tileSize >= 3072 ? 3072 : 2048;
-        float tileWorld = safeTileSize / renderScale;
-        TreeDocumentRenderer renderer = new TreeDocumentRenderer(
-            activity,
-            exportState,
-            activity.store.mediaStore());
-        RectF bounds = renderer.bounds();
-        int columns = Math.max(1, (int) Math.ceil(bounds.width() / tileWorld));
-        int rows = Math.max(1, (int) Math.ceil(bounds.height() / tileWorld));
-        long tileCount = (long) columns * rows;
-        if (tileCount > 256L) {
-            renderer.clear();
-            throw new IOException(
-                "Получается " + tileCount + " тайлов. Уменьшите детализацию");
-        }
-
-        try (ZipOutputStream zip = new ZipOutputStream(output)) {
-            zip.setLevel(0);
-            JSONObject manifest = new JSONObject()
-                .put("format", "ru.drshapaya.familytree.tiles")
-                .put("version", 1)
-                .put("appVersion", MainActivity.VERSION_NAME)
-                .put("tileSize", safeTileSize)
-                .put("pixelsPerWorld", renderScale)
-                .put("rows", rows)
-                .put("columns", columns)
-                .put("left", bounds.left)
-                .put("top", bounds.top)
-                .put("right", bounds.right)
-                .put("bottom", bounds.bottom);
-            zip.putNextEntry(new ZipEntry("manifest.json"));
-            zip.write(manifest.toString(2).getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-
-            for (int row = 0; row < rows; row++) {
-                for (int column = 0; column < columns; column++) {
-                    Bitmap bitmap = Bitmap.createBitmap(
-                        safeTileSize,
-                        safeTileSize,
-                        Bitmap.Config.ARGB_8888);
-                    try {
-                        RectF world = new RectF(
-                            bounds.left + column * tileWorld,
-                            bounds.top + row * tileWorld,
-                            bounds.left + (column + 1) * tileWorld,
-                            bounds.top + (row + 1) * tileWorld);
-                        renderer.render(
-                            new android.graphics.Canvas(bitmap),
-                            world,
-                            new RectF(0f, 0f, safeTileSize, safeTileSize),
-                            renderScale,
-                            false);
-                        String name = String.format(
-                            Locale.US,
-                            "tiles/tile-r%03d-c%03d.png",
-                            row + 1,
-                            column + 1);
-                        zip.putNextEntry(new ZipEntry(name));
-                        if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, zip)) {
-                            throw new IOException("Не удалось закодировать " + name);
-                        }
-                        zip.closeEntry();
-                    } finally {
-                        bitmap.recycle();
-                    }
-                }
-            }
-            writeTileOverview(zip, renderer, bounds);
-            zip.finish();
-        } finally {
-            renderer.clear();
-        }
-    }
-
-    private void writeTileOverview(
-        ZipOutputStream zip,
-        TreeDocumentRenderer renderer,
-        RectF bounds
-    ) throws Exception {
-        float overviewScale = Math.min(
-            1600f / Math.max(1f, bounds.width()),
-            1600f / Math.max(1f, bounds.height()));
-        overviewScale = Math.max(0.02f, overviewScale);
-        int width = Math.max(1, Math.round(bounds.width() * overviewScale));
-        int height = Math.max(1, Math.round(bounds.height() * overviewScale));
-        Bitmap overview = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        try {
-            renderer.render(
-                new android.graphics.Canvas(overview),
-                bounds,
-                new RectF(0f, 0f, width, height),
-                overviewScale,
-                false);
-            zip.putNextEntry(new ZipEntry("overview.png"));
-            if (!overview.compress(Bitmap.CompressFormat.PNG, 100, zip)) {
-                throw new IOException("Не удалось создать обзорную карту");
-            }
-            zip.closeEntry();
-        } finally {
-            overview.recycle();
         }
     }
 
@@ -1406,6 +1915,7 @@ final class MainActivityFiles {
             try (FileOutputStream output = new FileOutputStream(file)) {
                 output.write(activity.store.exportText(activity.state).getBytes(StandardCharsets.UTF_8));
             }
+            AnalyticsReporter.treeExported("json_share", activity.state);
             Uri uri = TreeShareProvider.uriFor(filename);
             Intent send = new Intent(Intent.ACTION_SEND);
             send.setType("application/json");
@@ -1440,6 +1950,7 @@ final class MainActivityFiles {
                         output,
                         exportState.readerMode ? "view" : "copy");
                 }
+                AnalyticsReporter.treeExported("ftree_share", exportState);
                 activity.runOnUiThread(() -> {
                     if (activity.isFinishing() || activity.isDestroyed()) return;
                     Uri uri = TreeShareProvider.uriFor(filename);
@@ -1479,7 +1990,10 @@ final class MainActivityFiles {
         return output.toString(StandardCharsets.UTF_8.name());
     }
 
-    private static String safeError(Exception error) {
+    private static String safeError(Throwable error) {
+        if (error instanceof java.util.concurrent.ExecutionException && error.getCause() != null)
+            return safeError(error.getCause());
+        if (error instanceof OutOfMemoryError) return "недостаточно памяти; уменьшите качество или добавьте разрезы";
         String message = error == null ? "" : error.getMessage();
         return message == null || message.trim().isEmpty()
             ? "неизвестная ошибка"

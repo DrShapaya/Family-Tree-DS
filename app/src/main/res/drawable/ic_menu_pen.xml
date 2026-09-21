@@ -1,0 +1,20 @@
+<!-- Pen icon for blueprint and ink styles. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4,20l4.4,-1 9.9,-9.9a2.8,2.8 0,0 0,-4 -4L4.4,15z"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8" />
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M13,6l5,5M4,20l1.2,-3.8"
+        android:strokeColor="#6A4AB1"
+        android:strokeLineCap="round"
+        android:strokeWidth="1.8" />
+</vector>

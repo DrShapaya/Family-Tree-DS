@@ -39,6 +39,16 @@ def githubClientSecret = githubProperties.getProperty(
     providers.gradleProperty("ANDROIDFT_GITHUB_CLIENT_SECRET")
         .orElse("")
         .get())
+def appMetricaPropertiesFile = rootProject.file("appmetrica.properties")
+def appMetricaProperties = new Properties()
+if (appMetricaPropertiesFile.exists()) {
+    appMetricaProperties.load(new FileInputStream(appMetricaPropertiesFile))
+}
+def appMetricaApiKey = appMetricaProperties.getProperty(
+    "apiKey",
+    providers.gradleProperty("APPMETRICA_API_KEY")
+        .orElse("")
+        .get())
 
 android {
     namespace 'ru.drshapaya.androidft2'
@@ -48,10 +58,13 @@ android {
         applicationId 'ru.drshapaya.familytree'
         minSdk 24
         targetSdk 36
-        versionCode 300
-        versionName '2.7.4'
+        versionCode 302
+        versionName '2.8.0'
+        manifestPlaceholders = [appLabel: "Family Tree DS"]
         buildConfigField "String", "GITHUB_CLIENT_ID", "\"${githubClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "String", "GITHUB_CLIENT_SECRET", "\"${githubClientSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "APPMETRICA_API_KEY", "\"${appMetricaApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+        buildConfigField "String", "YANDEX_REWARDED_AD_UNIT_ID", "\"demo-rewarded-yandex\""
     }
 
     buildFeatures {
@@ -75,10 +88,17 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            manifestPlaceholders = [appLabel: "Family Tree DS Debug"]
+        }
+
         release {
             if (releaseSigningAvailable) {
                 signingConfig signingConfigs.release
             }
+            buildConfigField "String", "YANDEX_REWARDED_AD_UNIT_ID", "\"R-M-19993209-1\""
             minifyEnabled false
             shrinkResources false
         }
@@ -87,9 +107,23 @@ android {
     testOptions {
         unitTests.returnDefaultValues = true
     }
+
+    // The app has an in-app language switch. Widget strings for both supported
+    // languages must remain available even when Play installs an App Bundle.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
 }
 
 dependencies {
+    implementation 'com.yandex.android:mobileads:8.4.0'
+    implementation 'io.appmetrica.analytics:analytics:8.5.1'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.0'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20260719'
+    // Device rendering checks use the platform test runner, without app runtime dependencies.
+    androidTestCompileOnly files("${android.sdkDirectory}/platforms/${android.compileSdkVersion}/optional/android.test.base.jar")
+    androidTestCompileOnly files("${android.sdkDirectory}/platforms/${android.compileSdkVersion}/optional/android.test.runner.jar")
 }

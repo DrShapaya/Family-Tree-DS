@@ -51,6 +51,7 @@ final class TreeCanvasView extends View {
         void onGuideActionMiss();
         void onCanvasTouched();
         void onEditBlocked();
+        void onZoomChanged(float scale);
     }
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -61,7 +62,17 @@ final class TreeCanvasView extends View {
     private final Rect tmpSrc = new Rect();
     private final Path clipPath = new Path();
     private final Path linkPathScratch = new Path();
+    private final PaperTexture paperTexture = new PaperTexture();
+    private final BotanicalCanvasBackground botanicalCanvasBackground;
+    private final FireCardEffect fireCardEffect = new FireCardEffect();
+    private final SmokeCardEffect smokeCardEffect = new SmokeCardEffect();
+    private final BotanicalEffect botanicalEffect = new BotanicalEffect();
+    private float fireFrameSeconds;
+    private final Path ribbonPathA = new Path();
+    private final Path ribbonPathB = new Path();
+    private final Path fireFlowPath = new Path();
     private final Matrix worldToScreen = new Matrix();
+    private Path lastLinkWorldPath;
     private final float[] worldToScreenValues = new float[9];
     private final Map<String, LinkGeometry> linkGeometryCache = new HashMap<>();
     private final Set<Integer> generationRows = new HashSet<>();
@@ -101,6 +112,13 @@ final class TreeCanvasView extends View {
     private String guideColor = "#2f7d75";
     private String guideLabel = "Поколение";
     private String theme = "light";
+    private String cardEdgeStyle = RewardCatalog.STANDARD;
+    private String cardStyle = RewardCatalog.STANDARD;
+    private String canvasStyle = RewardCatalog.STANDARD;
+    private String linkStyle = RewardCatalog.STANDARD;
+    private boolean exportRendering;
+    private boolean exportGrid;
+    private float exportPhotoScale = 1f;
     private Set<String> visibleBranchIds;
     private boolean spatialDirty = true;
     private int todayYear;
@@ -120,6 +138,11 @@ final class TreeCanvasView extends View {
     private float workspaceHeight = TreeLayoutEngine.SURFACE_H;
     private boolean appendSelection = false;
     private float scale = 0.55f;
+    private float zoomTargetScale = 0.55f;
+    private float zoomTargetOffsetX = 80f;
+    private float zoomTargetOffsetY = 160f;
+    private boolean zoomAnimationRunning;
+    private final Runnable zoomAnimation = this::advanceZoomAnimation;
     private float offsetX = 80f;
     private float offsetY = 160f;
     private float downX;
@@ -157,6 +180,7 @@ final class TreeCanvasView extends View {
         };
         uiRegular = loadTypeface(context, "fonts/NotoSans-Regular.ttf", Typeface.NORMAL);
         uiBold = loadTypeface(context, "fonts/NotoSans-Bold.ttf", Typeface.BOLD);
+        botanicalCanvasBackground = new BotanicalCanvasBackground(context);
         textPaint.setColor(Color.rgb(34, 37, 39));
         textPaint.setTextSize(28f);
         textPaint.setTypeface(uiRegular);
@@ -357,6 +381,66 @@ final class TreeCanvasView extends View {
         invalidate();
     }
 
+    void setCardEdgeStyle(String value) {
+        String next = normalizeWorkshopStyle(value);
+        if (cardEdgeStyle.equals(next)) return;
+        cardEdgeStyle = next;
+        invalidate();
+    }
+
+    void setCardStyle(String value) {
+        String next = normalizeWorkshopStyle(value);
+        if (cardStyle.equals(next)) return;
+        cardStyle = next;
+        invalidate();
+    }
+
+    void setCanvasStyle(String value) {
+        String next = normalizeWorkshopStyle(value);
+        if (canvasStyle.equals(next)) return;
+        canvasStyle = next;
+        invalidate();
+    }
+
+    void setLinkStyle(String value) {
+        String next = normalizeWorkshopStyle(value);
+        if (linkStyle.equals(next)) return;
+        linkStyle = next;
+        invalidate();
+    }
+
+    /** A private export view uses the same drawing code at a fixed logical zoom.
+     * Resolution and preview size are applied by Canvas, so details never change
+     * between preview, single PNG and individual tiles. Call on the UI thread. */
+    void drawExport(Canvas canvas, RectF bounds, boolean grid, float pixelsPerWorld) {
+        float oldScale = scale, oldX = offsetX, oldY = offsetY;
+        exportRendering = true;
+        exportGrid = grid;
+        exportPhotoScale = Math.max(1f, Math.min(16f, pixelsPerWorld));
+        try {
+            scale = 1f;
+            offsetX = -bounds.left;
+            offsetY = -bounds.top;
+            drawScene(canvas, (int) Math.ceil(bounds.width()), (int) Math.ceil(bounds.height()), true);
+        } finally {
+            scale = oldScale;
+            offsetX = oldX;
+            offsetY = oldY;
+            exportRendering = false;
+        }
+    }
+
+    RectF imageExportBounds() {
+        RectF bounds = exportBounds();
+        bounds.inset(-64f, -64f);
+        return bounds;
+    }
+
+    void releaseExportResources() {
+        photoCache.evictAll();
+        photoDecoder.shutdownNow();
+    }
+
     void setLinkState(String pendingFromId, String selectedId) {
         pendingLineFromId = pendingFromId == null ? "" : pendingFromId;
         selectedLinkId = selectedId == null ? "" : selectedId;
@@ -390,6 +474,8 @@ final class TreeCanvasView extends View {
         scale = clamp(Math.min(sx, sy), 0.08f, 2.2f);
         offsetX = getWidth() / 2f - bounds.centerX() * scale;
         offsetY = getHeight() / 2f - bounds.centerY() * scale;
+        syncZoomTarget();
+        notifyZoomChanged();
         invalidate();
     }
 
@@ -397,6 +483,7 @@ final class TreeCanvasView extends View {
         if (getWidth() == 0 || getHeight() == 0) return;
         offsetX = getWidth() / 2f - workspaceWidth / 2f * scale;
         offsetY = getHeight() / 2f - workspaceHeight / 2f * scale;
+        syncZoomTarget();
         invalidate();
     }
 
@@ -407,6 +494,8 @@ final class TreeCanvasView extends View {
         scale = clamp(Math.max(scale, 0.95f), 0.08f, 2.2f);
         offsetX = getWidth() / 2f - (person.x + cardWidthWorld() / 2f) * scale;
         offsetY = getHeight() / 2f - (person.y + cardHeightWorld() / 2f) * scale;
+        syncZoomTarget();
+        notifyZoomChanged();
         focusHighlightId = personId;
         focusHighlightUntil = SystemClock.uptimeMillis() + 1800L;
         invalidate();
@@ -503,8 +592,10 @@ final class TreeCanvasView extends View {
     }
 
     private void drawScene(Canvas canvas, int width, int height, boolean exportMode) {
+        fireFrameSeconds = exportMode ? 2.4f : SystemClock.uptimeMillis() / 1000f;
         canvas.drawColor(canvasBackground());
-        if (!exportMode && !"clean".equals(theme)) drawGrid(canvas, width, height);
+        drawCanvasStyle(canvas, width, height);
+        if ((!exportMode || exportGrid) && shouldDrawDefaultGrid()) drawGrid(canvas, width, height);
         if (state == null) return;
         refreshToday();
         prepareBranchCache();
@@ -515,7 +606,7 @@ final class TreeCanvasView extends View {
             wy(height) + 520f / scale);
         RectF visible = visibleScratch;
         if (generationLines) drawGenerationLines(canvas, visible, width, height);
-        if (exportMode || state.guidesVisible) drawGuides(canvas, visible);
+        if (state.guidesVisible && (!exportMode || generationLines)) drawGuides(canvas, visible);
         drawLinks(canvas, visible);
         drawCards(canvas, visible, exportMode);
         if (!exportMode) drawSelectionOverlay(canvas);
@@ -525,16 +616,148 @@ final class TreeCanvasView extends View {
         float grid = Math.max(1f, TreeLayoutEngine.GRID * scale);
         float startX = positiveModulo(offsetX, grid);
         float startY = positiveModulo(offsetY, grid);
+        paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
-        paint.setColor(Color.argb(scale < 0.2f ? 20 : 34, 45, 112, 125));
+        if ("canvas_background_blueprint".equals(canvasStyle) && !"dark".equals(theme)) {
+            paint.setColor(Color.argb(scale < 0.2f ? 26 : 46, 50, 109, 148));
+        } else if ("canvas_background_paper".equals(canvasStyle) && !"dark".equals(theme)) {
+            paint.setColor(Color.argb(scale < 0.2f ? 16 : 28, 128, 104, 72));
+        } else if ("canvas_background_garden".equals(canvasStyle) && !"dark".equals(theme)) {
+            paint.setColor(Color.argb(scale < 0.2f ? 16 : 30, 69, 132, 91));
+        } else if ("canvas_background_botanical".equals(canvasStyle) && !"dark".equals(theme)) {
+            paint.setColor(Color.argb(scale < 0.2f ? 13 : 23, 118, 91, 54));
+        } else if ("canvas_background_paper".equals(canvasStyle)) {
+            paint.setColor(Color.argb(scale < 0.2f ? 20 : 36, 105, 119, 124));
+        } else if ("canvas_background_garden".equals(canvasStyle)) {
+            paint.setColor(Color.argb(scale < 0.2f ? 18 : 34, 91, 139, 111));
+        } else {
+            paint.setColor(Color.argb(scale < 0.2f ? 20 : 34, 45, 112, 125));
+        }
         for (float x = startX; x < width; x += grid) canvas.drawLine(x, 0, x, height, paint);
         for (float y = startY; y < height; y += grid) canvas.drawLine(0, y, width, y, paint);
     }
 
     private int canvasBackground() {
-        if ("dark".equals(theme)) return Color.rgb(16, 23, 27);
-        if ("clean".equals(theme)) return Color.WHITE;
+        if ("dark".equals(theme)) {
+            if ("canvas_background_paper".equals(canvasStyle)) return Color.rgb(33, 36, 37);
+            if ("canvas_background_blueprint".equals(canvasStyle)) return Color.rgb(20, 34, 44);
+            if ("canvas_background_deep_blueprint".equals(canvasStyle)) return Color.rgb(5, 34, 88);
+            if ("canvas_background_garden".equals(canvasStyle)) return Color.rgb(23, 39, 32);
+            if ("canvas_background_botanical".equals(canvasStyle)) return Color.rgb(31, 29, 21);
+            return Color.rgb(16, 23, 27);
+        }
+        if ("clean".equals(theme)) {
+            return "canvas_background_paper".equals(canvasStyle)
+                ? Color.rgb(245, 241, 229)
+                : Color.WHITE;
+        }
+        if ("canvas_background_paper".equals(canvasStyle)) return Color.rgb(245, 241, 229);
+        if ("canvas_background_blueprint".equals(canvasStyle)) return Color.rgb(226, 238, 247);
+        if ("canvas_background_deep_blueprint".equals(canvasStyle)) return Color.rgb(7, 55, 126);
+        if ("canvas_background_garden".equals(canvasStyle)) return Color.rgb(238, 247, 235);
+        if ("canvas_background_botanical".equals(canvasStyle)) return Color.rgb(241, 222, 181);
         return Color.rgb(243, 246, 248);
+    }
+
+    private boolean shouldDrawDefaultGrid() {
+        if ("canvas_background_botanical".equals(canvasStyle)) {
+            return exportRendering && exportGrid;
+        }
+        return !"clean".equals(theme)
+            && !"canvas_background_blueprint".equals(canvasStyle)
+            && !"canvas_background_deep_blueprint".equals(canvasStyle);
+    }
+
+    private void drawCanvasStyle(Canvas canvas, int width, int height) {
+        if ("clean".equals(theme) && !"canvas_background_paper".equals(canvasStyle)) return;
+        paint.setPathEffect(null);
+        if ("canvas_background_paper".equals(canvasStyle)) {
+            drawPaperRelief(canvas, width, height);
+            return;
+        } else if ("canvas_background_botanical".equals(canvasStyle)) {
+            botanicalCanvasBackground.draw(
+                canvas, width, height, scale, offsetX, offsetY, "dark".equals(theme), exportRendering);
+            return;
+        } else if ("canvas_background_blueprint".equals(canvasStyle)) {
+            drawAnchoredBlueprintGrid(
+                canvas,
+                width,
+                height,
+                TreeLayoutEngine.GRID * 2f,
+                "dark".equals(theme) ? Color.argb(50, 88, 141, 170) : Color.argb(40, 45, 106, 148),
+                "dark".equals(theme) ? Color.argb(68, 159, 201, 220) : Color.argb(56, 255, 255, 255));
+        } else if ("canvas_background_deep_blueprint".equals(canvasStyle)) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new LinearGradient(
+                0f,
+                0f,
+                width,
+                height,
+                "dark".equals(theme) ? Color.rgb(7, 47, 115) : Color.rgb(10, 72, 150),
+                "dark".equals(theme) ? Color.rgb(3, 24, 68) : Color.rgb(4, 34, 91),
+                Shader.TileMode.CLAMP));
+            canvas.drawRect(0f, 0f, width, height, paint);
+            paint.setShader(null);
+            drawAnchoredBlueprintGrid(
+                canvas,
+                width,
+                height,
+                TreeLayoutEngine.GRID * 2f,
+                Color.argb(58, 152, 210, 242),
+                Color.argb(90, 219, 244, 255));
+        } else if ("canvas_background_garden".equals(canvasStyle)) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new LinearGradient(
+                0f,
+                0f,
+                width,
+                height,
+                "dark".equals(theme) ? Color.argb(54, 57, 91, 70) : Color.argb(76, 255, 249, 223),
+                "dark".equals(theme) ? Color.argb(62, 18, 62, 49) : Color.argb(66, 177, 217, 196),
+                Shader.TileMode.CLAMP));
+            canvas.drawRect(0f, 0f, width, height, paint);
+            paint.setShader(null);
+        }
+    }
+
+    private void drawPaperRelief(Canvas canvas, int width, int height) {
+        paperTexture.draw(canvas, width, height, scale, offsetX, offsetY, "dark".equals(theme));
+    }
+
+    private void drawAnchoredBlueprintGrid(
+        Canvas canvas,
+        int width,
+        int height,
+        float worldStep,
+        int minorColor,
+        int majorColor
+    ) {
+        if (exportRendering && !exportGrid) return;
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setPathEffect(null);
+        paint.setStrokeWidth(1f);
+        if (worldStep * scale >= 10f) {
+            paint.setColor(minorColor);
+            drawWorldGridLines(canvas, width, height, worldStep);
+        }
+        paint.setStrokeWidth(Math.max(1f, 1.5f * scale));
+        paint.setColor(majorColor);
+        drawWorldGridLines(canvas, width, height, worldStep * 4f);
+    }
+
+    private void drawWorldGridLines(Canvas canvas, int width, int height, float worldStep) {
+        float startX = (float) Math.floor(wx(0f) / worldStep) * worldStep;
+        float endX = wx(width);
+        for (float worldX = startX; worldX <= endX + worldStep; worldX += worldStep) {
+            float x = sx(worldX);
+            canvas.drawLine(x, 0f, x, height, paint);
+        }
+        float startY = (float) Math.floor(wy(0f) / worldStep) * worldStep;
+        float endY = wy(height);
+        for (float worldY = startY; worldY <= endY + worldStep; worldY += worldStep) {
+            float y = sy(worldY);
+            canvas.drawLine(0f, y, width, y, paint);
+        }
     }
 
     private void drawLinks(Canvas canvas, RectF visible) {
@@ -558,20 +781,302 @@ final class TreeCanvasView extends View {
             if (!RectF.intersects(visible, linkBoundsScratch)) continue;
             boolean selected = link.id != null && link.id.equals(selectedLinkId);
             boolean onPath = pathActive && highlightedPathEdges.contains(edgeKey(link.from, link.to));
-            paint.setColor(onPath
-                ? AppThemePalette.blue()
-                : selected
-                    ? AppThemePalette.text(Color.rgb(197, 83, 75))
-                    : AppThemePalette.relationColor(link.type));
-            paint.setStrokeWidth(onPath
-                ? Math.max(5f, 8f * scale)
-                : selected ? Math.max(3.4f, 5f * scale) : Math.max(2.4f, 3.6f * scale));
-            paint.setPathEffect(onPath ? null : "sibling".equals(link.type) ? siblingDashEffect() : null);
             Path path = linkPath(link, from, to);
-            canvas.drawPath(path, paint);
+            drawStyledLink(canvas, path, link, selected, onPath);
         }
         paint.setPathEffect(null);
         if (pathActive) postInvalidateOnAnimation();
+    }
+
+    private void drawStyledLink(Canvas canvas, Path path, Relation link, boolean selected, boolean onPath) {
+        if ("link_style_botanical".equals(linkStyle) && onPath) {
+            // Highlighted paths use the regular screen-space stroke.  The
+            // botanical fast path below keeps ordinary links in world space.
+            linkPathScratch.reset();
+            path.transform(worldToScreen, linkPathScratch);
+            path = linkPathScratch;
+        }
+        int baseColor = onPath
+            ? AppThemePalette.blue()
+            : selected
+                ? AppThemePalette.text(Color.rgb(197, 83, 75))
+                : AppThemePalette.relationColor(link.type);
+        int color = styledLinkColor(link, baseColor, selected, onPath);
+        float coreWidth = linkStrokeWidth(selected, onPath);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        if ("link_style_botanical".equals(linkStyle) && !onPath) {
+            canvas.save();
+            canvas.concat(worldToScreen);
+            botanicalEffect.link(
+                canvas,
+                lastLinkWorldPath,
+                "sibling".equals(link.type),
+                selected,
+                scale);
+            canvas.restore();
+            return;
+        } else if ("link_style_ribbon".equals(linkStyle) && !onPath) {
+            drawRibbonLink(canvas, path, link, color, selected);
+            return;
+        } else if ("link_style_fire".equals(linkStyle) && !onPath) {
+            drawFireLink(canvas, path, link, color, selected);
+            return;
+        } else if ("link_style_ink".equals(linkStyle) && !onPath) {
+            if (scale > 0.24f) {
+                paint.setPathEffect(null);
+                paint.setStrokeWidth(coreWidth + Math.max(0.6f, 1.2f * scale));
+                paint.setColor(withAlpha(Color.rgb(18, 24, 27), AppThemePalette.isDark() ? 70 : 34));
+                canvas.drawPath(path, paint);
+            }
+        } else if ("link_style_blueprint".equals(linkStyle) && !onPath) {
+            paint.setPathEffect(null);
+            paint.setStrokeWidth(coreWidth + Math.max(1f, 2.8f * scale));
+            paint.setColor(withAlpha(blend(color, Color.WHITE, 0.34f), AppThemePalette.isDark() ? 66 : 46));
+            canvas.drawPath(path, paint);
+        }
+        paint.setStrokeWidth(coreWidth);
+        paint.setColor(color);
+        paint.setPathEffect(linkPathEffect(link, onPath));
+        canvas.drawPath(path, paint);
+        paint.setPathEffect(null);
+        drawLinkStyleEndpoints(canvas, path, color, onPath);
+    }
+
+    private float linkStrokeWidth(boolean selected, boolean onPath) {
+        if (onPath) return Math.max(5f, 8f * scale);
+        if (selected) return Math.max(3.4f, 5f * scale);
+        if ("link_style_ink".equals(linkStyle)) return Math.max(1.35f, 4.1f * scale);
+        if ("link_style_ribbon".equals(linkStyle)) return Math.max(1.25f, 2.45f * scale);
+        if ("link_style_blueprint".equals(linkStyle)) return Math.max(2.1f, 3.4f * scale);
+        if ("link_style_fire".equals(linkStyle)) return Math.max(0.85f, 2.55f * scale);
+        return Math.max(2.4f, 3.6f * scale);
+    }
+
+    private DashPathEffect linkPathEffect(Relation link, boolean onPath) {
+        if (onPath) return null;
+        return "sibling".equals(link.type) ? siblingDashEffect() : null;
+    }
+
+    private int styledLinkColor(Relation link, int color, boolean selected, boolean onPath) {
+        if (selected || onPath) return color;
+        int background = canvasBackground();
+        boolean darkCanvas = Color.red(background) * 0.299f + Color.green(background) * 0.587f
+            + Color.blue(background) * 0.114f < 128f;
+        if ("link_style_ink".equals(linkStyle)) {
+            if (darkCanvas) {
+                if ("partner".equals(link.type)) return Color.rgb(206, 172, 126);
+                if ("sibling".equals(link.type)) return Color.rgb(167, 180, 193);
+                return Color.rgb(188, 207, 217);
+            }
+            if ("partner".equals(link.type)) return Color.rgb(112, 77, 48);
+            if ("sibling".equals(link.type)) return Color.rgb(82, 92, 102);
+            return Color.rgb(37, 50, 57);
+        }
+        if ("link_style_ribbon".equals(linkStyle)) {
+            return blend(color, darkCanvas ? Color.WHITE : Color.rgb(18, 74, 91), darkCanvas ? 0.55f : 0.18f);
+        }
+        if ("link_style_blueprint".equals(linkStyle)) {
+            if ("canvas_background_deep_blueprint".equals(canvasStyle)) return Color.rgb(190, 235, 255);
+            if (darkCanvas) return Color.rgb(142, 196, 232);
+            if ("partner".equals(link.type)) return Color.rgb(52, 121, 176);
+            if ("sibling".equals(link.type)) return Color.rgb(68, 133, 154);
+            return Color.rgb(27, 98, 158);
+        }
+        if ("link_style_fire".equals(linkStyle)) {
+            if ("partner".equals(link.type)) return Color.rgb(255, 153, 48);
+            if ("sibling".equals(link.type)) return Color.rgb(255, 190, 73);
+            return Color.rgb(245, 87, 33);
+        }
+        return darkCanvas ? blend(color, Color.WHITE, 0.4f) : color;
+    }
+
+    private void drawLinkStyleEndpoints(Canvas canvas, Path path, int color, boolean onPath) {
+        if (onPath || scale < 0.22f) return;
+        if (!"link_style_blueprint".equals(linkStyle)) return;
+        PathMeasure measure = new PathMeasure(path, false);
+        float length = measure.getLength();
+        if (length <= 0f) return;
+        float[] point = new float[2];
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(withAlpha(color, "link_style_ribbon".equals(linkStyle) ? 138 : 168));
+        float radius = "link_style_ribbon".equals(linkStyle)
+            ? Math.max(2f, 3.4f * scale)
+            : Math.max(1.6f, 2.5f * scale);
+        if (measure.getPosTan(0f, point, null)) canvas.drawCircle(point[0], point[1], radius, paint);
+        if (measure.getPosTan(length, point, null)) canvas.drawCircle(point[0], point[1], radius, paint);
+    }
+
+    private void drawRibbonLink(Canvas canvas, Path path, Relation link, int color, boolean selected) {
+        if (scale < 0.32f) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeWidth(Math.max(1.2f, 2.2f * scale));
+            paint.setColor(withAlpha(color, selected ? 230 : 190));
+            paint.setPathEffect(linkPathEffect(link, false));
+            canvas.drawPath(path, paint);
+            paint.setPathEffect(null);
+            return;
+        }
+        PathMeasure measure = new PathMeasure(path, false);
+        float length = measure.getLength();
+        if (length <= 0f) return;
+        float amplitude = 2.1f * scale;
+        float wavelength = 38f * scale;
+        if ("sibling".equals(link.type)) {
+            buildDashedRibbon(ribbonPathA, measure, length, amplitude, 0f);
+            buildDashedRibbon(ribbonPathB, measure, length, amplitude, (float) Math.PI);
+        } else {
+            buildRibbonStrand(ribbonPathA, measure, length, amplitude, wavelength, 0f);
+            buildRibbonStrand(ribbonPathB, measure, length, amplitude, wavelength, (float) Math.PI);
+        }
+
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setPathEffect(null);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeWidth(2.2f * scale);
+        paint.setColor(withAlpha(blend(color, Color.BLACK, 0.18f), AppThemePalette.isDark() ? 92 : 78));
+        canvas.drawPath(ribbonPathA, paint);
+        canvas.drawPath(ribbonPathB, paint);
+
+        paint.setStrokeWidth(1.25f * scale);
+        paint.setColor(withAlpha(blend(color, Color.WHITE, 0.06f), selected ? 238 : 218));
+        canvas.drawPath(ribbonPathA, paint);
+        paint.setColor(withAlpha(blend(color, Color.WHITE, AppThemePalette.isDark() ? 0.44f : 0.32f), selected ? 230 : 202));
+        canvas.drawPath(ribbonPathB, paint);
+
+        paint.setPathEffect(null);
+    }
+
+    private void drawFireLink(Canvas canvas, Path path, Relation link, int color, boolean selected) {
+        float coreWidth = linkStrokeWidth(selected, false);
+        DashPathEffect effect = linkPathEffect(link, false);
+        float zoomWidth = Math.max(0.18f, Math.min(1f, scale));
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setPathEffect(effect);
+
+        paint.setStrokeWidth(coreWidth + Math.max(0.9f, 7.4f * zoomWidth));
+        paint.setColor(Color.argb(AppThemePalette.isDark() ? 86 : 54, 245, 55, 18));
+        canvas.drawPath(path, paint);
+
+        paint.setStrokeWidth(coreWidth + Math.max(0.55f, 3.7f * zoomWidth));
+        paint.setColor(Color.argb(AppThemePalette.isDark() ? 126 : 86, 255, 144, 31));
+        canvas.drawPath(path, paint);
+
+        paint.setStrokeWidth(coreWidth);
+        paint.setColor(withAlpha(color, selected ? 245 : 222));
+        canvas.drawPath(path, paint);
+
+        paint.setStrokeWidth(Math.max(0.8f, 1.25f * scale));
+        paint.setColor(Color.argb(selected ? 238 : 205, 255, 229, 132));
+        canvas.drawPath(path, paint);
+        paint.setPathEffect(null);
+
+        PathMeasure measure = new PathMeasure(path, false);
+        float length = measure.getLength();
+        if (length <= 0f) return;
+        // Keep the glow on the connection itself. Detached flame slivers looked
+        // like broken strokes, and animated flow must not fill sibling gaps.
+        if (effect == null) drawFireFlow(canvas, measure, length, selected);
+        if (!exportRendering && effect == null) postInvalidateOnAnimation();
+    }
+
+    private void drawFireFlow(Canvas canvas, PathMeasure measure, float length, boolean selected) {
+        float progress = exportRendering ? 0.35f : (SystemClock.uptimeMillis() % 1800L) / 1800f;
+        float segment = Math.min(length * 0.26f, Math.max(30f, 92f * Math.max(0.28f, scale)));
+        float cycle = length + segment;
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setPathEffect(null);
+        for (int i = 0; i < 2; i++) {
+            float start = ((progress + i * 0.5f) % 1f) * cycle - segment;
+            drawFireFlowSegment(canvas, measure, length, start, Math.min(length, start + segment), selected, i);
+            if (start < 0f) {
+                drawFireFlowSegment(canvas, measure, length, length + start, length, selected, i);
+            } else if (start + segment > length) {
+                drawFireFlowSegment(canvas, measure, length, 0f, start + segment - length, selected, i);
+            }
+        }
+    }
+
+    private void drawFireFlowSegment(
+        Canvas canvas,
+        PathMeasure measure,
+        float length,
+        float start,
+        float end,
+        boolean selected,
+        int index
+    ) {
+        if (end <= start || start >= length || end <= 0f) return;
+        fireFlowPath.reset();
+        if (!measure.getSegment(Math.max(0f, start), Math.min(length, end), fireFlowPath, true)) return;
+        paint.setStrokeWidth(Math.max(0.85f, 1.55f * scale));
+        paint.setColor(Color.argb(selected ? 226 : 188, 255, index == 0 ? 239 : 183, 104));
+        canvas.drawPath(fireFlowPath, paint);
+    }
+
+    private void buildRibbonStrand(
+        Path target,
+        PathMeasure measure,
+        float length,
+        float amplitude,
+        float wavelength,
+        float phase
+    ) {
+        target.reset();
+        float[] point = new float[2];
+        float[] tangent = new float[2];
+        float step = Math.max(3.5f, wavelength / 9f);
+        boolean started = false;
+        for (float distance = 0f; distance <= length; distance += step) {
+            if (addRibbonPoint(target, measure, point, tangent, distance, amplitude, wavelength, phase, started)) {
+                started = true;
+            }
+        }
+        addRibbonPoint(target, measure, point, tangent, length, amplitude, wavelength, phase, started);
+    }
+
+    private void buildDashedRibbon(Path target, PathMeasure measure, float length, float amplitude, float phase) {
+        target.reset();
+        float[] point = new float[2], tangent = new float[2];
+        float dash = 18f * scale, gap = 10f * scale;
+        for (float start = 0; start < length; start += dash + gap) {
+            float end = Math.min(length, start + dash);
+            float wavelength = 2f * (end - start);
+            float localPhase = phase - start / wavelength * (float) Math.PI * 2f;
+            float height = amplitude * Math.min(1f, (end - start) / dash);
+            boolean started = false;
+            for (float d = start; d < end; d += 1.5f * scale) {
+                started |= addRibbonPoint(target, measure, point, tangent, d, height, wavelength, localPhase, started);
+            }
+            addRibbonPoint(target, measure, point, tangent, end, height, wavelength, localPhase, started);
+        }
+    }
+
+    private boolean addRibbonPoint(
+        Path target,
+        PathMeasure measure,
+        float[] point,
+        float[] tangent,
+        float distance,
+        float amplitude,
+        float wavelength,
+        float phase,
+        boolean started
+    ) {
+        if (!measure.getPosTan(distance, point, tangent)) return false;
+        float len = (float) Math.hypot(tangent[0], tangent[1]);
+        if (len <= 0f) return false;
+        float wave = (float) Math.sin(distance / wavelength * Math.PI * 2f + phase);
+        float nx = -tangent[1] / len;
+        float ny = tangent[0] / len;
+        float x = point[0] + nx * amplitude * wave;
+        float y = point[1] + ny * amplitude * wave;
+        if (started) target.lineTo(x, y);
+        else target.moveTo(x, y);
+        return true;
     }
 
     private void drawGenerationLines(Canvas canvas, RectF visible, int width, int height) {
@@ -635,15 +1140,21 @@ final class TreeCanvasView extends View {
     }
 
     private void drawCards(Canvas canvas, RectF visible, boolean exportMode) {
+        boolean drewFire = false;
         Iterable<Person> people = dragPersonIds.isEmpty()
             ? visiblePeople(visible)
             : state.people.values();
         for (Person person : people) {
             if (!matches(person)) continue;
-            tmp.set(person.x, person.y, person.x + cardWidthWorld(), person.y + cardHeightWorld());
+            tmp.set(person.x - 64f, person.y - 64f, person.x + cardWidthWorld() + 64f, person.y + cardHeightWorld() + 64f);
             if (!RectF.intersects(visible, tmp)) continue;
             drawCard(canvas, person, exportMode);
+            drewFire |= "card_edge_fire".equals(cardEdgeStyle)
+                || "card_edge_smoke".equals(cardEdgeStyle)
+                || "card_theme_fire".equals(cardStyle);
         }
+        if (drewFire && !exportMode && isShown() && getWindowVisibility() == VISIBLE)
+            postInvalidateDelayed(33L);
     }
 
     private void drawCard(Canvas canvas, Person person, boolean exportMode) {
@@ -651,7 +1162,26 @@ final class TreeCanvasView extends View {
         float top = sy(person.y);
         float width = cardWidthWorld() * scale;
         float height = cardHeightWorld() * scale;
-        float radius = 8f * scale;
+        boolean fire = "card_edge_fire".equals(cardEdgeStyle);
+        boolean smoke = "card_edge_smoke".equals(cardEdgeStyle);
+        boolean botanical = "card_edge_botanical".equals(cardEdgeStyle);
+        boolean decorated = fire || smoke || botanical;
+        float radius = (decorated || "card_theme_smoke".equals(cardStyle) ? 10f : 8f) * scale;
+        int fireSeed = person.id == null ? 0 : person.id.hashCode();
+        if (decorated) {
+            canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
+            if (fire) fireCardEffect.behind(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
+            if (smoke) smokeCardEffect.behind(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
+            if (botanical) {
+                botanicalEffect.behind(
+                    canvas,
+                    cardWidthWorld(),
+                    cardHeightWorld(),
+                    fireSeed,
+                    scale);
+            }
+            canvas.restore();
+        }
 
         paint.setStyle(Paint.Style.FILL);
         if (scale > 0.24f) {
@@ -666,11 +1196,20 @@ final class TreeCanvasView extends View {
                 radius,
                 paint);
         }
-        int cardColor = adjustForSelection(person);
+        int cardColor = styledCardColor(adjustForSelection(person), person);
         paint.setShader(cardFillGradient(left, top, left + width, top + height, cardColor));
         paint.setColor(cardColor);
         canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
         paint.setShader(null);
+        drawCardStyleOverlay(canvas, left, top, width, height, radius, person.color,
+            person.id == null ? 0 : person.id.hashCode());
+        if (decorated) {
+            canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
+            if (fire) fireCardEffect.rim(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
+            if (smoke) smokeCardEffect.rim(canvas, cardWidthWorld(), cardHeightWorld());
+            if (botanical) botanicalEffect.rim(canvas, cardWidthWorld(), cardHeightWorld());
+            canvas.restore();
+        }
         boolean selected = person.id.equals(state.selectedId);
         boolean multiSelected = selectedIds.contains(person.id);
         boolean lineStart = person.id.equals(pendingLineFromId);
@@ -724,7 +1263,8 @@ final class TreeCanvasView extends View {
                     : person.pinned
                         ? AppThemePalette.text(Color.rgb(31, 94, 89))
                         : cardNeonStroke(person.color, 220));
-        canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
+        if (!decorated || selected || multiSelected || lineStart || person.pinned)
+            canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
         if (person.id.equals(focusHighlightId)) {
             long remaining = focusHighlightUntil - SystemClock.uptimeMillis();
             if (remaining > 0L) {
@@ -790,13 +1330,20 @@ final class TreeCanvasView extends View {
             }
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3f * scale);
-            paint.setColor(cardNeonStroke(person.color, 224));
+            paint.setColor(photo == null
+                ? blend(cardInitialsTextColor(), person.color, 0.25f)
+                : cardNeonStroke(person.color, 224));
             canvas.drawCircle(cx, cy, avatar / 2f, paint);
+            if (photo == null) {
+                paint.setStrokeWidth(1.1f * scale);
+                paint.setColor(withAlpha(cardInitialsTextColor(), 100));
+                canvas.drawCircle(cx, cy, avatar / 2f - 4.5f * scale, paint);
+            }
             Paint.FontMetrics fm;
             if (photo == null) {
                 paint.setStyle(Paint.Style.FILL);
                 textPaint.setTextAlign(Paint.Align.CENTER);
-                textPaint.setColor(Color.argb(190, 34, 37, 39));
+                textPaint.setColor(cardInitialsTextColor());
                 textPaint.setFakeBoldText(true);
                 textPaint.setTypeface(uiBold);
                 textPaint.setTextSize(18f * textScale);
@@ -811,14 +1358,14 @@ final class TreeCanvasView extends View {
             textLeft = left + pad + avatar + (compactCards ? 9f : 12f) * scale;
             textMaxWidth = Math.max(1f, width - (textLeft - left) - pad);
 
-            if (scale > 0.11f) {
+            if (!exportMode && scale > 0.11f) {
                 float menu = (compactCards ? 23f : 28f) * scale;
                 float menuLeft = left + width - 7f * scale - menu;
                 float menuTop = top + 7f * scale;
                 paint.setColor(Color.argb(76, 255, 255, 255));
                 canvas.drawRoundRect(menuLeft, menuTop, menuLeft + menu, menuTop + menu, 5f * scale, 5f * scale, paint);
                 textPaint.setTextAlign(Paint.Align.CENTER);
-                textPaint.setColor(Color.rgb(83, 94, 88));
+                textPaint.setColor(cardMenuTextColor());
                 textPaint.setTextSize(17f * textScale);
                 fm = textPaint.getFontMetrics();
                 canvas.drawText("⋮", menuLeft + menu / 2f, menuTop + menu / 2f - (fm.ascent + fm.descent) / 2f, textPaint);
@@ -826,7 +1373,7 @@ final class TreeCanvasView extends View {
             }
         }
 
-        textPaint.setColor(Color.rgb(34, 37, 39));
+        textPaint.setColor(cardPrimaryTextColor());
         textPaint.setFakeBoldText(true);
         textPaint.setTypeface(uiBold);
         textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * textScale);
@@ -843,7 +1390,7 @@ final class TreeCanvasView extends View {
         if (!hideDetails && scale > 0.18f) {
             textPaint.setFakeBoldText(false);
             textPaint.setTypeface(uiRegular);
-            textPaint.setColor(Color.argb(184, 34, 37, 39));
+            textPaint.setColor(cardSecondaryTextColor());
             textPaint.setTextSize((compactCards ? 13f : 15f) * textScale);
             CardMeta meta = cardMeta(person);
             String date = meta.date;
@@ -1087,7 +1634,8 @@ final class TreeCanvasView extends View {
                 256,
                 Math.min(
                     1536,
-                    Math.round((compactCards ? 48f : 64f) * Math.max(1f, scale))));
+                    Math.round((compactCards ? 56f : 80f) * Math.max(1f,
+                        exportRendering ? exportPhotoScale : scale))));
             if (!mediaId.isEmpty() && mediaStore != null) {
                 return mediaStore.decodeBitmap(mediaId, targetSize);
             }
@@ -1381,6 +1929,12 @@ final class TreeCanvasView extends View {
         worldToScreenValues[7] = 0f;
         worldToScreenValues[8] = 1f;
         worldToScreen.setValues(worldToScreenValues);
+        lastLinkWorldPath = geometry.worldPath;
+        // Botanical links draw their cached decoration in world coordinates
+        // under one shared canvas transform.  Do not transform the same path
+        // into screen coordinates first; that matrix work used to happen on
+        // every visible botanical link during pinch and pan.
+        if ("link_style_botanical".equals(linkStyle)) return geometry.worldPath;
         linkPathScratch.reset();
         geometry.worldPath.transform(worldToScreen, linkPathScratch);
         return linkPathScratch;
@@ -1403,6 +1957,10 @@ final class TreeCanvasView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 if (listener != null) listener.onCanvasTouched();
+                // A new pan or pinch starts from the currently displayed
+                // transform.  Cancel a previous settle animation so it cannot
+                // fight the user's finger during the next gesture.
+                syncZoomTarget();
                 downX = lastX = event.getX();
                 downY = lastY = event.getY();
                 gestureStartOffsetX = offsetX;
@@ -1894,10 +2452,10 @@ final class TreeCanvasView extends View {
     private List<Person> visiblePeople(RectF visible) {
         rebuildSpatialIndex();
         visiblePeopleScratch.clear();
-        int minCellX = cell(visible.left - cardWidthWorld());
-        int maxCellX = cell(visible.right);
-        int minCellY = cell(visible.top - cardHeightWorld());
-        int maxCellY = cell(visible.bottom);
+        int minCellX = cell(visible.left - cardWidthWorld() - 64f);
+        int maxCellX = cell(visible.right + 64f);
+        int minCellY = cell(visible.top - cardHeightWorld() - 64f);
+        int maxCellY = cell(visible.bottom + 64f);
         long cellCount = (long) (maxCellX - minCellX + 1)
             * (long) (maxCellY - minCellY + 1);
         if (cellCount <= 0L || cellCount > 2048L) {
@@ -1974,12 +2532,58 @@ final class TreeCanvasView extends View {
     }
 
     private void zoom(float factor, float focusX, float focusY) {
+        if (!Float.isFinite(factor) || factor <= 0f) return;
         float beforeX = wx(focusX);
         float beforeY = wy(focusY);
-        scale = clamp(scale * factor, 0.05f, 3.0f);
-        offsetX = focusX - beforeX * scale;
-        offsetY = focusY - beforeY * scale;
+        // Accumulate pinch deltas against the animated destination.  During a
+        // fast gesture the displayed scale intentionally lags behind that
+        // destination; using the displayed value here would repeatedly erase
+        // part of the gesture and make zoom feel stepped.
+        float baseScale = zoomAnimationRunning ? zoomTargetScale : scale;
+        zoomTargetScale = clamp(baseScale * factor, 0.05f, 3.0f);
+        zoomTargetOffsetX = focusX - beforeX * zoomTargetScale;
+        zoomTargetOffsetY = focusY - beforeY * zoomTargetScale;
+        notifyZoomChanged(zoomTargetScale);
+        if (!zoomAnimationRunning) {
+            zoomAnimationRunning = true;
+            postOnAnimation(zoomAnimation);
+        }
+    }
+
+    private void advanceZoomAnimation() {
+        float interpolation = 0.34f;
+        scale += (zoomTargetScale - scale) * interpolation;
+        offsetX += (zoomTargetOffsetX - offsetX) * interpolation;
+        offsetY += (zoomTargetOffsetY - offsetY) * interpolation;
+        boolean settled = Math.abs(zoomTargetScale - scale) < .0006f
+            && Math.abs(zoomTargetOffsetX - offsetX) < .08f
+            && Math.abs(zoomTargetOffsetY - offsetY) < .08f;
+        if (settled) {
+            scale = zoomTargetScale;
+            offsetX = zoomTargetOffsetX;
+            offsetY = zoomTargetOffsetY;
+            zoomAnimationRunning = false;
+        } else {
+            postOnAnimation(zoomAnimation);
+        }
+        notifyZoomChanged();
         invalidate();
+    }
+
+    private void syncZoomTarget() {
+        zoomTargetScale = scale;
+        zoomTargetOffsetX = offsetX;
+        zoomTargetOffsetY = offsetY;
+        zoomAnimationRunning = false;
+        removeCallbacks(zoomAnimation);
+    }
+
+    private void notifyZoomChanged() {
+        notifyZoomChanged(scale);
+    }
+
+    private void notifyZoomChanged(float value) {
+        if (listener != null && Float.isFinite(value)) listener.onZoomChanged(value);
     }
 
     private float sx(float worldX) {
@@ -2024,6 +2628,24 @@ final class TreeCanvasView extends View {
     }
 
     private int cardNeonStroke(int color, int alpha) {
+        if ("card_theme_smoke".equals(cardStyle)) return Color.argb(alpha, 174, 194, 207);
+        if ("card_theme_botanical".equals(cardStyle))
+            return Color.argb(Math.min(alpha, 220), 72, 126, 49);
+        if ("card_theme_archive".equals(cardStyle)) {
+            return withAlpha(Color.rgb(116, 91, 57), Math.min(alpha, 188));
+        }
+        if ("card_theme_midnight".equals(cardStyle)) {
+            int mixed = blend(color, Color.rgb(105, 232, 218), 0.42f);
+            return withAlpha(mixed, Math.min(alpha, 230));
+        }
+        if ("card_theme_glass".equals(cardStyle)) {
+            int mixed = blend(color, Color.WHITE, 0.38f);
+            return withAlpha(mixed, Math.min(alpha, 198));
+        }
+        if ("card_theme_fire".equals(cardStyle)) {
+            int mixed = blend(color, Color.rgb(255, 127, 32), 0.62f);
+            return withAlpha(mixed, Math.min(alpha, 235));
+        }
         int mixed = blend(color, Color.WHITE, AppThemePalette.isDark() ? 0.18f : 0.06f);
         int cappedAlpha = AppThemePalette.isDark()
             ? Math.min(alpha, 214)
@@ -2032,9 +2654,201 @@ final class TreeCanvasView extends View {
     }
 
     private Shader cardFillGradient(float left, float top, float right, float bottom, int color) {
+        if ("card_theme_smoke".equals(cardStyle)) return new LinearGradient(left, top, right, bottom,
+            new int[] {0xff45525b, 0xff20282f, 0xff343f48}, new float[] {0, .52f, 1}, Shader.TileMode.CLAMP);
+        if ("card_theme_botanical".equals(cardStyle)) return new LinearGradient(
+            left, top, right, bottom,
+            new int[] {0xffeff8d7, 0xffcce9b1, 0xfff7f2cf},
+            new float[] {0f, .56f, 1f}, Shader.TileMode.CLAMP);
+        if ("card_theme_archive".equals(cardStyle)) {
+            return new LinearGradient(
+                left,
+                top,
+                right,
+                bottom,
+                blend(color, Color.WHITE, 0.18f),
+                blend(color, Color.rgb(126, 88, 48), 0.15f),
+                Shader.TileMode.CLAMP);
+        }
+        if ("card_theme_midnight".equals(cardStyle)) {
+            return new LinearGradient(
+                left,
+                top,
+                right,
+                bottom,
+                blend(color, Color.rgb(25, 39, 50), 0.42f),
+                blend(color, Color.rgb(7, 16, 23), 0.64f),
+                Shader.TileMode.CLAMP);
+        }
+        if ("card_theme_glass".equals(cardStyle)) {
+            return new LinearGradient(
+                left,
+                top,
+                right,
+                bottom,
+                withAlpha(blend(color, Color.WHITE, 0.58f), 188),
+                withAlpha(blend(color, Color.rgb(210, 235, 241), 0.42f), 138),
+                Shader.TileMode.CLAMP);
+        }
+        if ("card_theme_fire".equals(cardStyle)) {
+            return new LinearGradient(
+                left,
+                top,
+                right,
+                bottom,
+                new int[] {
+                    Color.rgb(213, 80, 11),
+                    Color.rgb(166, 53, 8),
+                    Color.rgb(238, 98, 10)
+                },
+                new float[] {0f, 0.46f, 1f},
+                Shader.TileMode.CLAMP);
+        }
         int topColor = color;
         int bottomColor = blend(color, Color.BLACK, AppThemePalette.isDark() ? 0.18f : 0.12f);
         return new LinearGradient(left, top, right, bottom, topColor, bottomColor, Shader.TileMode.CLAMP);
+    }
+
+    private int styledCardColor(int color, Person person) {
+        if ("card_theme_smoke".equals(cardStyle)) return Color.rgb(42, 52, 60);
+        if ("card_theme_botanical".equals(cardStyle))
+            return blend(color, Color.rgb(225, 241, 193), .78f);
+        if ("card_theme_archive".equals(cardStyle)) {
+            return blend(blend(color, Color.rgb(250, 238, 207), 0.72f), Color.WHITE, 0.08f);
+        }
+        if ("card_theme_midnight".equals(cardStyle)) {
+            return blend(color, Color.rgb(11, 23, 31), AppThemePalette.isDark() ? 0.48f : 0.56f);
+        }
+        if ("card_theme_glass".equals(cardStyle)) {
+            return blend(color, Color.WHITE, person.pinned ? 0.44f : 0.34f);
+        }
+        if ("card_theme_fire".equals(cardStyle)) {
+            return blend(color, Color.rgb(118, 40, 10), AppThemePalette.isDark() ? 0.38f : 0.43f);
+        }
+        return color;
+    }
+
+    private void drawCardStyleOverlay(Canvas canvas, float left, float top, float width, float height, float radius, int accent, int seed) {
+        if ("card_theme_archive".equals(cardStyle)) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, 1.2f * scale));
+            paint.setColor(Color.argb(26, 118, 91, 54));
+            float step = Math.max(5f, 15f * scale);
+            for (float y = top + step; y < top + height - step / 2f; y += step) {
+                canvas.drawLine(left + 10f * scale, y, left + width - 10f * scale, y, paint);
+            }
+        } else if ("card_theme_midnight".equals(cardStyle)) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new LinearGradient(
+                left,
+                top,
+                left + width * 0.32f,
+                top,
+                withAlpha(blend(accent, Color.rgb(98, 228, 216), 0.16f), 132),
+                Color.TRANSPARENT,
+                Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
+            paint.setShader(null);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, 1.2f * scale));
+            paint.setColor(Color.argb(48, 145, 240, 226));
+            canvas.drawRoundRect(
+                left + 3f * scale,
+                top + 3f * scale,
+                left + width - 3f * scale,
+                top + height - 3f * scale,
+                Math.max(1f, radius - 2f * scale),
+                Math.max(1f, radius - 2f * scale),
+                paint);
+            paint.setStrokeWidth(Math.max(2f, 3.2f * scale));
+            paint.setColor(withAlpha(blend(accent, Color.WHITE, 0.18f), 188));
+            canvas.drawLine(left + 7f * scale, top + 12f * scale, left + 7f * scale, top + height - 12f * scale, paint);
+        } else if ("card_theme_glass".equals(cardStyle)) {
+            paint.setStyle(Paint.Style.FILL);
+            paint.setShader(new LinearGradient(
+                left,
+                top,
+                left,
+                top + height * 0.55f,
+                Color.argb(122, 255, 255, 255),
+                Color.argb(28, 255, 255, 255),
+                Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
+            paint.setShader(null);
+            paint.setShader(new LinearGradient(
+                left,
+                top + height * 0.18f,
+                left + width,
+                top + height * 0.82f,
+                Color.TRANSPARENT,
+                Color.argb(76, 255, 255, 255),
+                Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(
+                left + 8f * scale,
+                top + 8f * scale,
+                left + width - 8f * scale,
+                top + height - 8f * scale,
+                Math.max(1f, radius - 3f * scale),
+                Math.max(1f, radius - 3f * scale),
+                paint);
+            paint.setShader(null);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, 1.4f * scale));
+            paint.setColor(Color.argb(148, 255, 255, 255));
+            canvas.drawRoundRect(left + scale, top + scale, left + width - scale, top + height - scale, radius, radius, paint);
+        } else if ("card_theme_fire".equals(cardStyle)) {
+            canvas.save();
+            canvas.translate(left, top);
+            canvas.scale(scale, scale);
+            fireCardEffect.surface(canvas, width / scale, height / scale, seed, fireFrameSeconds);
+            canvas.restore();
+        } else if ("card_theme_smoke".equals(cardStyle)) {
+            canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
+            smokeCardEffect.surface(canvas, width / scale, height / scale, seed);
+            canvas.restore();
+        } else if ("card_theme_botanical".equals(cardStyle)) {
+            canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
+            botanicalEffect.surface(canvas, width / scale, height / scale, seed);
+            canvas.restore();
+        }
+    }
+
+    private int cardPrimaryTextColor() {
+        if ("card_theme_smoke".equals(cardStyle)) return Color.rgb(245, 249, 251);
+        if ("card_theme_midnight".equals(cardStyle)) return Color.rgb(236, 244, 246);
+        if ("card_theme_archive".equals(cardStyle)) return Color.rgb(58, 44, 30);
+        if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 246, 222);
+        return Color.rgb(34, 37, 39);
+    }
+
+    private int cardSecondaryTextColor() {
+        if ("card_theme_smoke".equals(cardStyle)) return Color.rgb(215, 227, 234);
+        if ("card_theme_midnight".equals(cardStyle)) return Color.argb(205, 206, 224, 226);
+        if ("card_theme_archive".equals(cardStyle)) return Color.argb(208, 101, 75, 46);
+        if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 220, 103);
+        return Color.argb(184, 34, 37, 39);
+    }
+
+    private int cardInitialsTextColor() {
+        if ("card_theme_smoke".equals(cardStyle)) return Color.rgb(239, 245, 249);
+        if ("card_theme_midnight".equals(cardStyle)) return Color.rgb(238, 248, 248);
+        if ("card_theme_archive".equals(cardStyle)) return Color.argb(210, 70, 51, 31);
+        if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 238, 185);
+        return Color.argb(190, 34, 37, 39);
+    }
+
+    private int cardMenuTextColor() {
+        if ("card_theme_smoke".equals(cardStyle)) return Color.rgb(219, 233, 243);
+        if ("card_theme_botanical".equals(cardStyle)) return Color.rgb(53, 91, 39);
+        if ("card_theme_midnight".equals(cardStyle)) return Color.rgb(218, 235, 238);
+        if ("card_theme_archive".equals(cardStyle)) return Color.rgb(98, 72, 43);
+        if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 218, 148);
+        return Color.rgb(83, 94, 88);
+    }
+
+    private static String normalizeWorkshopStyle(String value) {
+        String id = value == null ? "" : value.trim();
+        return id.isEmpty() ? RewardCatalog.STANDARD : id;
     }
 
     private static int withAlpha(int color, int alpha) {

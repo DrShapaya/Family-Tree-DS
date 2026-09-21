@@ -7,6 +7,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -80,8 +81,6 @@ public final class MainActivity extends Activity {
     static final int REQ_MEMORY_PHOTO = 31;
     static final int REQ_ALBUM_PHOTOS = 32;
     static final String VERSION_NAME = BuildConfig.VERSION_NAME;
-    static final String DONATION_ALERTS_URL = "https://www.donationalerts.com/r/drshapaya";
-    static final int COLLAPSED_RELEASE_NOTES = 2;
     private static final String UI_PREFERENCES = "androidft-ui";
     private static final String TRAINING_OFFER_HANDLED = "training_offer_handled";
     private static final String PREF_TREE_HINT_DISMISSED = "tree_hint_dismissed";
@@ -104,8 +103,13 @@ public final class MainActivity extends Activity {
     TreeState state;
     TreeCanvasView treeView;
     FrameLayout stage;
+    LinearLayout landscapeBody;
+    FrameLayout landscapePanelHost;
+    FrameLayout landscapeFullPanelHost;
+    View landscapeTreePanelCloseButton;
     TextView stats;
     EditText search;
+    Button searchToggleButton;
     HorizontalScrollView searchSuggestionsScroll;
     LinearLayout searchSuggestions;
     LinearLayout cardPanel;
@@ -150,8 +154,14 @@ public final class MainActivity extends Activity {
     Button treeQualityButton;
     View appHeader;
     View headerBrand;
-    Button headerSaveButton;
+    View headerIdentityIcon;
+    View headerIdentityTexts;
+    LinearLayout landscapeHeaderControls;
+    LinearLayout landscapeFocusControlsHost;
+    View landscapePeopleCloseHost;
+    TextView zoomIndicator;
     TextView treeHint;
+    View actionOverlay;
     boolean treeHintDismissed;
     boolean treeHintAutoHidden;
     View zoomRail;
@@ -208,13 +218,19 @@ public final class MainActivity extends Activity {
     private MainActivityEditor editorModule;
     private MainActivityQuickStart quickStartModule;
     MainActivityPeople peopleModule;
+    private MainUiKit uiKit;
+    private MainActivityAbout aboutModule;
+    private MainActivityWorkshop workshopModule;
     private MainActivityOnline onlineModule;
     private OnlineTreeManager onlineManager;
     private TreeSaveCoordinator saveCoordinator;
     private LayoutTrainingStore layoutTraining;
-    private TreeQualityAnalyzer.TreeReport qualityReport = new TreeQualityAnalyzer.TreeReport();
+    private MainActivityQuality qualityModule;
     private final Handler toastHandler = new Handler(Looper.getMainLooper());
     private Toast currentToast;
+    private int statusBarInsetPx;
+    private final java.util.IdentityHashMap<View, View> landscapePanelContainers =
+        new java.util.IdentityHashMap<>();
     private Dialog lockedEditPromptDialog;
     private volatile boolean arrangeInProgress;
     private final Runnable dismissLockedEditPromptRunnable = () -> {
@@ -224,6 +240,12 @@ public final class MainActivity extends Activity {
     };
     private final Runnable cancelToastRunnable = () -> {
         if (currentToast != null) currentToast.cancel();
+    };
+    private final Runnable hideZoomIndicatorRunnable = () -> {
+        if (zoomIndicator == null) return;
+        zoomIndicator.animate().alpha(0f).setDuration(180L).withEndAction(() -> {
+            if (zoomIndicator != null) zoomIndicator.setVisibility(View.GONE);
+        }).start();
     };
     private OnBackInvokedCallback backInvokedCallback;
 
@@ -252,6 +274,7 @@ public final class MainActivity extends Activity {
         layoutTraining = new LayoutTrainingStore(this);
         SmartLayoutSolver.setRuntimeWeights(layoutTraining.weights());
         state = store.load();
+        AnalyticsReporter.treeLoaded(state);
         applyAutoArrangePreference(state);
         treeHintDismissed = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
             .getBoolean(PREF_TREE_HINT_DISMISSED, false);
@@ -264,6 +287,27 @@ public final class MainActivity extends Activity {
         editorModule = new MainActivityEditor(this);
         quickStartModule = new MainActivityQuickStart(this);
         peopleModule = new MainActivityPeople(this);
+        uiKit = new MainUiKit(this, () -> uiScale);
+        aboutModule = new MainActivityAbout(
+            this,
+            uiKit,
+            this::toast,
+            this::showDeveloperMenu);
+        workshopModule = new MainActivityWorkshop(
+            this,
+            uiKit,
+            () -> treeView,
+            this::toast);
+        qualityModule = new MainActivityQuality(
+            this,
+            uiKit,
+            () -> state,
+            () -> treeView,
+            () -> treeQualityButton,
+            this::selectQualityPerson,
+            this::showPanel,
+            this::toast,
+            this::openPersonEditor);
         onlineManager = new OnlineTreeManager(this, store, new OnlineTreeManager.Listener() {
             @Override public void onRemoteTree(TreeState remote, String message) {
                 applyOnlineTree(remote, message);
@@ -305,6 +349,7 @@ public final class MainActivity extends Activity {
                 }
 
                 @Override public void onSaved(TreeState snapshot) {
+                    AnalyticsReporter.treeSaved(snapshot);
                     BirthdayWidgetProvider.updateAll(MainActivity.this);
                     if (onlineManager != null) onlineManager.onLocalTreeSaved(snapshot);
                 }
@@ -335,6 +380,14 @@ public final class MainActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleIncomingIntent(intent);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (state != null && headerModule != null && panelsModule != null) {
+            rebuildUiKeepingPanel();
+        }
     }
 
     @SuppressLint("GestureBackNavigation")
@@ -383,6 +436,8 @@ public final class MainActivity extends Activity {
         if (onlineManager != null) onlineManager.close();
         if (peopleModule != null) peopleModule.close();
         if (settingsModule != null) settingsModule.close();
+        if (filesModule != null) filesModule.close();
+        if (workshopModule != null) workshopModule.close();
         toastHandler.removeCallbacks(dismissLockedEditPromptRunnable);
         if (lockedEditPromptDialog != null && lockedEditPromptDialog.isShowing()) {
             lockedEditPromptDialog.dismiss();
@@ -398,6 +453,14 @@ public final class MainActivity extends Activity {
     }
 
     private void buildUi() {
+        landscapePanelContainers.clear();
+        landscapePanelHost = null;
+        landscapeFullPanelHost = null;
+        landscapeBody = null;
+        landscapeTreePanelCloseButton = null;
+        landscapeHeaderControls = null;
+        landscapeFocusControlsHost = null;
+        landscapePeopleCloseHost = null;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppThemePalette.isDark()
@@ -405,12 +468,24 @@ public final class MainActivity extends Activity {
             : Color.rgb(243, 246, 248));
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             int bottomInset = 0;
+            int topInset = 0;
             if (insets != null) {
-                bottomInset = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                    ? insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
-                    : insets.getSystemWindowInsetBottom();
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    bottomInset = insets.getInsets(
+                        android.view.WindowInsets.Type.navigationBars()).bottom;
+                    topInset = insets.getInsets(
+                        android.view.WindowInsets.Type.statusBars()).top;
+                } else {
+                    bottomInset = insets.getSystemWindowInsetBottom();
+                    topInset = insets.getSystemWindowInsetTop();
+                }
             }
             view.setPadding(0, 0, 0, Math.max(0, bottomInset));
+            int safeTop = Math.max(0, topInset);
+            if (statusBarInsetPx != safeTop) {
+                statusBarInsetPx = safeTop;
+                applyFullPanelTopInset();
+            }
             return insets;
         });
         setContentView(root);
@@ -422,7 +497,30 @@ public final class MainActivity extends Activity {
         stage = new FrameLayout(this);
         stage.setFocusableInTouchMode(true);
         stage.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
-        root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
+        if (isLandscapeLayout()) {
+            landscapeBody = new LinearLayout(this);
+            landscapeBody.setOrientation(LinearLayout.HORIZONTAL);
+            landscapeBody.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
+            root.addView(landscapeBody, new LinearLayout.LayoutParams(-1, 0, 1));
+
+            landscapePanelHost = new FrameLayout(this);
+            landscapePanelHost.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
+            landscapePanelHost.setVisibility(View.GONE);
+            landscapePanelHost.setElevation(dp(9));
+            landscapeBody.addView(
+                landscapePanelHost,
+                new LinearLayout.LayoutParams(landscapePanelWidth(), -1));
+            landscapeBody.addView(stage, new LinearLayout.LayoutParams(0, -1, 1));
+
+            landscapeFullPanelHost = new FrameLayout(this);
+            landscapeFullPanelHost.setBackgroundColor(AppThemePalette.surface(Color.rgb(243, 247, 248)));
+            landscapeFullPanelHost.setVisibility(View.GONE);
+            landscapeBody.addView(
+                landscapeFullPanelHost,
+                new LinearLayout.LayoutParams(0, -1, 1));
+        } else {
+            root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
+        }
 
         treeView = new TreeCanvasView(this);
         treeView.setMediaStore(store.mediaStore());
@@ -479,8 +577,71 @@ public final class MainActivity extends Activity {
             @Override public void onEditBlocked() {
                 showEditingLockedPrompt();
             }
+            @Override public void onZoomChanged(float scale) {
+                showZoomIndicator(scale);
+            }
         });
         stage.addView(treeView, new FrameLayout.LayoutParams(-1, -1));
+
+        if (isLandscapeLayout()) {
+            landscapeFocusControlsHost = new LinearLayout(this);
+            landscapeFocusControlsHost.setGravity(Gravity.CENTER_VERTICAL);
+            landscapeFocusControlsHost.setOrientation(LinearLayout.HORIZONTAL);
+            landscapeFocusControlsHost.setPadding(0, dp(3), dp(2), dp(3));
+            landscapeFocusControlsHost.setBackgroundColor(Color.TRANSPARENT);
+            landscapeFocusControlsHost.setVisibility(View.GONE);
+            landscapeFocusControlsHost.setElevation(dp(13));
+            FrameLayout.LayoutParams focusControlsParams = new FrameLayout.LayoutParams(
+                -1,
+                dp(58),
+                Gravity.TOP);
+            focusControlsParams.setMargins(dp(7), statusBarHeight(), dp(10), 0);
+            stage.addView(landscapeFocusControlsHost, focusControlsParams);
+        }
+
+        if (isLandscapeLayout()) {
+            TextView closeTreePanel = new LocalizedTextView(this);
+            closeTreePanel.setGravity(Gravity.CENTER);
+            closeTreePanel.setBackground(panelBg(
+                Color.rgb(255, 247, 247),
+                dp(10),
+                Color.rgb(224, 86, 86)));
+            closeTreePanel.setForeground(centeredIcon(
+                R.drawable.ic_menu_close,
+                Color.rgb(211, 55, 55)));
+            closeTreePanel.setForegroundGravity(Gravity.CENTER);
+            closeTreePanel.setContentDescription(tr("Закрыть инструменты дерева"));
+            closeTreePanel.setOnClickListener(v -> showPanel(""));
+            closeTreePanel.setElevation(dp(16));
+            closeTreePanel.setVisibility(View.GONE);
+            FrameLayout.LayoutParams closeTreeParams = new FrameLayout.LayoutParams(
+                dp(42),
+                dp(42),
+                Gravity.LEFT | Gravity.TOP);
+            closeTreeParams.setMargins(dp(8), dp(8), 0, 0);
+            stage.addView(closeTreePanel, closeTreeParams);
+            landscapeTreePanelCloseButton = closeTreePanel;
+        }
+
+        actionOverlay = headerModule.buildActionOverlay();
+        if (actionOverlay != null) {
+            actionOverlay.setElevation(dp(12));
+            FrameLayout.LayoutParams actionParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
+            actionParams.setMargins(0, isLandscapeLayout() ? 0 : dp(8), 0, 0);
+            stage.addView(actionOverlay, actionParams);
+        }
+
+        zoomIndicator = new LocalizedTextView(this);
+        zoomIndicator.setTextColor(Color.WHITE);
+        zoomIndicator.setTextSize(12);
+        zoomIndicator.setTypeface(uiBold());
+        zoomIndicator.setGravity(Gravity.CENTER);
+        zoomIndicator.setBackground(panelBg(Color.argb(205, 36, 42, 48), dp(999), Color.argb(90, 255, 255, 255)));
+        zoomIndicator.setVisibility(View.GONE);
+        zoomIndicator.setAlpha(0f);
+        FrameLayout.LayoutParams zoomIndicatorParams = new FrameLayout.LayoutParams(dp(76), dp(34), Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+        zoomIndicatorParams.setMargins(0, 0, 0, dp(12));
+        stage.addView(zoomIndicator, zoomIndicatorParams);
 
         TextView hint = new LocalizedTextView(this);
         hint.setText("Один палец - движение, два пальца - масштаб");
@@ -509,14 +670,22 @@ public final class MainActivity extends Activity {
             return true;
         });
         FrameLayout.LayoutParams hintParams = new FrameLayout.LayoutParams(-1, dp(40), Gravity.TOP);
-        hintParams.setMargins(dp(12), dp(10), dp(64), 0);
+        hintParams.setMargins(
+            dp(isLandscapeLayout() ? 64 : 12),
+            dp(isLandscapeLayout() ? 8 : 76),
+            dp(isLandscapeLayout() ? 12 : 64),
+            0);
         stage.addView(hint, hintParams);
         treeHint = hint;
         refreshLockUi();
 
         distantCardsWarning = buildDistantCardsWarning();
         FrameLayout.LayoutParams distantParams = new FrameLayout.LayoutParams(-1, dp(44), Gravity.TOP);
-        distantParams.setMargins(dp(12), dp(58), dp(64), 0);
+        distantParams.setMargins(
+            dp(isLandscapeLayout() ? 64 : 12),
+            dp(isLandscapeLayout() ? 56 : 124),
+            dp(isLandscapeLayout() ? 12 : 64),
+            0);
         stage.addView(distantCardsWarning, distantParams);
         distantCardsWarning.setVisibility(View.GONE);
 
@@ -538,7 +707,7 @@ public final class MainActivity extends Activity {
         add.setBackground(gradientBg());
         add.setElevation(dp(7));
         FrameLayout.LayoutParams addParams = new FrameLayout.LayoutParams(dp(56), dp(56), Gravity.RIGHT | Gravity.BOTTOM);
-        addParams.setMargins(0, 0, dp(12), dp(86));
+        addParams.setMargins(0, 0, dp(12), dp(isLandscapeLayout() ? 12 : 86));
         stage.addView(add, addParams);
         addPersonButton = add;
 
@@ -551,18 +720,24 @@ public final class MainActivity extends Activity {
         settingsPanel = buildSettingsPanel();
         peoplePanel = peopleModule.buildPanel();
         morePanel = buildMorePanel();
-        stage.addView(cardPanel, bottomPanelWrapParams());
-        stage.addView(linksPanel, bottomPanelWrapParams());
-        stage.addView(guidePanel, bottomPanelWrapParams());
-        stage.addView(filesPanel, bottomPanelWrapParams());
-        stage.addView(viewPanel, bottomPanelWrapParams());
-        stage.addView(branchPanel, bottomPanelWrapParams());
-        stage.addView(settingsPanel, fullPanelParams());
-        stage.addView(peoplePanel, fullPanelParams());
-        stage.addView(morePanel, new FrameLayout.LayoutParams(-1, -1));
+        addAdaptivePanel(cardPanel, bottomPanelWrapParams(), true);
+        addAdaptivePanel(linksPanel, bottomPanelWrapParams(), true);
+        addAdaptivePanel(guidePanel, bottomPanelWrapParams(), true);
+        addAdaptivePanel(filesPanel, bottomPanelWrapParams(), true);
+        addAdaptivePanel(viewPanel, bottomPanelWrapParams(), false);
+        addAdaptivePanel(branchPanel, bottomPanelWrapParams(), true);
+        addAdaptivePanel(settingsPanel, fullPanelParams(), false);
+        addAdaptiveFullPanel(peoplePanel, fullPanelParams());
+        addAdaptivePanel(morePanel, new FrameLayout.LayoutParams(-1, -1), false);
 
         bottomNavigation = buildBottomNav();
-        stage.addView(bottomNavigation, bottomParams());
+        if (isLandscapeLayout()) {
+            landscapeBody.addView(
+                bottomNavigation,
+                new LinearLayout.LayoutParams(dp(88), -1));
+        } else {
+            stage.addView(bottomNavigation, bottomParams());
+        }
         applyFocusTreeUi();
         showPanel(activePanel);
 
@@ -643,7 +818,8 @@ public final class MainActivity extends Activity {
         if (!show) return;
         String label = distantIds.size()
             + " "
-            + countWord(distantIds.size(), "карточка", "карточки", "карточек")
+            + RussianWordForms.forCount(
+                distantIds.size(), "карточка", "карточки", "карточек")
             + " далеко от основного дерева";
         distantCardsWarningText.setText(label);
     }
@@ -959,25 +1135,139 @@ public final class MainActivity extends Activity {
         return panel;
     }
 
+    boolean isLandscapeLayout() {
+        android.graphics.Rect bounds;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            bounds = getWindowManager().getCurrentWindowMetrics().getBounds();
+        } else {
+            android.graphics.Point size = new android.graphics.Point();
+            getWindowManager().getDefaultDisplay().getSize(size);
+            bounds = new android.graphics.Rect(0, 0, size.x, size.y);
+        }
+        return bounds.width() > bounds.height();
+    }
+
+    private int landscapePanelWidth() {
+        float density = getResources().getDisplayMetrics().density;
+        int widthPixels;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            widthPixels = getWindowManager().getCurrentWindowMetrics().getBounds().width();
+        } else {
+            android.graphics.Point size = new android.graphics.Point();
+            getWindowManager().getDefaultDisplay().getSize(size);
+            widthPixels = size.x;
+        }
+        int screenWidthDp = Math.round(widthPixels / Math.max(1f, density));
+        int preferred = Math.round(screenWidthDp * (focusTree ? 0.22f : 0.25f));
+        return dp(Math.min(focusTree ? 204 : 224, Math.max(focusTree ? 176 : 192, preferred)));
+    }
+
+    private void addAdaptivePanel(
+        View panel,
+        FrameLayout.LayoutParams portraitParams,
+        boolean scrollInLandscape
+    ) {
+        if (!isLandscapeLayout() || landscapePanelHost == null) {
+            stage.addView(panel, portraitParams);
+            return;
+        }
+        View container = panel;
+        if (scrollInLandscape) {
+            ScrollView scroll = new ScrollView(this);
+            scroll.setFillViewport(true);
+            scroll.setClipToPadding(false);
+            scroll.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
+            scroll.addView(panel, new ScrollView.LayoutParams(-1, -2));
+            container = scroll;
+        }
+        container.setVisibility(View.GONE);
+        panel.setVisibility(View.GONE);
+        landscapePanelHost.addView(container, new FrameLayout.LayoutParams(-1, -1));
+        landscapePanelContainers.put(panel, container);
+    }
+
+    private void addAdaptiveFullPanel(View panel, FrameLayout.LayoutParams portraitParams) {
+        if (!isLandscapeLayout() || landscapeFullPanelHost == null) {
+            stage.addView(panel, portraitParams);
+            return;
+        }
+        panel.setVisibility(View.GONE);
+        landscapeFullPanelHost.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    void setAdaptivePanelVisibility(View panel, boolean visible) {
+        if (panel == null) return;
+        View container = landscapePanelContainers.get(panel);
+        panel.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (container != null && container != panel) {
+            container.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    void bringAdaptivePanelToFront(View panel) {
+        if (panel == null) return;
+        View container = landscapePanelContainers.get(panel);
+        (container == null ? panel : container).bringToFront();
+    }
+
+    void updateLandscapePanelHostVisibility() {
+        if (landscapePanelHost == null) return;
+        int visibility = activePanel == null
+            || activePanel.isEmpty()
+            || "people".equals(activePanel)
+            ? View.GONE
+            : View.VISIBLE;
+        if (landscapePanelHost.getVisibility() == visibility) return;
+        landscapePanelHost.setVisibility(visibility);
+        if (stage != null && treeView != null) {
+            stage.post(() -> {
+                if (treeView != null && state != null && !state.people.isEmpty()) treeView.fit();
+            });
+        }
+    }
+
     private LinearLayout buildBottomNav() {
         LinearLayout nav = new LinearLayout(this);
         nav.setGravity(Gravity.CENTER);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setPadding(dp(8), dp(7), dp(8), dp(6));
+        boolean landscape = isLandscapeLayout();
+        nav.setOrientation(landscape ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        nav.setPadding(
+            dp(landscape ? 6 : 8),
+            dp(landscape ? 8 : 7),
+            dp(landscape ? 6 : 8),
+            dp(landscape ? 8 : 6));
         nav.setClipChildren(false);
         nav.setClipToPadding(false);
         nav.setBackground(panelBg(Color.argb(242, 248, 251, 252), 0, Color.argb(32, 63, 82, 94)));
         nav.setElevation(dp(8));
+        if (landscape) {
+            LinearLayout closeHost = new LinearLayout(this);
+            closeHost.setGravity(Gravity.CENTER);
+            closeHost.setBackgroundColor(Color.TRANSPARENT);
+            closeHost.setVisibility(View.GONE);
+            Button closePeople = iconButton(
+                R.drawable.ic_menu_close,
+                v -> showPanel(""),
+                Color.rgb(83, 94, 103));
+            closePeople.setContentDescription(tr("Закрыть список людей"));
+            closePeople.setBackground(panelBg(
+                Color.WHITE,
+                dp(10),
+                Color.rgb(205, 214, 220)));
+            closeHost.addView(closePeople, new LinearLayout.LayoutParams(dp(58), dp(52)));
+            nav.addView(closeHost, new LinearLayout.LayoutParams(-1, 0));
+            landscapePeopleCloseHost = closeHost;
+        }
         treeNav = navButton("Дерево", R.drawable.ic_nav_tree, v -> {
             togglePanel("view");
             trainingTargetActivated("tree-menu");
         });
-        nav.addView(treeNav, new LinearLayout.LayoutParams(0, -1, 1));
+        nav.addView(treeNav, navigationItemParams(landscape));
         cardNav = navButton("Карточка", R.drawable.ic_nav_card, v -> {
             togglePanel("card");
             trainingTargetActivated("card-menu");
         });
-        nav.addView(cardNav, new LinearLayout.LayoutParams(0, -1, 1));
+        nav.addView(cardNav, navigationItemParams(landscape));
         peopleNav = navButton("Люди", R.drawable.ic_menu_people, v -> {
             togglePanel("people");
             trainingTargetActivated("people-menu");
@@ -988,20 +1278,30 @@ public final class MainActivity extends Activity {
         peopleSlot.setClipChildren(false);
         peopleSlot.setClipToPadding(false);
         FrameLayout.LayoutParams peopleButtonParams = new FrameLayout.LayoutParams(-1, -1);
-        peopleButtonParams.setMargins(dp(3), 0, dp(3), dp(6));
+        peopleButtonParams.setMargins(
+            landscape ? 0 : dp(3),
+            landscape ? dp(2) : 0,
+            landscape ? 0 : dp(3),
+            landscape ? dp(2) : dp(6));
         peopleSlot.addView(peopleNav, peopleButtonParams);
-        nav.addView(peopleSlot, new LinearLayout.LayoutParams(0, -1, 1));
+        nav.addView(peopleSlot, navigationItemParams(landscape));
         linksNav = navButton("Связи", R.drawable.ic_nav_links, v -> {
             togglePanel("links");
             trainingTargetActivated("links-menu");
         });
-        nav.addView(linksNav, new LinearLayout.LayoutParams(0, -1, 1));
+        nav.addView(linksNav, navigationItemParams(landscape));
         moreNav = navButton("Ещё", R.drawable.ic_nav_more, v -> {
             togglePanel("more");
             trainingTargetActivated("more-menu");
         });
-        nav.addView(moreNav, new LinearLayout.LayoutParams(0, -1, 1));
+        nav.addView(moreNav, navigationItemParams(landscape));
         return nav;
+    }
+
+    private LinearLayout.LayoutParams navigationItemParams(boolean landscape) {
+        return landscape
+            ? new LinearLayout.LayoutParams(-1, 0, 1)
+            : new LinearLayout.LayoutParams(0, -1, 1);
     }
 
     private View buildMorePanel() {
@@ -1021,6 +1321,10 @@ public final class MainActivity extends Activity {
         bubbles.setOnClickListener(v -> { });
         trainingMoreMenuTarget = bubbles;
         bubbles.addView(onlineTreeBubble(), onlineTreeBubbleParams());
+        bubbles.addView(moreBubble(R.drawable.ic_workshop_storefront, "Мастерская", "Жетоны, оформление и бонусы", () -> {
+            showPanel("");
+            openWorkshop();
+        }), moreBubbleParams(false));
         bubbles.addView(moreBubble(R.drawable.ic_nav_files, "Файлы и экспорт", "Сохранение, импорт и отправка", () -> {
             showPanel("files");
         }), moreBubbleParams(false));
@@ -1040,10 +1344,21 @@ public final class MainActivity extends Activity {
             showAbout();
         }), moreBubbleParams(true));
 
-        int menuWidth = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(24));
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.RIGHT | Gravity.BOTTOM);
-        params.setMargins(dp(12), dp(12), dp(12), dp(86));
-        overlay.addView(bubbles, params);
+        if (isLandscapeLayout()) {
+            overlay.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
+            bubbles.setGravity(Gravity.TOP);
+            bubbles.setBackgroundColor(Color.TRANSPARENT);
+            ScrollView scroll = new ScrollView(this);
+            scroll.setFillViewport(true);
+            scroll.setClipToPadding(false);
+            scroll.addView(bubbles, new ScrollView.LayoutParams(-1, -2));
+            overlay.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            int menuWidth = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(24));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.RIGHT | Gravity.BOTTOM);
+            params.setMargins(dp(12), dp(12), dp(12), dp(86));
+            overlay.addView(bubbles, params);
+        }
         overlay.setVisibility(View.GONE);
         return overlay;
     }
@@ -1105,6 +1420,10 @@ public final class MainActivity extends Activity {
         return params;
     }
 
+    void openWorkshop() {
+        if (workshopModule != null) workshopModule.open();
+    }
+
     private View moreBubble(int iconRes, String title, String detail, Runnable action) {
         LinearLayout bubble = new LinearLayout(this);
         bubble.setGravity(Gravity.CENTER_VERTICAL);
@@ -1147,237 +1466,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showAbout() {
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout shell = editorDialogShell();
-        shell.addView(editorDialogHeader(dialog, R.drawable.ic_menu_info, "О нас", "Family Tree DS"));
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(2), dp(6), dp(2), dp(2));
-
-        ImageView appIcon = new ImageView(this);
-        appIcon.setImageResource(R.drawable.app_icon);
-        appIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        appIcon.setBackground(panelBg(Color.WHITE, dp(14), Color.argb(60, 24, 169, 153)));
-        appIcon.setClipToOutline(true);
-        appIcon.setElevation(dp(5));
-        final int[] developerTaps = {0};
-        final long[] lastDeveloperTap = {0L};
-        appIcon.setOnClickListener(v -> {
-            long now = System.currentTimeMillis();
-            if (now - lastDeveloperTap[0] > 1400L) developerTaps[0] = 0;
-            lastDeveloperTap[0] = now;
-            developerTaps[0]++;
-            if (developerTaps[0] < 5) return;
-            developerTaps[0] = 0;
-            dialog.dismiss();
-            showDeveloperMenu();
-        });
-        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(76), dp(76));
-        iconParams.gravity = Gravity.CENTER_HORIZONTAL;
-        iconParams.setMargins(0, 0, 0, dp(4));
-        body.addView(appIcon, iconParams);
-
-        TextView appName = aboutText("Family Tree DS", 20, Color.rgb(28, 34, 38), true, Gravity.CENTER);
-        body.addView(appName, new LinearLayout.LayoutParams(-1, dp(28)));
-        TextView createdBy = aboutText("Приложение создано TeamDS", 10, Color.rgb(83, 94, 103), false, Gravity.CENTER);
-        body.addView(createdBy, new LinearLayout.LayoutParams(-1, dp(20)));
-        TextView version = aboutText("Версия " + VERSION_NAME, 10, Color.rgb(8, 122, 115), true, Gravity.CENTER);
-        body.addView(version, new LinearLayout.LayoutParams(-1, dp(22)));
-
-        LinearLayout socials = new LinearLayout(this);
-        socials.setGravity(Gravity.CENTER_VERTICAL);
-        Button supportDeveloper = actionButton("Поддержать разработчика", v ->
-            openExternalUrl(DONATION_ALERTS_URL));
-        supportDeveloper.setTextSize(9);
-        supportDeveloper.setSingleLine(true);
-        supportDeveloper.setTextColor(Color.rgb(8, 122, 115));
-        supportDeveloper.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_heart, 0, 0, 0);
-        supportDeveloper.setCompoundDrawablePadding(dp(6));
-        tintDrawables(supportDeveloper, Color.rgb(8, 122, 115));
-        supportDeveloper.setBackground(panelBg(Color.rgb(235, 248, 246), dp(999), Color.argb(64, 24, 169, 153)));
-        LinearLayout.LayoutParams supportParams = new LinearLayout.LayoutParams(0, dp(40), 1);
-        supportParams.setMargins(0, 0, dp(10), 0);
-        socials.addView(supportDeveloper, supportParams);
-        socials.addView(socialButton(R.drawable.ic_social_telegram, "Telegram-канал", "https://t.me/FamilyTreeDS"), socialParams(0));
-        socials.addView(socialButton(R.drawable.ic_social_chat, "Telegram-чат", "https://t.me/ChatFamilyTree"), socialParams(dp(8)));
-        socials.addView(socialButton(R.drawable.ic_social_github, "GitHub", "https://github.com/DrShapaya/Family-Tree-DS"), socialParams(dp(8)));
-        LinearLayout.LayoutParams socialsParams = new LinearLayout.LayoutParams(-1, dp(46));
-        socialsParams.setMargins(0, dp(2), 0, dp(6));
-        body.addView(socials, socialsParams);
-
-        LinearLayout notesCard = aboutCard();
-        String notesTitle = AppLanguage.isEnglish(this)
-            ? "Update " + releaseNotesVersion() + " since " + releaseNotesBaseVersion()
-            : "Обновление " + releaseNotesVersion() + " по сравнению с " + releaseNotesBaseVersion();
-        notesCard.addView(aboutText(notesTitle, 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
-        LinearLayout notesList = new LinearLayout(this);
-        notesList.setOrientation(LinearLayout.VERTICAL);
-        notesCard.addView(notesList, new LinearLayout.LayoutParams(-1, -2));
-        bindReleaseNotes(notesList, releaseNotes(), false);
-        body.addView(notesCard, aboutCardParams());
-
-        LinearLayout teamCard = aboutCard();
-        teamCard.addView(aboutText("Команда", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
-        TextView developer = aboutText("DrShapaya", 13, Color.rgb(8, 122, 115), true, Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        developer.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_people, 0, 0, 0);
-        developer.setCompoundDrawablePadding(dp(9));
-        tintDrawables(developer, Color.rgb(8, 122, 115));
-        installHoldTooltip(developer, "Оригинальный создатель, разработчик и дизайнер приложения");
-        developer.setBackground(panelBg(Color.rgb(235, 248, 246), dp(13), Color.argb(52, 24, 169, 153)));
-        developer.setPadding(dp(12), 0, dp(12), 0);
-        LinearLayout.LayoutParams developerParams = new LinearLayout.LayoutParams(-1, dp(42));
-        developerParams.setMargins(0, dp(6), 0, 0);
-        teamCard.addView(developer, developerParams);
-        body.addView(teamCard, aboutCardParams());
-
-        LinearLayout donorsCard = aboutCard();
-        donorsCard.addView(aboutText("Топ донатеры", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
-        bindSupporters(donorsCard);
-        body.addView(donorsCard, aboutCardParams());
-
-        scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
-        shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        showEditorDialog(dialog, shell);
-    }
-
-    private void bindSupporters(LinearLayout card) {
-        List<SupporterCatalog.Entry> supporters = loadSupporters();
-        if (supporters.isEmpty()) {
-            LinearLayout empty = new LinearLayout(this);
-            empty.setGravity(Gravity.CENTER_VERTICAL);
-            TextView nobody = aboutText(
-                "Пока здесь никого нет",
-                11,
-                Color.rgb(83, 94, 103),
-                false,
-                Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            empty.addView(nobody, new LinearLayout.LayoutParams(0, dp(40), 1));
-            Button first = actionButton("Стать первым", v -> openExternalUrl(DONATION_ALERTS_URL));
-            first.setTextSize(10);
-            first.setTextColor(Color.WHITE);
-            first.setBackground(tealGradientBg(dp(13)));
-            LinearLayout.LayoutParams firstParams = new LinearLayout.LayoutParams(dp(124), dp(40));
-            firstParams.setMargins(dp(10), 0, 0, 0);
-            empty.addView(first, firstParams);
-            LinearLayout.LayoutParams emptyParams = new LinearLayout.LayoutParams(-1, dp(40));
-            emptyParams.setMargins(0, dp(5), 0, 0);
-            card.addView(empty, emptyParams);
-            return;
-        }
-
-        int visible = Math.min(5, supporters.size());
-        for (int index = 0; index < visible; index++) {
-            SupporterCatalog.Entry supporter = supporters.get(index);
-            boolean leader = index == 0;
-            LinearLayout row = new LinearLayout(this);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(10), 0, dp(10), 0);
-            row.setBackground(panelBg(
-                leader ? Color.rgb(255, 248, 222) : Color.rgb(248, 251, 252),
-                dp(13),
-                leader ? Color.rgb(232, 185, 56) : Color.rgb(217, 224, 229)));
-
-            TextView crown = aboutText(
-                leader ? "♛" : String.valueOf(index + 1),
-                leader ? 24 : 11,
-                leader ? Color.rgb(207, 147, 18) : Color.rgb(101, 113, 122),
-                leader,
-                Gravity.CENTER);
-            crown.setTypeface(Typeface.DEFAULT_BOLD);
-            LocalizedViews.setRaw(crown, leader ? "♛" : String.valueOf(index + 1));
-            row.addView(crown, new LinearLayout.LayoutParams(dp(38), -1));
-
-            TextView name = aboutText(
-                supporter.name,
-                leader ? 14 : 11,
-                leader ? Color.rgb(38, 34, 22) : Color.rgb(28, 34, 38),
-                leader,
-                Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            LocalizedViews.setRaw(name, supporter.name);
-            name.setSingleLine(true);
-            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            row.addView(name, new LinearLayout.LayoutParams(0, -1, 1));
-
-            String amount = formatDonationAmount(supporter.amount, supporter.currency);
-            TextView amountView = aboutText(
-                amount,
-                leader ? 13 : 10,
-                leader ? Color.rgb(164, 105, 4) : Color.rgb(8, 122, 115),
-                true,
-                Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-            LocalizedViews.setRaw(amountView, amount);
-            row.addView(amountView, new LinearLayout.LayoutParams(-2, -1));
-
-            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                -1,
-                dp(leader ? 52 : 44));
-            rowParams.setMargins(0, dp(index == 0 ? 7 : 5), 0, 0);
-            card.addView(row, rowParams);
-        }
-
-        SupporterCatalog.Entry leader = supporters.get(0);
-        long recordAmount = SupporterCatalog.amountToBeat(leader);
-        String suggested = formatDonationAmount(recordAmount, leader.currency);
-        String buttonLabel = AppLanguage.isEnglish(this)
-            ? "Beat the record · " + suggested
-            : "Побить рекорд · " + suggested;
-        Button beatRecord = actionButton(buttonLabel, v -> openRecordDonation(recordAmount, leader.currency));
-        LocalizedViews.setRaw(beatRecord, buttonLabel);
-        beatRecord.setTextSize(10);
-        beatRecord.setSingleLine(true);
-        beatRecord.setTextColor(Color.WHITE);
-        beatRecord.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_heart, 0, 0, 0);
-        beatRecord.setCompoundDrawablePadding(dp(7));
-        tintDrawables(beatRecord, Color.WHITE);
-        beatRecord.setBackground(tealGradientBg(dp(13)));
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(-1, dp(42));
-        buttonParams.setMargins(0, dp(9), 0, 0);
-        card.addView(beatRecord, buttonParams);
-    }
-
-    private List<SupporterCatalog.Entry> loadSupporters() {
-        try (InputStream input = getAssets().open("supporters.json")) {
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            byte[] buffer = new byte[2048];
-            int read;
-            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
-            return SupporterCatalog.parse(output.toString(StandardCharsets.UTF_8.name()));
-        } catch (Exception ignored) {
-            return java.util.Collections.emptyList();
-        }
-    }
-
-    private String formatDonationAmount(double amount, String currency) {
-        java.text.NumberFormat format = java.text.NumberFormat.getNumberInstance(
-            AppLanguage.isEnglish(this) ? Locale.US : new Locale("ru", "RU"));
-        format.setMinimumFractionDigits(0);
-        format.setMaximumFractionDigits(Math.abs(amount - Math.rint(amount)) < 0.001d ? 0 : 2);
-        String code = currency == null ? "RUB" : currency.toUpperCase(Locale.ROOT);
-        String mark;
-        if ("RUB".equals(code)) mark = "₽";
-        else if ("USD".equals(code)) mark = "$";
-        else if ("EUR".equals(code)) mark = "€";
-        else if ("KZT".equals(code)) mark = "₸";
-        else mark = code;
-        return format.format(amount) + " " + mark;
-    }
-
-    private void openRecordDonation(long amount, String currency) {
-        String amountText = String.valueOf(amount);
-        ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        if (clipboard != null) {
-            clipboard.setPrimaryClip(ClipData.newPlainText("DonationAlerts amount", amountText));
-            String display = formatDonationAmount(amount, currency);
-            toast(AppLanguage.isEnglish(this)
-                ? display + " copied — paste it into DonationAlerts"
-                : display + " скопировано — вставьте сумму в DonationAlerts");
-        }
-        openExternalUrl(DONATION_ALERTS_URL);
+        if (aboutModule != null) aboutModule.open();
     }
 
     private void showDeveloperMenu() {
@@ -1426,6 +1515,17 @@ public final class MainActivity extends Activity {
                 copyLayoutLogs();
                 dialog.dismiss();
             }));
+        if (BuildConfig.DEBUG) {
+            rows.addView(menuRow(
+                R.drawable.ic_workshop_tokens,
+                "Выдать 100 жетонов",
+                "Для тестирования Мастерской без просмотра рекламы",
+                v -> {
+                    if (workshopModule != null) workshopModule.grantDebugTokens();
+                    toast("Начислено 100 жетонов");
+                    dialog.dismiss();
+                }));
+        }
         shell.addView(rows, new LinearLayout.LayoutParams(-1, -2));
 
         dialog.setContentView(shell);
@@ -1454,155 +1554,6 @@ public final class MainActivity extends Activity {
         return text;
     }
 
-    private void bindReleaseNotes(LinearLayout host, List<String> notes, boolean expanded) {
-        host.removeAllViews();
-        int visible = expanded ? notes.size() : Math.min(COLLAPSED_RELEASE_NOTES, notes.size());
-        for (int index = 0; index < visible; index++) {
-            String translatedNote = AppLanguage.translateFully(this, notes.get(index));
-            String value = "•  " + translatedNote;
-            TextView noteView = aboutText(value, 10, Color.rgb(70, 83, 92), false, Gravity.LEFT);
-            LocalizedViews.setRaw(noteView, value);
-            noteView.setPadding(0, dp(5), 0, 0);
-            if (!expanded) {
-                noteView.setMaxLines(2);
-                noteView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            }
-            host.addView(noteView, new LinearLayout.LayoutParams(-1, -2));
-        }
-        if (notes.size() <= COLLAPSED_RELEASE_NOTES) return;
-        String label = expanded
-            ? AppLanguage.text(this, "Свернуть")
-            : (AppLanguage.isEnglish(this) ? "Show all · " : "Показать все · ") + notes.size();
-        Button toggle = actionButton(label, v -> bindReleaseNotes(host, notes, !expanded));
-        toggle.setTextColor(Color.rgb(8, 122, 115));
-        toggle.setBackground(panelBg(Color.rgb(235, 248, 246), dp(13), Color.argb(52, 24, 169, 153)));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(38));
-        params.setMargins(0, dp(7), 0, 0);
-        host.addView(toggle, params);
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private void installHoldTooltip(TextView anchor, String message) {
-        Handler handler = new Handler(Looper.getMainLooper());
-        final PopupWindow[] tooltip = {null};
-        Runnable show = () -> {
-            if (!anchor.isPressed() || tooltip[0] != null) return;
-            TextView content = aboutText(message, 11, Color.WHITE, false, Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            LocalizedViews.setRaw(content, AppLanguage.translateFully(this, message));
-            content.setPadding(dp(14), dp(10), dp(14), dp(10));
-            content.setBackground(panelBg(Color.rgb(35, 55, 62), dp(14), Color.argb(70, 255, 255, 255)));
-            int width = Math.min(dp(330), getResources().getDisplayMetrics().widthPixels - dp(36));
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-            PopupWindow popup = new PopupWindow(content, width, content.getMeasuredHeight(), false);
-            popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            popup.setTouchable(false);
-            popup.setOutsideTouchable(false);
-            popup.setElevation(dp(8));
-            tooltip[0] = popup;
-            popup.showAsDropDown(anchor, anchor.getWidth() - width, -anchor.getHeight() - content.getMeasuredHeight() - dp(8));
-        };
-        anchor.setOnTouchListener((view, event) -> {
-            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                view.setPressed(true);
-                handler.postDelayed(show, ViewConfiguration.getLongPressTimeout());
-                return true;
-            }
-            if (event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
-                handler.removeCallbacks(show);
-                view.setPressed(false);
-                if (tooltip[0] != null) {
-                    tooltip[0].dismiss();
-                    tooltip[0] = null;
-                }
-                return true;
-            }
-            return true;
-        });
-    }
-
-    private LinearLayout aboutCard() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(13), dp(10), dp(13), dp(10));
-        card.setBackground(panelBg(Color.rgb(248, 251, 252), dp(18), Color.rgb(217, 224, 229)));
-        return card;
-    }
-
-    private LinearLayout.LayoutParams aboutCardParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(0, 0, 0, dp(6));
-        return params;
-    }
-
-    private ImageView socialButton(int icon, String description, String url) {
-        ImageView button = new ImageView(this);
-        button.setImageResource(icon);
-        button.setContentDescription(description);
-        button.setPadding(dp(9), dp(9), dp(9), dp(9));
-        button.setColorFilter(Color.WHITE);
-        button.setBackground(tealGradientBg(dp(999)));
-        button.setElevation(dp(3));
-        button.setOnClickListener(v -> openExternalUrl(url));
-        return button;
-    }
-
-    private LinearLayout.LayoutParams socialParams(int leftMargin) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(40), dp(40));
-        params.setMargins(leftMargin, 0, 0, 0);
-        return params;
-    }
-
-    private void openExternalUrl(String url) {
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (Exception ignored) {
-            toast("Не удалось открыть ссылку");
-        }
-    }
-
-    private String releaseNotesVersion() {
-        try {
-            return releaseNotesJson().optString("version", VERSION_NAME);
-        } catch (Exception ignored) {
-            return VERSION_NAME;
-        }
-    }
-
-    private String releaseNotesBaseVersion() {
-        try {
-            return releaseNotesJson().optString("baseVersion", "2.6.5");
-        } catch (Exception ignored) {
-            return "2.6.5";
-        }
-    }
-
-    private List<String> releaseNotes() {
-        ArrayList<String> notes = new ArrayList<>();
-        try {
-            JSONArray values = releaseNotesJson().optJSONArray("notes");
-            if (values != null) {
-                for (int index = 0; index < values.length(); index++) {
-                    String note = values.optString(index, "").trim();
-                    if (!note.isEmpty()) notes.add(note);
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        if (notes.isEmpty()) notes.add("Улучшения стабильности и интерфейса.");
-        return notes;
-    }
-
-    private JSONObject releaseNotesJson() throws Exception {
-        try (InputStream input = getAssets().open("release_notes.json")) {
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
-            return new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
-        }
-    }
 
     private LinearLayout buildCardPanel() {
         LinearLayout panel = basePanel();
@@ -1695,7 +1646,12 @@ public final class MainActivity extends Activity {
         LinearLayout tile = new LinearLayout(this);
         tile.setOrientation(LinearLayout.VERTICAL);
         tile.setGravity(Gravity.CENTER);
-        tile.setPadding(dp(10), dp(12), dp(10), dp(10));
+        boolean landscape = isLandscapeLayout();
+        tile.setPadding(
+            dp(landscape ? 6 : 10),
+            dp(landscape ? 6 : 12),
+            dp(landscape ? 6 : 10),
+            dp(landscape ? 6 : 10));
         tile.setBackground(accent
             ? panelBg(Color.WHITE, dp(10), AppThemePalette.alpha(AppThemePalette.secondaryBright(), 82))
             : panelBg(Color.WHITE, dp(10), Color.rgb(217, 224, 229)));
@@ -1703,14 +1659,24 @@ public final class MainActivity extends Activity {
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
         icon.setColorFilter(uiColor(accent ? AppThemePalette.secondary() : AppThemePalette.primary()));
-        tile.addView(icon, new LinearLayout.LayoutParams(dp(30), dp(30)));
+        tile.addView(icon, new LinearLayout.LayoutParams(dp(landscape ? 26 : 30), dp(landscape ? 26 : 30)));
         TextView text = cardActionTitle(label, false);
         if (accent) text.setTextColor(AppThemePalette.secondary());
         text.setGravity(Gravity.CENTER);
-        tile.addView(text, new LinearLayout.LayoutParams(-1, dp(28)));
+        if (landscape) {
+            text.setSingleLine(false);
+            text.setMaxLines(2);
+            text.setTextSize(10);
+        }
+        tile.addView(text, new LinearLayout.LayoutParams(-1, dp(landscape ? 34 : 28)));
         TextView sub = cardActionDetail(detail, false);
         sub.setGravity(Gravity.CENTER);
-        tile.addView(sub, new LinearLayout.LayoutParams(-1, dp(22)));
+        if (landscape) {
+            sub.setSingleLine(false);
+            sub.setMaxLines(2);
+            sub.setTextSize(8);
+        }
+        tile.addView(sub, new LinearLayout.LayoutParams(-1, dp(landscape ? 30 : 22)));
         return tile;
     }
 
@@ -1740,32 +1706,49 @@ public final class MainActivity extends Activity {
 
     private LinearLayout buildFilesPanel() {
         LinearLayout panel = basePanel();
+        panel.setPadding(dp(10), dp(8), dp(10), dp(2));
+        LinearLayout primary = new LinearLayout(this);
+        primary.setOrientation(LinearLayout.HORIZONTAL);
+        primary.addView(cardActionTile(
+            R.drawable.ic_menu_upload,
+            "Поделиться деревом",
+            "Один файл со всеми вложениями",
+            v -> filesModule.shareTreePackage(),
+            true), new LinearLayout.LayoutParams(0, dp(112), 1));
+        LinearLayout.LayoutParams pngParams = new LinearLayout.LayoutParams(0, dp(112), 1);
+        pngParams.setMargins(dp(10), 0, 0, 0);
+        primary.addView(cardActionTile(
+            R.drawable.ic_menu_image,
+            "Сохранить PNG",
+            "Предпросмотр и точные настройки",
+            v -> filesModule.showPngSettings(),
+            true), pngParams);
+        panel.addView(primary, new LinearLayout.LayoutParams(-1, dp(112)));
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
+        rows.setPadding(0, dp(8), 0, 0);
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
-        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить", "Сохраняет дерево локально на устройстве.", v -> saveToast("Дерево сохранено")));
+        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить", "Сохраняет дерево локально на устройстве.", v -> {
+            AnalyticsReporter.onlineAction("manual_save_requested", state);
+            saveToast("Дерево сохранено");
+        }));
         rows.addView(menuRow(
             R.drawable.ic_editor_archive,
             "Сохранённые версии",
             "Показывает 10 последних локальных версий и позволяет восстановить любую из них.",
             v -> filesModule.openVersions()));
-        rows.addView(menuRow(
-            R.drawable.ic_menu_upload,
-            "Поделиться деревом",
-            "Отправляет один .ftree файл вместе с фото и вложениями.",
-            v -> filesModule.shareTreePackage()));
         rows.addView(menuRow(R.drawable.ic_menu_import, "Импорт", "Загружает .ftree, JSON или совместимый текстовый файл.", v -> openImport()));
         rows.addView(menuRow(
             R.drawable.ic_menu_export,
             "Экспорт",
-            "Открывает подменю: Family Tree DS, JSON, GEDCOM, PNG, PDF и тайлы.",
+            "Открывает форматы Family Tree DS, JSON, GEDCOM и PDF.",
             v -> filesModule.showExportMenu()));
         return panel;
     }
 
     private LinearLayout buildLinksPanel() {
         LinearLayout panel = basePanel();
-        panel.setPadding(dp(10), dp(10), dp(10), dp(2));
+        panel.setPadding(dp(10), dp(8), dp(10), dp(2));
         LinearLayout primary = new LinearLayout(this);
         primary.setOrientation(LinearLayout.HORIZONTAL);
         primary.addView(cardActionTile(
@@ -1977,7 +1960,10 @@ public final class MainActivity extends Activity {
         LinearLayout panel = basePanel();
         panel.setPadding(dp(10), dp(8), dp(10), dp(2));
         ScrollView scroll = new ScrollView(this);
-        panel.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
+        panel.addView(scroll, new LinearLayout.LayoutParams(
+            -1,
+            isLandscapeLayout() ? 0 : -2,
+            isLandscapeLayout() ? 1 : 0));
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
@@ -2707,9 +2693,8 @@ public final class MainActivity extends Activity {
 
     void bindState() {
         syncSettingsToState();
-        qualityReport = TreeQualityAnalyzer.analyze(state);
         treeView.setState(state);
-        treeView.setQualityReports(qualityReport.people);
+        if (qualityModule != null) qualityModule.refresh();
         treeView.setEditLocked(editingBlocked());
         treeView.setGenerationLines(generationLines);
         treeView.setHideDetails(hideCardDetails);
@@ -2718,11 +2703,11 @@ public final class MainActivity extends Activity {
         treeView.setWorkspaceSize(workspaceWidth, workspaceHeight);
         treeView.setParentLineMode(parentLineMode);
         treeView.setTheme(theme);
+        if (workshopModule != null) workshopModule.applyStyles();
         treeView.setBranchMode(branchMode, branchAnchorId);
         treeView.setLinkState(pendingLinkFrom, selectedLinkId);
         bindEditor(state.selectedPerson());
         updateStats();
-        updateTreeQualityButton();
         updateCanvasModePanel();
         updateHistoryButtons();
         updateHistoryPanel();
@@ -2895,6 +2880,24 @@ public final class MainActivity extends Activity {
             locked ? Color.argb(242, 255, 241, 239) : Color.argb(218, 255, 255, 255),
             dp(8),
             locked ? Color.argb(108, 197, 83, 75) : Color.argb(42, 24, 169, 153)));
+        if (treeHint.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) treeHint.getLayoutParams();
+            params.gravity = locked ? Gravity.BOTTOM : Gravity.TOP;
+            if (locked) {
+                params.setMargins(
+                    dp(isLandscapeLayout() ? 64 : 12),
+                    0,
+                    dp(isLandscapeLayout() ? 12 : 12),
+                    dp(isLandscapeLayout() ? 12 : focusTree ? 60 : 80));
+            } else {
+                params.setMargins(
+                    dp(isLandscapeLayout() ? 64 : 12),
+                    dp(isLandscapeLayout() ? 8 : 72),
+                    dp(isLandscapeLayout() ? 12 : 64),
+                    0);
+            }
+            treeHint.setLayoutParams(params);
+        }
         boolean fullScreenPanel = "settings".equals(activePanel) || "people".equals(activePanel);
         boolean show = !fullScreenPanel && (locked || (!focusTree && !treeHintDismissed && !treeHintAutoHidden));
         treeHint.setVisibility(show ? View.VISIBLE : View.GONE);
@@ -3020,6 +3023,7 @@ public final class MainActivity extends Activity {
         float[] spot = findOpenSpot(center.x, center.y);
         Person person = state.addPerson(tr("Пустая карточка"), spot[0], spot[1]);
         state.selectedId = person.id;
+        AnalyticsReporter.personAdded("loose", 1, firstCard, state);
         saveToast("Карточка добавлена");
         bindState();
         if (firstCard) treeView.post(() -> treeView.focusPerson(person.id));
@@ -3219,7 +3223,9 @@ public final class MainActivity extends Activity {
         popup.setOutsideTouchable(true);
         popup.setElevation(dp(12));
 
-        TreeQualityAnalyzer.PersonReport report = qualityReport.person(person.id);
+        TreeQualityAnalyzer.PersonReport report = qualityModule == null
+            ? new TreeQualityAnalyzer.PersonReport(person.id)
+            : qualityModule.person(person.id);
         menu.addView(selectedPersonMenuHeader(person, report), new LinearLayout.LayoutParams(-1, dp(86)));
         menu.addView(personMenuSpaced(
             personMenuAction(
@@ -3313,7 +3319,7 @@ public final class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(10), dp(7), dp(10), dp(7));
-        header.setBackground(panelBg(Color.rgb(232, 248, 246), dp(10), Color.argb(72, 24, 169, 153)));
+        header.setBackground(softAccentGradientBg(dp(10)));
         TextView avatar = new LocalizedTextView(this);
         LocalizedViews.setRaw(avatar, personInitials(person.name));
         avatar.setTextColor(Color.WHITE);
@@ -3410,21 +3416,15 @@ public final class MainActivity extends Activity {
         title.setBackgroundColor(Color.TRANSPARENT);
         row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
-        TextView toggle = new LocalizedTextView(this);
-        toggle.setText("●");
-        toggle.setTextColor(Color.WHITE);
-        toggle.setTextSize(20);
-        toggle.setPadding(dp(3), 0, dp(3), 0);
+        FrameLayout toggle = toggleControl(enabled);
         LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(dp(44), dp(26));
         toggleParams.setMargins(dp(8), 0, 0, 0);
         row.addView(toggle, toggleParams);
 
         final boolean[] value = {enabled};
         Runnable refresh = () -> {
-            toggle.setGravity(value[0]
-                ? Gravity.END | Gravity.CENTER_VERTICAL
-                : Gravity.START | Gravity.CENTER_VERTICAL);
             toggle.setBackground(toggleBg(value[0]));
+            positionToggleThumb(toggle, value[0]);
         };
         refresh.run();
         row.setOnClickListener(v -> {
@@ -3550,7 +3550,8 @@ public final class MainActivity extends Activity {
         int count = report.countCategory(category);
         String detail = count == 0
             ? "Замечаний нет"
-            : count + " " + countWord(count, "замечание", "замечания", "замечаний");
+            : count + " " + RussianWordForms.forCount(
+                count, "замечание", "замечания", "замечаний");
         return personMenuDetailedAction(
             iconRes,
             label,
@@ -3641,7 +3642,8 @@ public final class MainActivity extends Activity {
         int count = report == null ? 0 : report.countCategory(category);
         String detail = count == 0
             ? "Чисто"
-            : count + " " + countWord(count, "пункт", "пункта", "пунктов");
+            : count + " " + RussianWordForms.forCount(
+                count, "пункт", "пункта", "пунктов");
         return personMenuGridTile(iconRes, label, detail, false, popup, () -> showPersonQualityDialog(person, category));
     }
 
@@ -3794,7 +3796,7 @@ public final class MainActivity extends Activity {
         int age = personAge(person);
         if (age >= 0) {
             biography.append("\nВозраст: ").append(age).append(" ")
-                .append(countWord(age, "год", "года", "лет"));
+                .append(RussianWordForms.forCount(age, "год", "года", "лет"));
         }
         String born = humanDate(person.bornDay, person.bornMonth, person.bornYear);
         String died = humanDate(person.diedDay, person.diedMonth, person.diedYear);
@@ -3881,473 +3883,34 @@ public final class MainActivity extends Activity {
     }
 
     private String personQualitySummary(TreeQualityAnalyzer.PersonReport report) {
-        if (report == null) return "Заполнено 0%";
-        if (report.errors() > 0) {
-            String value = "Заполнено " + report.completeness + "% · " + report.errors()
-                + " " + countWord(report.errors(), "ошибка", "ошибки", "ошибок");
-            if (report.warnings() > 0) value += " · " + report.warnings() + " предупр.";
-            return value;
-        }
-        if (report.warnings() > 0) {
-            return "Заполнено " + report.completeness + "% · " + report.warnings()
-                + " " + countWord(report.warnings(), "предупреждение", "предупреждения", "предупреждений");
-        }
-        if (report.recommendations() > 0) {
-            return "Заполнено " + report.completeness + "% · " + report.recommendations()
-                + " " + countWord(report.recommendations(), "рекомендация", "рекомендации", "рекомендаций");
-        }
-        return "Заполнено " + report.completeness + "% · всё хорошо";
+        return qualityModule == null
+            ? "Заполнено 0%"
+            : qualityModule.personSummary(report);
     }
 
     private int qualitySummaryColor(TreeQualityAnalyzer.PersonReport report) {
-        if (report != null && report.errors() > 0) return Color.rgb(197, 83, 75);
-        if (report != null && report.warnings() > 0) return Color.rgb(184, 128, 24);
-        if (report != null && report.recommendations() > 0) return Color.rgb(101, 113, 122);
-        return Color.rgb(8, 122, 115);
-    }
-
-    private String countWord(int count, String one, String few, String many) {
-        int mod100 = count % 100;
-        int mod10 = count % 10;
-        if (mod100 >= 11 && mod100 <= 14) return many;
-        if (mod10 == 1) return one;
-        if (mod10 >= 2 && mod10 <= 4) return few;
-        return many;
-    }
-
-    private void updateTreeQualityButton() {
-        if (treeQualityButton == null) return;
-        int score = qualityReport == null ? 0 : qualityReport.score;
-        treeQualityButton.setText("Оценка дерева\n" + score + "%");
-        int color = score >= 80
-            ? AppThemePalette.secondary()
-            : score >= 55 ? Color.rgb(184, 128, 24) : Color.rgb(197, 83, 75);
-        treeQualityButton.setTextColor(color);
-        tintDrawables(treeQualityButton, color);
-        treeQualityButton.setBackground(softAccentGradientBg(dp(10)));
+        return qualityModule == null
+            ? Color.rgb(8, 122, 115)
+            : qualityModule.summaryColor(report);
     }
 
     void refreshTreeQuality() {
-        qualityReport = TreeQualityAnalyzer.analyze(state);
-        if (treeView != null) treeView.setQualityReports(qualityReport.people);
-        updateTreeQualityButton();
+        if (qualityModule != null) qualityModule.refresh();
     }
 
     void showTreeQualityDialog() {
-        qualityReport = TreeQualityAnalyzer.analyze(state);
-        showQualityDialog(
-            "Оценка здоровья дерева",
-            state.people.size() + " карточек · " + state.links.size() + " связей",
-            qualityReport.score,
-            qualityReport.issues,
-            "");
+        if (qualityModule != null) qualityModule.showTreeDialog();
     }
 
     private void showPersonQualityDialog(Person person, String category) {
-        if (person == null) return;
-        qualityReport = TreeQualityAnalyzer.analyze(state);
-        TreeQualityAnalyzer.PersonReport report = qualityReport.person(person.id);
-        java.util.List<TreeQualityAnalyzer.Issue> filtered = new java.util.ArrayList<>();
-        for (TreeQualityAnalyzer.Issue issue : report.issues) {
-            if (category == null || category.isEmpty() || category.equals(issue.category)) filtered.add(issue);
-        }
-        showQualityDialog(
-            "Проверка карточки",
-            person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim(),
-            report.completeness,
-            filtered,
-            person.id);
+        if (qualityModule != null) qualityModule.showPersonDialog(person, category);
     }
 
-    private void showQualityDialog(
-        String titleValue,
-        String subtitleValue,
-        int score,
-        java.util.List<TreeQualityAnalyzer.Issue> issues,
-        String personId
-    ) {
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        boolean treeReport = personId == null || personId.isEmpty();
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(dp(16), dp(14), dp(16), dp(16));
-        shell.setBackground(treeReport
-            ? softAccentGradientBg(dp(18))
-            : panelBg(Color.rgb(250, 252, 253), dp(18), Color.argb(56, 63, 82, 94)));
-        scroll.addView(shell, new ScrollView.LayoutParams(-1, -2));
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.VERTICAL);
-        TextView title = cardActionTitle(titleValue, false);
-        title.setTextSize(19);
-        heading.addView(title, new LinearLayout.LayoutParams(-1, dp(30)));
-        TextView subtitle = cardActionDetail(subtitleValue, false);
-        subtitle.setTextSize(11);
-        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(22)));
-        top.addView(heading, new LinearLayout.LayoutParams(0, dp(52), 1));
-        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(42), dp(42)));
-        shell.addView(top);
-
-        if (treeReport) shell.addView(qualityGenderSummary(), qualityGenderParams());
-        shell.addView(qualityScoreCard(score, treeReport), qualityBlockParams());
-        LinearLayout metrics = new LinearLayout(this);
-        metrics.setOrientation(LinearLayout.HORIZONTAL);
-        int errors = 0;
-        int warnings = 0;
-        int recommendations = 0;
-        for (TreeQualityAnalyzer.Issue issue : issues) {
-            if (issue.severity == TreeQualityAnalyzer.ERROR) errors++;
-            else if (issue.severity == TreeQualityAnalyzer.WARNING) warnings++;
-            else recommendations++;
-        }
-        metrics.addView(qualityMetric("Ошибки", errors, Color.rgb(197, 83, 75)), new LinearLayout.LayoutParams(0, dp(58), 1));
-        LinearLayout.LayoutParams warningParams = new LinearLayout.LayoutParams(0, dp(58), 1);
-        warningParams.setMargins(dp(7), 0, 0, 0);
-        metrics.addView(qualityMetric("Предупреждения", warnings, Color.rgb(184, 128, 24)), warningParams);
-        LinearLayout.LayoutParams recommendationParams = new LinearLayout.LayoutParams(0, dp(58), 1);
-        recommendationParams.setMargins(dp(7), 0, 0, 0);
-        metrics.addView(qualityMetric("Советы", recommendations, Color.rgb(101, 113, 122)), recommendationParams);
-        shell.addView(metrics, qualityBlockParams());
-
-        TextView section = personMenuSection(issues.isEmpty() ? "РЕЗУЛЬТАТ" : "ЧТО НУЖНО ПРОВЕРИТЬ");
-        shell.addView(section, new LinearLayout.LayoutParams(-1, dp(34)));
-        if (issues.isEmpty()) {
-            TextView empty = cardActionDetail("Замечаний не найдено. Данные выглядят согласованными.", false);
-            empty.setTextSize(12);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(dp(12), dp(14), dp(12), dp(14));
-            empty.setBackground(panelBg(Color.rgb(232, 248, 246), dp(12), Color.argb(72, 24, 169, 153)));
-            shell.addView(empty, new LinearLayout.LayoutParams(-1, dp(72)));
-        } else if (treeReport) {
-            addGroupedQualityIssues(shell, issues, dialog);
-        } else {
-            int limit = Math.min(60, issues.size());
-            for (int index = 0; index < limit; index++) {
-                shell.addView(qualityIssueRow(issues.get(index), dialog, false), qualityIssueParams());
-            }
-        }
-
-        dialog.setContentView(scroll);
-        dialog.setCanceledOnTouchOutside(true);
-        Window window = dialog.getWindow();
-        if (window != null) {
-            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(24), dp(540));
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = width;
-            attrs.height = Math.min(getResources().getDisplayMetrics().heightPixels - dp(54), dp(760));
-            attrs.dimAmount = 0.34f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
-        dialog.show();
-    }
-
-    private View qualityScoreCard(int score, boolean treeReport) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        int color = score >= 80
-            ? AppThemePalette.secondary()
-            : score >= 55 ? Color.rgb(184, 128, 24) : Color.rgb(197, 83, 75);
-        card.setPadding(dp(14), dp(10), dp(14), dp(10));
-        card.setBackground(treeReport || score >= 80
-            ? softAccentGradientBg(dp(12))
-            : panelBg(Color.WHITE, dp(12), Color.argb(86, Color.red(color), Color.green(color), Color.blue(color))));
-        TextView scoreView = new LocalizedTextView(this);
-        LocalizedViews.setRaw(scoreView, score + "%");
-        scoreView.setTextColor(color);
-        scoreView.setTextSize(26);
-        scoreView.setTypeface(uiBold());
-        scoreView.setGravity(Gravity.CENTER);
-        card.addView(scoreView, new LinearLayout.LayoutParams(dp(82), -1));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        TextView title = cardActionTitle(
-            score >= 80 ? "Хорошее состояние" : score >= 55 ? "Нужно проверить" : "Требует внимания",
-            false);
-        if (score >= 80) title.setTextColor(AppThemePalette.secondary());
-        copy.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
-        TextView detail = cardActionDetail("Оценка учитывает заполненность, даты и семейные связи.", false);
-        detail.setTextSize(9);
-        detail.setMaxLines(2);
-        copy.addView(detail, new LinearLayout.LayoutParams(-1, dp(34)));
-        card.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-        return card;
-    }
-
-    private View qualityMetric(String label, int value, int color) {
-        LinearLayout metric = new LinearLayout(this);
-        metric.setOrientation(LinearLayout.VERTICAL);
-        metric.setGravity(Gravity.CENTER);
-        metric.setBackground(panelBg(Color.WHITE, dp(10), Color.argb(64, Color.red(color), Color.green(color), Color.blue(color))));
-        TextView number = new LocalizedTextView(this);
-        LocalizedViews.setRaw(number, String.valueOf(value));
-        number.setTextColor(color);
-        number.setTextSize(18);
-        number.setTypeface(uiBold());
-        number.setGravity(Gravity.CENTER);
-        metric.addView(number, new LinearLayout.LayoutParams(-1, dp(30)));
-        TextView caption = cardActionDetail(label, false);
-        caption.setTextSize(8);
-        caption.setGravity(Gravity.CENTER);
-        metric.addView(caption, new LinearLayout.LayoutParams(-1, dp(20)));
-        return metric;
-    }
-
-    private View qualityGenderSummary() {
-        int male = 0;
-        int female = 0;
-        int unknown = 0;
-        if (state != null) {
-            for (Person person : state.people.values()) {
-                String gender = PersonGender.resolve(person);
-                if (PersonGender.MALE.equals(gender)) male++;
-                else if (PersonGender.FEMALE.equals(gender)) female++;
-                else unknown++;
-            }
-        }
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), dp(7), dp(8), dp(7));
-        row.setBackground(panelBg(Color.WHITE, dp(12), Color.rgb(217, 224, 229)));
-        row.addView(qualityGenderMetric("М", "Мужчины", male, Color.rgb(47, 125, 185)), new LinearLayout.LayoutParams(0, -1, 1));
-        LinearLayout.LayoutParams femaleParams = new LinearLayout.LayoutParams(0, -1, 1);
-        femaleParams.setMargins(dp(7), 0, 0, 0);
-        row.addView(qualityGenderMetric("Ж", "Женщины", female, Color.rgb(185, 83, 130)), femaleParams);
-        if (unknown > 0) {
-            LinearLayout.LayoutParams unknownParams = new LinearLayout.LayoutParams(0, -1, 1);
-            unknownParams.setMargins(dp(7), 0, 0, 0);
-            row.addView(qualityGenderMetric("?", "Не указан", unknown, Color.rgb(101, 113, 122)), unknownParams);
-        }
-        return row;
-    }
-
-    private View qualityGenderMetric(String mark, String label, int value, int color) {
-        LinearLayout metric = new LinearLayout(this);
-        metric.setOrientation(LinearLayout.HORIZONTAL);
-        metric.setGravity(Gravity.CENTER_VERTICAL);
-        TextView badge = new LocalizedTextView(this);
-        LocalizedViews.setRaw(badge, mark);
-        badge.setTextSize(12);
-        badge.setTypeface(uiBold());
-        badge.setTextColor(Color.WHITE);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(panelBg(color, dp(999), Color.TRANSPARENT));
-        metric.addView(badge, new LinearLayout.LayoutParams(dp(30), dp(30)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(7), 0, 0, 0);
-        TextView count = new LocalizedTextView(this);
-        LocalizedViews.setRaw(count, String.valueOf(value));
-        count.setTextSize(14);
-        count.setTypeface(uiBold());
-        count.setTextColor(color);
-        count.setIncludeFontPadding(false);
-        copy.addView(count, new LinearLayout.LayoutParams(-1, dp(21)));
-        TextView caption = cardActionDetail(label, false);
-        caption.setTextSize(8);
-        copy.addView(caption, new LinearLayout.LayoutParams(-1, dp(17)));
-        metric.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-        return metric;
-    }
-
-    private void addGroupedQualityIssues(
-        LinearLayout shell,
-        java.util.List<TreeQualityAnalyzer.Issue> issues,
-        Dialog dialog
-    ) {
-        java.util.Map<String, java.util.List<TreeQualityAnalyzer.Issue>> groups = new java.util.LinkedHashMap<>();
-        for (TreeQualityAnalyzer.Issue issue : issues) {
-            groups.computeIfAbsent(issue.title, key -> new java.util.ArrayList<>()).add(issue);
-        }
-        for (java.util.Map.Entry<String, java.util.List<TreeQualityAnalyzer.Issue>> group : groups.entrySet()) {
-            java.util.Set<String> cards = new java.util.LinkedHashSet<>();
-            int severity = 0;
-            for (TreeQualityAnalyzer.Issue issue : group.getValue()) {
-                cards.add(issue.personId);
-                severity = Math.max(severity, issue.severity);
-            }
-            shell.addView(
-                qualityProblemAccordion(group.getKey(), cards.size(), severity, group.getValue(), dialog),
-                qualityProblemHeaderParams());
-        }
-    }
-
-    private View qualityProblemAccordion(
-        String problem,
-        int cardCount,
-        int severity,
-        java.util.List<TreeQualityAnalyzer.Issue> issues,
-        Dialog dialog
-    ) {
-        LinearLayout group = new LinearLayout(this);
-        group.setOrientation(LinearLayout.VERTICAL);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(10), 0, dp(10), 0);
-        String countLabel = AppLanguage.isEnglish(this)
-            ? cardCount + (cardCount == 1 ? " card" : " cards")
-            : cardCount + " " + countWord(cardCount, "карточка", "карточки", "карточек");
-        int color = severity == TreeQualityAnalyzer.ERROR
-            ? Color.rgb(197, 83, 75)
-            : severity == TreeQualityAnalyzer.WARNING
-                ? Color.rgb(184, 128, 24)
-                : Color.rgb(101, 113, 122);
-        header.setBackground(panelBg(
-            severity == TreeQualityAnalyzer.ERROR
-                ? Color.rgb(255, 244, 241)
-                : severity == TreeQualityAnalyzer.WARNING
-                    ? Color.rgb(255, 248, 226)
-                    : Color.rgb(243, 246, 248),
-            dp(9),
-            Color.argb(76, Color.red(color), Color.green(color), Color.blue(color))));
-
-        TextView arrow = new LocalizedTextView(this);
-        LocalizedViews.setRaw(arrow, "›");
-        arrow.setTextColor(color);
-        arrow.setTextSize(22);
-        arrow.setTypeface(uiBold());
-        arrow.setGravity(Gravity.CENTER);
-        arrow.setIncludeFontPadding(false);
-        header.addView(arrow, new LinearLayout.LayoutParams(dp(28), -1));
-
-        TextView title = new LocalizedTextView(this);
-        LocalizedViews.setRaw(title, AppLanguage.translate(this, problem));
-        title.setTextColor(color);
-        title.setTextSize(12);
-        title.setTypeface(uiBold());
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        title.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(title, new LinearLayout.LayoutParams(0, -1, 1));
-
-        TextView count = new LocalizedTextView(this);
-        LocalizedViews.setRaw(count, countLabel);
-        count.setTextColor(color);
-        count.setTextSize(9);
-        count.setTypeface(uiBold());
-        count.setGravity(Gravity.CENTER);
-        count.setPadding(dp(9), 0, dp(9), 0);
-        count.setBackground(panelBg(Color.WHITE, dp(999), Color.argb(72, Color.red(color), Color.green(color), Color.blue(color))));
-        header.addView(count, new LinearLayout.LayoutParams(-2, dp(30)));
-        group.addView(header, new LinearLayout.LayoutParams(-1, dp(48)));
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(8), dp(8), 0, 0);
-        content.setVisibility(View.GONE);
-        group.addView(content, new LinearLayout.LayoutParams(-1, -2));
-        boolean[] populated = {false};
-        header.setOnClickListener(v -> {
-            boolean open = content.getVisibility() == View.VISIBLE;
-            if (!open && !populated[0]) {
-                for (TreeQualityAnalyzer.Issue issue : issues) {
-                    content.addView(qualityIssueRow(issue, dialog, true), qualityIssueParams());
-                }
-                populated[0] = true;
-            }
-            content.setVisibility(open ? View.GONE : View.VISIBLE);
-            LocalizedViews.setRaw(arrow, open ? "›" : "⌄");
-        });
-        return group;
-    }
-
-    private View qualityIssueRow(TreeQualityAnalyzer.Issue issue, Dialog dialog, boolean showPersonName) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        int color = issue.severity == TreeQualityAnalyzer.ERROR
-            ? Color.rgb(197, 83, 75)
-            : issue.severity == TreeQualityAnalyzer.WARNING
-                ? Color.rgb(184, 128, 24)
-                : Color.rgb(101, 113, 122);
-        row.setPadding(dp(10), dp(7), dp(8), dp(7));
-        row.setBackground(panelBg(Color.WHITE, dp(10), Color.argb(70, Color.red(color), Color.green(color), Color.blue(color))));
-        TextView marker = new LocalizedTextView(this);
-        marker.setText(issue.severity == TreeQualityAnalyzer.RECOMMENDATION ? "i" : "!");
-        marker.setTextColor(Color.WHITE);
-        marker.setTextSize(13);
-        marker.setTypeface(uiBold());
-        marker.setGravity(Gravity.CENTER);
-        marker.setBackground(panelBg(color, dp(999), Color.TRANSPARENT));
-        row.addView(marker, new LinearLayout.LayoutParams(dp(28), dp(28)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(9), 0, dp(7), 0);
-        Person issuePerson = state == null ? null : state.people.get(issue.personId);
-        String titleValue = showPersonName
-            ? issuePerson == null || issuePerson.name == null || issuePerson.name.trim().isEmpty()
-                ? "Без имени"
-                : issuePerson.name.trim()
-            : issue.title;
-        TextView title = cardActionTitle(titleValue, false);
-        title.setTextSize(11);
-        copy.addView(title, new LinearLayout.LayoutParams(-1, dp(23)));
-        TextView detail = cardActionDetail(issue.detail, false);
-        detail.setTextSize(8);
-        detail.setMaxLines(2);
-        copy.addView(detail, new LinearLayout.LayoutParams(-1, dp(34)));
-        row.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-        Button fix = actionButton("Исправить", v -> {
-            dialog.dismiss();
-            quickFixQualityIssue(issue);
-        });
-        fix.setTextSize(9);
-        fix.setTextColor(color);
-        fix.setBackground(panelBg(Color.WHITE, dp(8), Color.argb(90, Color.red(color), Color.green(color), Color.blue(color))));
-        row.addView(fix, new LinearLayout.LayoutParams(dp(78), dp(38)));
-        return row;
-    }
-
-    private void quickFixQualityIssue(TreeQualityAnalyzer.Issue issue) {
-        if (issue == null || state == null || !state.people.containsKey(issue.personId)) return;
-        state.selectedId = issue.personId;
+    private void selectQualityPerson(String personId) {
+        if (state == null || !state.people.containsKey(personId)) return;
+        state.selectedId = personId;
         bindState();
-        treeView.focusPerson(issue.personId);
-        if (TreeQualityAnalyzer.CATEGORY_RELATIONS.equals(issue.category)
-            || TreeQualityAnalyzer.CATEGORY_STRUCTURE.equals(issue.category)) {
-            showPanel("links");
-            toast("Выберите инструмент для исправления связи");
-        } else if (TreeQualityAnalyzer.CATEGORY_DUPLICATES.equals(issue.category)) {
-            showPanel("people");
-            toast("Проверьте похожие карточки в каталоге");
-        } else {
-            openPersonEditor();
-        }
-    }
-
-    private LinearLayout.LayoutParams qualityBlockParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(80));
-        params.setMargins(0, dp(12), 0, 0);
-        return params;
-    }
-
-    private LinearLayout.LayoutParams qualityGenderParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(62));
-        params.setMargins(0, dp(10), 0, 0);
-        return params;
-    }
-
-    private LinearLayout.LayoutParams qualityIssueParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(76));
-        params.setMargins(0, 0, 0, dp(8));
-        return params;
-    }
-
-    private LinearLayout.LayoutParams qualityProblemHeaderParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.setMargins(0, dp(7), 0, dp(7));
-        return params;
+        if (treeView != null) treeView.focusPerson(personId);
     }
 
     private void togglePersonPin(Person person) {
@@ -4450,6 +4013,7 @@ public final class MainActivity extends Activity {
         recordAction(label, current.name.isEmpty() ? "Без имени" : current.name);
         state.selectedId = newId;
         arrangeAfterPersonAddedIfEnabled(newIds, current.id, action);
+        AnalyticsReporter.personAdded(action, newIds.size(), false, state);
         saveToast(newIds.size() > 1 ? "Карточки добавлены: " + newIds.size() : "Родственник добавлен");
         bindState();
         treeView.invalidate();
@@ -4737,10 +4301,13 @@ public final class MainActivity extends Activity {
             true,
             () -> {
                 String name = person.name.isEmpty() ? "Без имени" : person.name;
+                int peopleBefore = state.people.size();
+                int linksBefore = state.links.size();
                 recordUndo(state.people.size() <= 1 ? "Очищена последняя карточка" : "Удалён: " + name);
                 boolean clearedLast = state.people.size() <= 1;
                 if (state.people.size() <= 1) clearLastPerson(person);
                 else state.deletePerson(person.id);
+                AnalyticsReporter.personDeleted(1, false, peopleBefore, linksBefore);
                 saveToast(clearedLast ? "Последняя карточка очищена" : "Человек удалён");
                 bindState();
                 treeView.invalidate();
@@ -4776,9 +4343,12 @@ public final class MainActivity extends Activity {
             "Удалить",
             true,
             () -> {
+                int peopleBefore = state.people.size();
+                int linksBefore = state.links.size();
                 recordUndo(state.people.size() <= 1 ? "Очищена последняя карточка" : "Удалён: " + name);
                 if (state.people.size() <= 1) clearLastPerson(person);
                 else state.deletePerson(person.id);
+                AnalyticsReporter.personDeleted(1, false, peopleBefore, linksBefore);
                 saveOnly();
                 bindState();
                 treeView.invalidate();
@@ -4805,6 +4375,7 @@ public final class MainActivity extends Activity {
     private void deleteWholeTree() {
         if (state == null) return;
         int peopleCount = state.people.size();
+        int linksCount = state.links.size();
         recordUndo("Удалено всё дерево", peopleCount + " карточек");
         state.people.clear();
         state.links.clear();
@@ -4816,6 +4387,7 @@ public final class MainActivity extends Activity {
         pendingBranchMode = "";
         resetTransientCanvasModes(false);
         saveOnly();
+        AnalyticsReporter.personDeleted(peopleCount, true, peopleCount, linksCount);
         bindState();
         showPanel("");
         treeView.invalidate();
@@ -5255,6 +4827,76 @@ public final class MainActivity extends Activity {
         if (search != null) search.clearFocus();
         if (stage != null) stage.requestFocus();
         hideKeyboard();
+        if (search != null && search.getText().length() == 0) collapseSearchField();
+    }
+
+    void toggleSearchField() {
+        if (search == null) return;
+        if (search.getVisibility() == View.VISIBLE) {
+            search.requestFocus();
+            showKeyboard(search);
+            return;
+        }
+        if (searchToggleButton != null) searchToggleButton.setVisibility(View.GONE);
+        search.setVisibility(View.VISIBLE);
+        search.requestFocus();
+        showKeyboard(search);
+    }
+
+    private void collapseSearchField() {
+        if (search == null || search.getText().length() > 0) return;
+        search.setVisibility(View.INVISIBLE);
+        if (searchToggleButton != null) searchToggleButton.setVisibility(View.VISIBLE);
+        if (searchSuggestionsScroll != null) searchSuggestionsScroll.setVisibility(View.GONE);
+    }
+
+    private void showZoomIndicator(float scale) {
+        if (zoomIndicator == null || !Float.isFinite(scale)) return;
+        int percent = Math.max(5, Math.round(scale * 100f));
+        zoomIndicator.setText(percent + "%");
+        zoomIndicator.animate().cancel();
+        zoomIndicator.setVisibility(View.VISIBLE);
+        zoomIndicator.setAlpha(1f);
+        toastHandler.removeCallbacks(hideZoomIndicatorRunnable);
+        toastHandler.postDelayed(hideZoomIndicatorRunnable, 850L);
+    }
+
+    void setHeaderActionsDimmed(boolean dimmed) {
+        int surface = dimmed ? Color.rgb(206, 210, 211) : Color.WHITE;
+        int stroke = dimmed ? Color.rgb(174, 184, 188) : Color.rgb(217, 224, 229);
+        int icon = dimmed ? Color.rgb(101, 113, 122) : Color.rgb(8, 122, 115);
+
+        if (searchToggleButton != null) {
+            searchToggleButton.setAlpha(1f);
+            searchToggleButton.setEnabled(!dimmed);
+            searchToggleButton.setBackground(panelBg(surface, dp(11), stroke));
+            tintHeaderAction(searchToggleButton, icon);
+        }
+        if (search != null) {
+            search.setAlpha(1f);
+            search.setEnabled(!dimmed);
+            search.setBackground(panelBg(surface, dp(8), stroke));
+            search.setTextColor(AppThemePalette.text(dimmed
+                ? Color.rgb(70, 83, 92)
+                : Color.rgb(28, 34, 38)));
+            search.setHintTextColor(AppThemePalette.text(dimmed
+                ? Color.rgb(101, 113, 122)
+                : Color.rgb(128, 137, 144)));
+            tintDrawables(search, icon);
+        }
+        for (Button action : new Button[]{undoBtn, redoBtn}) {
+            if (action == null) continue;
+            action.setAlpha(1f);
+            action.setEnabled(!dimmed);
+            action.setBackground(panelBg(surface, dp(8), stroke));
+            tintHeaderAction(action, icon);
+        }
+    }
+
+    private void tintHeaderAction(View action, int color) {
+        if (action instanceof TextView) tintDrawables((TextView) action, color);
+        Drawable foreground = action.getForeground();
+        if (foreground != null) foreground.mutate().setTint(AppThemePalette.text(color));
     }
 
     private void updateSearchSuggestions(String query) {
@@ -5331,26 +4973,14 @@ public final class MainActivity extends Activity {
         if (normalizedInput.isEmpty() || state == null) return result;
         boolean trailingSpace = suggestionInput != null && suggestionInput.endsWith(" ");
         String[] tokens = normalizedInput.split("\\s+");
-        if (tokens.length == 1 && !trailingSpace) {
-            for (Person person : state.people.values()) {
-                String surname = surnameDisplayOf(person);
-                if (surname.isEmpty() || !normalizeSearch(surname).startsWith(tokens[0])) continue;
-                addTreeSuggestion(result, seen, normalizedInput, commandPrefix, capitalize(surname), capitalize(surname) + " ", "", limit);
-                if (result.size() >= limit) return result;
-            }
-        }
-        for (Person person : state.people.values()) {
+        java.util.List<Person> rankedPeople = new java.util.ArrayList<>(state.people.values());
+        rankedPeople.sort((first, second) -> Integer.compare(
+            SmartPeopleSearch.suggestionScore(displayName(second), normalizedInput),
+            SmartPeopleSearch.suggestionScore(displayName(first), normalizedInput)));
+        for (Person person : rankedPeople) {
             String name = displayName(person);
-            String normalizedName = normalizeSearch(name);
-            if (!normalizedName.startsWith(normalizedInput)) continue;
-            String label = progressiveNameSuggestion(name, tokens.length, trailingSpace);
-            if (normalizeSearch(label).equals(normalizedInput) && nameParts(name).length > nameParts(label).length) {
-                label = displayNameFromParts(nameParts(name), nameParts(name).length);
-            }
-            String apply = label;
-            if (nameParts(name).length > nameParts(label).length) apply += " ";
-            String personId = normalizeSearch(label).equals(normalizedName) ? person.id : "";
-            addTreeSuggestion(result, seen, normalizedInput, commandPrefix, label, apply, personId, limit);
+            if (SmartPeopleSearch.suggestionScore(name, normalizedInput) <= 0) continue;
+            addTreeSuggestion(result, seen, normalizedInput, commandPrefix, name, name, person.id, limit);
             if (result.size() >= limit) return result;
         }
         if (commandPrefix.isEmpty() && tokens.length <= 1 && !trailingSpace) {
@@ -5387,7 +5017,9 @@ public final class MainActivity extends Activity {
         int limit
     ) {
         String key = normalizeSearch(label);
-        if (result.size() >= limit || key.isEmpty() || key.equals(normalizedInput) || !seen.add(key)) return;
+        if (result.size() >= limit || key.isEmpty()
+            || key.equals(normalizedInput) && (personId == null || personId.isEmpty())
+            || !seen.add(key)) return;
         result.add(new TreeSearchSuggestion(label, prefix + apply, personId));
     }
 
@@ -6632,7 +6264,7 @@ public final class MainActivity extends Activity {
         showEditorDialog(dialog, shell);
     }
 
-    private LinearLayout editorDialogShell() {
+    LinearLayout editorDialogShell() {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -6640,7 +6272,7 @@ public final class MainActivity extends Activity {
         return shell;
     }
 
-    private View editorDialogHeader(Dialog dialog, int icon, String titleText, String subtitleText) {
+    View editorDialogHeader(Dialog dialog, int icon, String titleText, String subtitleText) {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
         ImageView mark = new ImageView(this);
@@ -6669,7 +6301,7 @@ public final class MainActivity extends Activity {
         return top;
     }
 
-    private void showEditorDialog(Dialog dialog, View shell) {
+    void showEditorDialog(Dialog dialog, View shell) {
         dialog.setContentView(shell);
         dialog.setCanceledOnTouchOutside(true);
         dialog.show();
@@ -6976,13 +6608,13 @@ public final class MainActivity extends Activity {
 
     private Button navButton(String label, int iconRes, View.OnClickListener listener) {
         Button button = actionButton(label, listener);
-        button.setTextSize(10);
+        button.setTextSize(isLandscapeLayout() ? 9 : 10);
         button.setTypeface(uiBold());
         button.setGravity(Gravity.CENTER);
         button.setCompoundDrawablesWithIntrinsicBounds(0, iconRes, 0, 0);
         button.setCompoundDrawablePadding(dp(4));
-        button.setPadding(dp(3), dp(5), dp(3), dp(5));
-        button.setMinHeight(dp(58));
+        button.setPadding(dp(3), dp(isLandscapeLayout() ? 3 : 5), dp(3), dp(isLandscapeLayout() ? 3 : 5));
+        button.setMinHeight(dp(isLandscapeLayout() ? 48 : 58));
         button.setElevation(0f);
         return button;
     }
@@ -6996,8 +6628,9 @@ public final class MainActivity extends Activity {
         Drawable top = button.getCompoundDrawables()[1];
         if (top != null) top.mutate().setTint(color);
         button.setBackground(active
-            ? softAccentGradientBg(dp(8))
+            ? softAccentGradientBg(dp(isLandscapeLayout() ? 12 : 8))
             : panelBg(Color.TRANSPARENT, dp(8), Color.TRANSPARENT));
+        button.setElevation(active ? dp(2) : 0f);
     }
 
     void stylePeopleNav(boolean active) {
@@ -7254,12 +6887,7 @@ public final class MainActivity extends Activity {
         tintDrawables(text, AppThemePalette.primary());
         mainBox.addView(text, new LinearLayout.LayoutParams(0, -1, 1));
 
-        TextView toggle = new LocalizedTextView(this);
-        toggle.setText(enabled ? "●" : "●");
-        toggle.setGravity(enabled ? Gravity.RIGHT | Gravity.CENTER_VERTICAL : Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        toggle.setTextColor(Color.WHITE);
-        toggle.setTextSize(20);
-        toggle.setPadding(dp(3), 0, dp(3), 0);
+        FrameLayout toggle = toggleControl(enabled);
         toggle.setBackground(toggleBg(enabled));
         LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(dp(44), dp(26));
         toggleParams.setMargins(dp(8), 0, 0, 0);
@@ -7364,6 +6992,46 @@ public final class MainActivity extends Activity {
         return bg;
     }
 
+    private FrameLayout toggleControl(boolean enabled) {
+        FrameLayout toggle = new FrameLayout(this);
+        toggle.setBackground(toggleBg(enabled));
+        View thumb = new View(this);
+        thumb.setBackground(toggleThumbBg());
+        toggle.addView(thumb, new FrameLayout.LayoutParams(dp(20), dp(20)));
+        positionToggleThumb(toggle, enabled);
+        return toggle;
+    }
+
+    private void positionToggleThumb(FrameLayout toggle, boolean enabled) {
+        if (toggle == null || toggle.getChildCount() == 0) return;
+        View thumb = toggle.getChildAt(0);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(20), dp(20));
+        params.leftMargin = dp(enabled ? 21 : 3);
+        params.topMargin = dp(3);
+        thumb.setLayoutParams(params);
+    }
+
+    private GradientDrawable toggleThumbBg() {
+        GradientDrawable thumb = new GradientDrawable();
+        thumb.setShape(GradientDrawable.OVAL);
+        thumb.setColor(AppThemePalette.surface(Color.WHITE));
+        thumb.setStroke(dp(1), AppThemePalette.alpha(Color.rgb(63, 82, 94), 38));
+        return thumb;
+    }
+
+    GradientDrawable qualityGradientBg(int radius) {
+        GradientDrawable bg = new GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            new int[]{
+                Color.rgb(220, 249, 232),
+                Color.rgb(250, 247, 255),
+                Color.rgb(231, 218, 255)
+            });
+        bg.setCornerRadius(radius);
+        bg.setStroke(dp(1), Color.argb(110, 122, 91, 177));
+        return bg;
+    }
+
     private GradientDrawable gradientBg() {
         GradientDrawable bg = new GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
@@ -7388,15 +7056,32 @@ public final class MainActivity extends Activity {
         return params;
     }
 
+    LinearLayout.LayoutParams railCardButtonParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(52), dp(52));
+        return params;
+    }
+
     private FrameLayout.LayoutParams railParams() {
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(52), -2, Gravity.RIGHT | Gravity.TOP);
-        params.setMargins(0, dp(18), dp(8), 0);
+        boolean landscape = isLandscapeLayout();
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            dp(52),
+            -2,
+            (landscape ? Gravity.LEFT : Gravity.RIGHT) | Gravity.TOP);
+        params.setMargins(
+            landscape ? dp(8) : 0,
+            dp(landscape ? 56 : 76),
+            landscape ? 0 : dp(8),
+            0);
         return params;
     }
 
     private FrameLayout.LayoutParams canvasModeParams() {
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(68), Gravity.TOP);
-        params.setMargins(dp(12), dp(58), dp(64), 0);
+        params.setMargins(
+            dp(isLandscapeLayout() ? 64 : 12),
+            dp(isLandscapeLayout() ? 56 : 76),
+            dp(isLandscapeLayout() ? 12 : 64),
+            0);
         return params;
     }
 
@@ -7407,19 +7092,19 @@ public final class MainActivity extends Activity {
         int widthDp = Math.min(phone ? 320 : 360, Math.max(240, screenWidthDp - 24));
         int heightDp = phone ? 176 : 242;
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(widthDp), dp(heightDp), Gravity.LEFT | Gravity.BOTTOM);
-        params.setMargins(dp(12), 0, 0, dp(88));
+        params.setMargins(dp(isLandscapeLayout() ? 64 : 12), 0, 0, dp(isLandscapeLayout() ? 12 : 88));
         return params;
     }
 
     private FrameLayout.LayoutParams branchStatusParams() {
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(330), dp(48), Gravity.RIGHT | Gravity.BOTTOM);
-        params.setMargins(0, 0, dp(16), dp(154));
+        params.setMargins(0, 0, dp(16), dp(isLandscapeLayout() ? 12 : 154));
         return params;
     }
 
     private FrameLayout.LayoutParams selectionToolbarParams() {
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(86), Gravity.BOTTOM);
-        params.setMargins(dp(10), 0, dp(10), dp(84));
+        params.setMargins(dp(10), 0, dp(10), dp(isLandscapeLayout() ? 10 : 84));
         return params;
     }
 
@@ -7451,16 +7136,149 @@ public final class MainActivity extends Activity {
         return params;
     }
 
-    private int statusBarHeight() {
-        int resource = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resource > 0 ? getResources().getDimensionPixelSize(resource) : dp(24);
+    int statusBarHeight() {
+        return statusBarInsetPx > 0 ? statusBarInsetPx : dp(24);
+    }
+
+    private void applyFullPanelTopInset() {
+        if (isLandscapeLayout()) {
+            if (landscapeFocusControlsHost != null
+                && landscapeFocusControlsHost.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams params =
+                    (FrameLayout.LayoutParams) landscapeFocusControlsHost.getLayoutParams();
+                params.topMargin = statusBarHeight();
+                landscapeFocusControlsHost.setLayoutParams(params);
+            }
+            if (landscapePeopleCloseHost != null
+                && landscapePeopleCloseHost.getVisibility() == View.VISIBLE
+                && landscapePeopleCloseHost.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+                LinearLayout.LayoutParams params =
+                    (LinearLayout.LayoutParams) landscapePeopleCloseHost.getLayoutParams();
+                params.height = statusBarHeight() + dp(58);
+                landscapePeopleCloseHost.setLayoutParams(params);
+            }
+            return;
+        }
+        int top = statusBarHeight();
+        View[] panels = {settingsPanel, peoplePanel};
+        for (View panel : panels) {
+            if (panel == null || !(panel.getLayoutParams() instanceof FrameLayout.LayoutParams)) continue;
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) panel.getLayoutParams();
+            params.topMargin = top;
+            panel.setLayoutParams(params);
+        }
+    }
+
+    private void moveLandscapeHeaderControls(boolean toCanvasOverlay) {
+        if (!isLandscapeLayout() || landscapeHeaderControls == null) return;
+        ViewGroup destination = toCanvasOverlay
+            ? landscapeFocusControlsHost
+            : headerBrand instanceof ViewGroup ? (ViewGroup) headerBrand : null;
+        if (destination == null) return;
+        ViewGroup current = landscapeHeaderControls.getParent() instanceof ViewGroup
+            ? (ViewGroup) landscapeHeaderControls.getParent()
+            : null;
+        if (current == destination) return;
+        if (current != null) current.removeView(landscapeHeaderControls);
+        if (toCanvasOverlay) {
+            destination.addView(landscapeHeaderControls, new LinearLayout.LayoutParams(-1, -1));
+            return;
+        }
+        int index = landscapePeopleCloseHost != null
+            && landscapePeopleCloseHost.getParent() == destination
+            ? destination.indexOfChild(landscapePeopleCloseHost)
+            : destination.getChildCount();
+        destination.addView(
+            landscapeHeaderControls,
+            Math.max(0, index),
+            new LinearLayout.LayoutParams(0, -2, 1));
     }
 
     void applyFocusTreeUi() {
+        if (isLandscapeLayout()) {
+            boolean peopleTab = "people".equals(activePanel);
+            boolean fullScreenPanel = "settings".equals(activePanel) || peopleTab;
+            if (landscapePanelHost != null
+                && landscapePanelHost.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+                LinearLayout.LayoutParams hostParams =
+                    (LinearLayout.LayoutParams) landscapePanelHost.getLayoutParams();
+                hostParams.width = landscapePanelWidth();
+                landscapePanelHost.setLayoutParams(hostParams);
+            }
+            moveLandscapeHeaderControls(focusTree);
+            if (appHeader != null) {
+                appHeader.setVisibility(focusTree || peopleTab ? View.GONE : View.VISIBLE);
+            }
+            if (actionOverlay != null) actionOverlay.setVisibility(peopleTab ? View.GONE : View.VISIBLE);
+            if (headerBrand != null) headerBrand.setVisibility(View.VISIBLE);
+            if (headerIdentityIcon != null) {
+                headerIdentityIcon.setVisibility(!focusTree && !peopleTab ? View.VISIBLE : View.GONE);
+            }
+            if (headerIdentityTexts != null) {
+                headerIdentityTexts.setVisibility(!focusTree && !peopleTab ? View.VISIBLE : View.GONE);
+            }
+            if (landscapeHeaderControls != null) {
+                landscapeHeaderControls.setVisibility(peopleTab ? View.GONE : View.VISIBLE);
+            }
+            if (landscapeFocusControlsHost != null) {
+                landscapeFocusControlsHost.setVisibility(
+                    focusTree && !peopleTab ? View.VISIBLE : View.GONE);
+            }
+            if (landscapePeopleCloseHost != null) {
+                landscapePeopleCloseHost.setVisibility(
+                    !focusTree && peopleTab ? View.VISIBLE : View.GONE);
+                if (landscapePeopleCloseHost.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+                    LinearLayout.LayoutParams closeParams =
+                        (LinearLayout.LayoutParams) landscapePeopleCloseHost.getLayoutParams();
+                    closeParams.height = !focusTree && peopleTab
+                        ? statusBarHeight() + dp(58)
+                        : 0;
+                    closeParams.weight = 0f;
+                    landscapePeopleCloseHost.setLayoutParams(closeParams);
+                }
+            }
+            if (actionOverlay != null
+                && actionOverlay.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams overlayParams =
+                    (FrameLayout.LayoutParams) actionOverlay.getLayoutParams();
+                overlayParams.topMargin = focusTree ? statusBarHeight() + dp(58) : 0;
+                actionOverlay.setLayoutParams(overlayParams);
+            }
+            if (zoomRail != null) {
+                zoomRail.setVisibility(fullScreenPanel ? View.GONE : View.VISIBLE);
+                if (zoomRail.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                    FrameLayout.LayoutParams railLayout =
+                        (FrameLayout.LayoutParams) zoomRail.getLayoutParams();
+                    railLayout.topMargin = focusTree
+                        ? statusBarHeight() + dp(62)
+                        : dp(56);
+                    zoomRail.setLayoutParams(railLayout);
+                }
+            }
+            setHeaderActionsDimmed("more".equals(activePanel) && !focusTree);
+            refreshLockUi();
+            updateAddPersonButtonVisibility();
+            applyFocusNavStyle(treeNav, "Дерево");
+            applyFocusNavStyle(cardNav, "Карточка");
+            applyFocusNavStyle(peopleNav, "Люди");
+            applyFocusNavStyle(linksNav, "Связи");
+            applyFocusNavStyle(moreNav, "Ещё");
+            if (addPersonButton != null
+                && addPersonButton.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams params =
+                    (FrameLayout.LayoutParams) addPersonButton.getLayoutParams();
+                params.setMargins(0, 0, dp(12), dp(12));
+                addPersonButton.setLayoutParams(params);
+            }
+            updateHistoryPanel();
+            return;
+        }
         boolean settingsTab = "settings".equals(activePanel) || "people".equals(activePanel);
         if (appHeader != null) appHeader.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
+        if (actionOverlay != null) actionOverlay.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
         if (headerBrand != null) headerBrand.setVisibility(focusTree ? View.GONE : View.VISIBLE);
-        if (headerSaveButton != null) headerSaveButton.setVisibility(focusTree ? View.GONE : View.VISIBLE);
+        if (headerIdentityIcon != null) headerIdentityIcon.setVisibility(View.VISIBLE);
+        if (headerIdentityTexts != null) headerIdentityTexts.setVisibility(View.VISIBLE);
         if (zoomRail != null) zoomRail.setVisibility(settingsTab ? View.GONE : View.VISIBLE);
         refreshLockUi();
         updateAddPersonButtonVisibility();
@@ -7510,10 +7328,11 @@ public final class MainActivity extends Activity {
     private void applyFocusNavStyle(Button button, String label) {
         if (button == null) return;
         button.setContentDescription(tr(label));
-        button.setText(focusTree ? "" : label);
-        button.setCompoundDrawablePadding(focusTree ? 0 : dp(4));
-        button.setPadding(dp(3), focusTree ? dp(4) : dp(5), dp(3), focusTree ? dp(4) : dp(5));
-        button.setMinHeight(dp(focusTree ? 46 : 58));
+        boolean compact = focusTree && !isLandscapeLayout();
+        button.setText(compact ? "" : label);
+        button.setCompoundDrawablePadding(compact ? 0 : dp(4));
+        button.setPadding(dp(3), compact ? dp(4) : dp(5), dp(3), compact ? dp(4) : dp(5));
+        button.setMinHeight(dp(compact ? 46 : isLandscapeLayout() ? 48 : 58));
     }
 
     String text(EditText editText) {
@@ -7550,6 +7369,17 @@ public final class MainActivity extends Activity {
         if (day != null && !day.isEmpty() && month != null && !month.isEmpty()) return day + "." + month + "." + year;
         if (month != null && !month.isEmpty()) return month + "." + year;
         return year;
+    }
+
+    private void showKeyboard(View target) {
+        if (target == null) return;
+        target.post(() -> {
+            try {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showSoftInput(target, InputMethodManager.SHOW_IMPLICIT);
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private void hideKeyboard() {

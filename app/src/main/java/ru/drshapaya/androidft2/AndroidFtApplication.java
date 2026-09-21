@@ -2,10 +2,14 @@ package ru.drshapaya.androidft2;
 
 import android.app.Application;
 
+import com.yandex.mobile.ads.common.YandexAds;
+
 public final class AndroidFtApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        AnalyticsReporter.initialize(this);
+        YandexAds.initialize(this, () -> DiagnosticsLogger.breadcrumb(this, "ads.ready"));
         Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
             DiagnosticsLogger.crash(this, error);

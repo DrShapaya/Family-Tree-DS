@@ -76,6 +76,7 @@ final class MainActivityRelations {
             }
             activity.recordUndo("Удалена связь: " + fromName + " - " + toName);
             activity.state.removeRelationsBetween(activity.pendingLinkFrom, person.id);
+            AnalyticsReporter.relationDeleted(activity.state);
             activity.pendingLinkType = "";
             activity.pendingLinkFrom = "";
             activity.selectedLinkId = "";
@@ -86,6 +87,7 @@ final class MainActivityRelations {
         }
         activity.recordUndo("Создана связь: " + fromName + " - " + toName);
         Relation relation = activity.state.addRelation(activity.pendingLinkType, activity.pendingLinkFrom, person.id);
+        AnalyticsReporter.relationCreated(activity.pendingLinkType, activity.state);
         activity.pendingLinkType = "";
         activity.pendingLinkFrom = "";
         activity.selectedLinkId = relation == null ? "" : relation.id;

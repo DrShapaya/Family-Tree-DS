@@ -50,7 +50,137 @@ final class BirthdayWidgetRenderer {
         canvas.clipPath(clip);
         if (alpha > 0) drawOneUiDecoration(canvas, background, alpha, scale, safeHeightDp);
         canvas.restore();
+        if (alpha > 0) {
+            String frame = new RewardWallet(context).selected(RewardCatalog.WIDGET_FRAMES);
+            if ("widget_frame_family".equals(frame)) {
+                drawFamilyFrame(canvas, card, radius, scale, alpha, background);
+            } else if ("widget_frame_fire".equals(frame)) {
+                drawFireFrame(canvas, card, alpha);
+            } else if ("widget_frame_botanical".equals(frame)) {
+                drawBotanicalFrame(canvas, card, scale, alpha, background);
+            }
+        }
         return bitmap;
+    }
+
+    private static void drawFamilyFrame(Canvas canvas, RectF card, float radius,
+                                        float scale, int alpha, int background) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1.6f * scale);
+        paint.setColor(withAlpha(isDark(background) ? Color.rgb(158, 225, 193)
+            : Color.rgb(61, 121, 93), Math.min(alpha, 205)));
+        RectF border = new RectF(card);
+        border.inset(.9f * scale, .9f * scale);
+        canvas.drawRoundRect(border, Math.max(0, radius - .9f * scale),
+            Math.max(0, radius - .9f * scale), paint);
+        // Small leaf pairs stay on the border and leave native widget text clear.
+        paint.setStyle(Paint.Style.FILL);
+        for (int side = 0; side < 2; side++) {
+            float x = side == 0 ? card.left + 18f * scale : card.right - 18f * scale;
+            float y = card.bottom - 6f * scale;
+            canvas.save();
+            canvas.rotate(side == 0 ? -25f : 25f, x, y);
+            canvas.drawOval(x - 5f * scale, y - 3f * scale, x, y + scale, paint);
+            canvas.drawOval(x + scale, y - 4f * scale, x + 6f * scale, y, paint);
+            canvas.restore();
+        }
+    }
+
+    private static void drawFireFrame(Canvas canvas, RectF card, int alpha) {
+        RectF layer = expandedLayer(card, 38f);
+        int checkpoint = canvas.saveLayerAlpha(layer, Math.min(alpha, 235));
+        RectF border = new RectF(card);
+        border.inset(.8f, .8f);
+        canvas.translate(border.left, border.top);
+        FireCardEffect fire = new FireCardEffect();
+        // Widgets are bitmaps, so use one deliberate animation frame of the same
+        // organic effect as fire cards instead of a row of geometric spikes.
+        fire.behind(canvas, border.width(), border.height(), 0x51f3, 1.75f);
+        fire.rim(canvas, border.width(), border.height(), 0x51f3, 1.75f);
+        canvas.restoreToCount(checkpoint);
+    }
+
+    private static void drawBotanicalFrame(
+        Canvas canvas,
+        RectF card,
+        float scale,
+        int alpha,
+        int background
+    ) {
+        RectF border = new RectF(card);
+        border.inset(.8f * scale, .8f * scale);
+        int checkpoint = canvas.saveLayerAlpha(expandedLayer(card, 28f * scale), Math.min(alpha, 235));
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        boolean dark = isDark(background);
+        int stem = dark ? Color.rgb(151, 211, 106) : Color.rgb(69, 122, 35);
+        int leaf = dark ? Color.rgb(111, 177, 71) : Color.rgb(82, 146, 35);
+        int highlight = dark ? Color.rgb(193, 232, 124) : Color.rgb(164, 207, 73);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setStrokeWidth(2.1f * scale);
+        paint.setColor(withAlpha(stem, Math.min(alpha, 225)));
+        canvas.drawRoundRect(border, Math.max(0f, 12f * scale), Math.max(0f, 12f * scale), paint);
+        paint.setStrokeWidth(.8f * scale);
+        paint.setColor(withAlpha(highlight, Math.min(alpha, 185)));
+        canvas.drawRoundRect(border, Math.max(0f, 12f * scale), Math.max(0f, 12f * scale), paint);
+
+        Path leafPath = new Path();
+        leafPath.moveTo(0f, 0f);
+        leafPath.cubicTo(4f, -8f, 14f, -8f, 22f, -2f);
+        leafPath.cubicTo(16f, 1f, 9f, 9f, 0f, 0f);
+        leafPath.close();
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(withAlpha(leaf, Math.min(alpha, 225)));
+        float step = Math.max(30f * scale, Math.min(48f * scale, border.width() / 8f));
+        int index = 0;
+        for (float x = border.left + 16f * scale; x < border.right - 10f * scale; x += step) {
+            drawWidgetLeaf(canvas, paint, leafPath, x, border.top + 6f * scale, -50f, scale);
+            if ((index++ & 1) == 0) {
+                drawWidgetLeaf(canvas, paint, leafPath, x + 8f * scale,
+                    border.bottom - 6f * scale, 132f, scale);
+            }
+        }
+        for (float y = border.top + 24f * scale; y < border.bottom - 14f * scale; y += step) {
+            drawWidgetLeaf(canvas, paint, leafPath, border.left + 6f * scale, y, -138f, scale);
+            if ((index++ & 1) == 0) {
+                drawWidgetLeaf(canvas, paint, leafPath, border.right - 6f * scale, y + 7f * scale, 42f, scale);
+            }
+        }
+        paint.setColor(withAlpha(Color.rgb(250, 239, 178), Math.min(alpha, 235)));
+        for (int flower = 0; flower < 4; flower++) {
+            float x = border.left + (flower + 1f) * border.width() / 5f;
+            float y = flower % 2 == 0 ? border.top + 4f * scale : border.bottom - 4f * scale;
+            canvas.drawCircle(x, y, 2.8f * scale, paint);
+            paint.setColor(withAlpha(Color.rgb(218, 164, 45), Math.min(alpha, 240)));
+            canvas.drawCircle(x, y, .95f * scale, paint);
+            paint.setColor(withAlpha(Color.rgb(250, 239, 178), Math.min(alpha, 235)));
+        }
+        canvas.restoreToCount(checkpoint);
+    }
+
+    private static void drawWidgetLeaf(
+        Canvas canvas,
+        Paint paint,
+        Path leaf,
+        float x,
+        float y,
+        float angle,
+        float scale
+    ) {
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(angle);
+        canvas.scale(.84f * scale, .84f * scale);
+        canvas.drawPath(leaf, paint);
+        canvas.restore();
+    }
+
+    private static RectF expandedLayer(RectF source, float bleed) {
+        RectF result = new RectF(source);
+        result.inset(-bleed, -bleed);
+        return result;
     }
 
     static Bitmap renderPhoto(Context context, BirthdayCalculator.Result birthday, int sizeDp) {
