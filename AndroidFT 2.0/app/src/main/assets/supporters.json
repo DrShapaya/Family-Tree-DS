@@ -18,10 +18,10 @@
       "order": 0
     },
     {
-      "name": "Тест 2 o",
+      "name": "Тест 2",
       "amount": 42,
       "currency": "RUB",
-      "color": "#E8789D",
+      "color": "#D59AEB",
       "showHeart": false,
       "order": 1
     }
