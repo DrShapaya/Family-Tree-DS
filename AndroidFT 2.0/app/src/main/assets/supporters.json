@@ -16,14 +16,6 @@
       "color": "#8B7CFF",
       "showHeart": false,
       "order": 0
-    },
-    {
-      "name": "Тест 2",
-      "amount": 42,
-      "currency": "RUB",
-      "color": "#D59AEB",
-      "showHeart": false,
-      "order": 1
     }
   ]
 }
