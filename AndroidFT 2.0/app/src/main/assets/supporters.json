@@ -10,20 +10,12 @@
   },
   "supporters": [
     {
-      "name": "Тест",
-      "amount": 67,
-      "currency": "RUB",
-      "color": "#8B7CFF",
-      "showHeart": false,
-      "order": 0
-    },
-    {
       "name": "JVIiracLe",
       "amount": 100,
       "currency": "RUB",
       "color": "#8B7CFF",
       "showHeart": true,
-      "order": 1
+      "order": 0
     }
   ]
 }
