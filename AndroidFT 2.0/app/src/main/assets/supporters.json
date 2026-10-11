@@ -14,7 +14,7 @@
       "amount": 100,
       "currency": "RUB",
       "color": "#F3A45F",
-      "showHeart": true,
+      "showHeart": false,
       "order": 0
     },
     {
