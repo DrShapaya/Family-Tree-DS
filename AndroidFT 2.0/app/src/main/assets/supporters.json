@@ -19,6 +19,17 @@
       "color": "#8B7CFF",
       "showHeart": false,
       "order": 0
+    },
+    {
+      "id": "8c4cdab6-b33b-4451-88b3-6d32dd0c6f20",
+      "amountRevision": 0,
+      "donationLinks": [],
+      "name": "JVIiracLe",
+      "amount": 100,
+      "currency": "RUB",
+      "color": "#F3A45F",
+      "showHeart": true,
+      "order": 1
     }
   ]
 }
