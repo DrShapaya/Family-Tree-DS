@@ -162,6 +162,64 @@ public final class SmartPeopleSearchTest {
     }
 
     @Test
+    public void findsDirectFamilyOfAnna() {
+        TreeState state = new TreeState();
+        Person anna = person("anna", "Анна Иванова", "1980");
+        Person mother = person("mother", "Мария Иванова", "1950");
+        Person partner = person("partner", "Иван Петров", "1979");
+        Person son = person("son", "Сергей Петров", "2000");
+        Person brother = person("brother", "Павел Иванов", "1982");
+        Person sister = person("sister", "Елена Иванова", "1984");
+        for (Person person : new Person[]{anna, mother, partner, son, brother, sister}) {
+            state.people.put(person.id, person);
+        }
+        state.addRelation("parent", mother.id, anna.id);
+        state.addRelation("parent", mother.id, brother.id);
+        state.addRelation("sibling", anna.id, sister.id);
+        state.addRelation("partner", anna.id, partner.id);
+        state.addRelation("parent", anna.id, son.id);
+
+        assertOnly(state, "дети Анны", anna.id, son.id);
+        assertOnly(state, "партнёры Анны", anna.id, partner.id);
+        assertOnly(state, "родители Анны", anna.id, mother.id);
+        assertOnly(state, "братья Анны", anna.id, brother.id);
+        assertOnly(state, "сёстры Анны", anna.id, sister.id);
+        assertOnly(state, "братья и сёстры Анны", anna.id, brother.id, sister.id);
+    }
+
+    @Test
+    public void ancestorsOfMariaUseDeclinedNameAndEmptyResultStaysEmpty() {
+        TreeState state = new TreeState();
+        Person marina = person("marina", "Марина Сидорова", "1975");
+        Person maria = person("maria", "Мария Иванова", "1980");
+        Person mother = person("mother", "Елена Петрова", "1950");
+        Person unrelated = person("unrelated", "Ольга Сидорова", "1970");
+        state.people.put(marina.id, marina);
+        state.people.put(maria.id, maria);
+        state.people.put(mother.id, mother);
+        state.people.put(unrelated.id, unrelated);
+        state.addRelation("parent", mother.id, maria.id);
+
+        SmartPeopleSearch.Query byName = SmartPeopleSearch.parse(state, "Мария", maria.id);
+        assertFalse(byName.birthdays);
+        assertTrue(matches(state, byName, maria));
+        assertFalse(matches(state, byName, unrelated));
+        assertOnly(state, "предки Марии", unrelated.id, mother.id);
+        SmartPeopleSearch.Query noAncestors = SmartPeopleSearch.parse(state, "предки Елены", maria.id);
+        assertEquals("ancestors", noAncestors.scope);
+        for (Person person : state.people.values()) assertFalse(matches(state, noAncestors, person));
+    }
+
+    private static void assertOnly(TreeState state, String text, String selectedId, String... expectedIds) {
+        SmartPeopleSearch.Query query = SmartPeopleSearch.parse(state, text, selectedId);
+        assertFalse("scope missing for " + text, query.scope.isEmpty());
+        for (Person person : state.people.values()) {
+            boolean expected = java.util.Arrays.asList(expectedIds).contains(person.id);
+            assertEquals(text + ": " + person.name, expected, matches(state, query, person));
+        }
+    }
+
+    @Test
     public void relationCommandWithoutNameDoesNotUseSelectedPerson() {
         TreeState state = new TreeState();
         Person father = person("father", "Иван Петров", "1950");

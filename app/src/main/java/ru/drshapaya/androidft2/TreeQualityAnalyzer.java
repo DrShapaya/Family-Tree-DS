@@ -103,16 +103,17 @@ final class TreeQualityAnalyzer {
         }
 
         Map<String, Map<String, Issue>> unique = new LinkedHashMap<>();
+        TreeRelationsIndex index = new TreeRelationsIndex(state);
         for (Person person : state.people.values()) {
             PersonReport report = new PersonReport(person.id);
-            report.completeness = completeness(state, person);
+            report.completeness = completeness(index, person);
             tree.people.put(person.id, report);
             unique.put(person.id, new LinkedHashMap<>());
-            checkPerson(state, person, unique.get(person.id));
+            checkPerson(state, index, person, unique.get(person.id));
         }
-        checkRelations(state, unique);
+        checkRelations(state, index, unique);
         checkDuplicatePeople(state, unique);
-        checkDisconnectedComponents(state, unique);
+        checkDisconnectedComponents(state, index, unique);
 
         int completenessTotal = 0;
         for (PersonReport report : tree.people.values()) {
@@ -129,7 +130,7 @@ final class TreeQualityAnalyzer {
         return tree;
     }
 
-    private static int completeness(TreeState state, Person person) {
+    private static int completeness(TreeRelationsIndex index, Person person) {
         int score = 0;
         if (!isPlaceholderName(person.name)) score += 20;
         if (positiveYear(person.bornYear) > 0) score += 15;
@@ -139,11 +140,11 @@ final class TreeQualityAnalyzer {
         if (present(person.notes)) score += 10;
         if (present(person.photoMediaId) || present(person.photo)) score += 15;
         if (!person.memories.isEmpty()) score += 10;
-        if (hasRelation(state, person.id)) score += 5;
+        if (index.linkedPeople.contains(person.id)) score += 5;
         return clamp(score, 0, 100);
     }
 
-    private static void checkPerson(TreeState state, Person person, Map<String, Issue> issues) {
+    private static void checkPerson(TreeState state, TreeRelationsIndex index, Person person, Map<String, Issue> issues) {
         int currentYear = Calendar.getInstance().get(Calendar.YEAR);
         int born = positiveYear(person.bornYear);
         int died = positiveYear(person.diedYear);
@@ -168,7 +169,7 @@ final class TreeQualityAnalyzer {
             add(issues, person.id, RECOMMENDATION, CATEGORY_MISSING,
                 "Не указан пол", "Пол нужен для точных названий родства.");
         }
-        if (!hasRelation(state, person.id) && state.people.size() > 1) {
+        if (!index.linkedPeople.contains(person.id) && state.people.size() > 1) {
             add(issues, person.id, WARNING, CATEGORY_RELATIONS,
                 "Карточка не связана с деревом", "Добавьте хотя бы одну семейную связь.");
         }
@@ -193,10 +194,18 @@ final class TreeQualityAnalyzer {
         checkMemories(person, issues);
     }
 
-    private static void checkRelations(TreeState state, Map<String, Map<String, Issue>> unique) {
+    private static void checkRelations(TreeState state, TreeRelationsIndex index, Map<String, Map<String, Issue>> unique) {
         Map<String, Integer> parentCounts = new LinkedHashMap<>();
         Map<String, Integer> relationCounts = new LinkedHashMap<>();
         Map<String, Set<String>> pairRoles = new LinkedHashMap<>();
+        Map<String, Set<String>> childrenByParent = new LinkedHashMap<>();
+        for (Relation link : state.links) {
+            if (!"parent".equals(link.type)
+                || !state.people.containsKey(link.from)
+                || !state.people.containsKey(link.to)) continue;
+            childrenByParent.computeIfAbsent(link.from, ignored -> new LinkedHashSet<>())
+                .add(link.to);
+        }
         for (Relation link : state.links) {
             Person from = state.people.get(link.from);
             Person to = state.people.get(link.to);
@@ -221,18 +230,9 @@ final class TreeQualityAnalyzer {
             parentCounts.put(link.to, parentCounts.getOrDefault(link.to, 0) + 1);
             checkParentAge(from, to, unique.get(to.id));
 
-            if (state.descendantsOf(to.id).contains(from.id)) {
+            if (index.ancestryCycle(from.id, to.id)) {
                 add(unique.get(to.id), to.id, ERROR, CATEGORY_RELATIONS,
                     "Циклическая родительская связь", "Человек не может быть собственным предком.");
-            }
-            for (Relation other : state.links) {
-                if (!"partner".equals(other.type) && !"sibling".equals(other.type)) continue;
-                boolean samePair = (link.from.equals(other.from) && link.to.equals(other.to))
-                    || (link.from.equals(other.to) && link.to.equals(other.from));
-                if (samePair) {
-                    add(unique.get(to.id), to.id, ERROR, CATEGORY_RELATIONS,
-                        "Несовместимые типы связи", "Между двумя карточками одновременно указаны разные роли.");
-                }
             }
         }
         for (Map.Entry<String, Set<String>> entry : pairRoles.entrySet()) {
@@ -247,6 +247,26 @@ final class TreeQualityAnalyzer {
             add(unique.get(item.getKey()), item.getKey(), WARNING, CATEGORY_RELATIONS,
                 "Указано больше двух родителей", "Проверьте родительские связи: " + item.getValue() + ".");
         }
+    }
+
+    private static boolean canReach(
+        Map<String, Set<String>> childrenByParent,
+        String startId,
+        String targetId
+    ) {
+        if (startId == null || targetId == null) return false;
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        Set<String> visited = new LinkedHashSet<>();
+        queue.add(startId);
+        visited.add(startId);
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            for (String child : childrenByParent.getOrDefault(current, java.util.Collections.emptySet())) {
+                if (targetId.equals(child)) return true;
+                if (visited.add(child)) queue.addLast(child);
+            }
+        }
+        return false;
     }
 
     private static void checkDuplicatePeople(
@@ -290,20 +310,21 @@ final class TreeQualityAnalyzer {
 
     private static void checkDisconnectedComponents(
         TreeState state,
+        TreeRelationsIndex index,
         Map<String, Map<String, Issue>> unique
     ) {
         if (state.people.size() < 2) return;
         String root = state.people.containsKey(state.rootId)
             ? state.rootId
             : state.people.keySet().iterator().next();
-        Set<String> rootComponent = relatedComponent(state, root);
+        Set<String> rootComponent = index.component(root);
         if (rootComponent.size() == state.people.size()) return;
         Set<String> reported = new LinkedHashSet<>();
         for (String id : state.people.keySet()) {
             if (rootComponent.contains(id) || !reported.add(id)) continue;
-            Set<String> component = relatedComponent(state, id);
+            Set<String> component = index.component(id);
             reported.addAll(component);
-            if (component.size() == 1 && !hasRelation(state, id)) continue;
+            if (component.size() == 1 && !index.linkedPeople.contains(id)) continue;
             Person person = state.people.get(id);
             add(unique.get(id), id, WARNING, CATEGORY_STRUCTURE,
                 "Отдельная ветка не связана с корнем",

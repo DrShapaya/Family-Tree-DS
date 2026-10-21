@@ -33,10 +33,16 @@ final class TreeLayoutEngine {
     static final float SURFACE_H = 16000f;
     static final int MIN_SURFACE_W = 1200;
     static final int MIN_SURFACE_H = 800;
-    static final int MAX_SURFACE_SIZE = 100000;
+    // Deep imported lineages can legitimately exceed 100,000 world pixels.
+    // The canvas renders only the visible viewport, so a larger coordinate
+    // range does not allocate a bitmap of this size.
+    static final int MAX_SURFACE_SIZE = 1_000_000;
     private static final float PARTNER_GAP = GRID;
+    // Local packing gap. Full branch contours are separated by BRANCH_GAP below;
+    // using 200 px here as well over-expands remarriage rows before contour packing.
     private static final float SIBLING_FAMILY_GAP = GRID * 2f;
     private static final float BRANCH_GAP = GRID * 5f;
+    private static final float COMPONENT_GAP = GRID * 10f;
     private static final float MARGIN_X = GRID * 4f;
     private static final float MARGIN_Y = GRID * 4f;
     // Place a four-row card fully between generation guides. This used to be
@@ -104,14 +110,193 @@ final class TreeLayoutEngine {
     }
 
     static void layout(TreeState state) {
-        layout(state, Collections.emptySet());
+        layoutComplete(state, !hasSavedPositions(state));
     }
 
+    private static void layoutComplete(TreeState state, boolean rebuild) {
+        layoutComplete(state, rebuild, null, 0);
+    }
+
+    private static boolean layoutComplete(
+        TreeState state,
+        boolean rebuild,
+        RebuildProgress progress,
+        int totalPeople
+    ) {
+        try (FamilyLayoutGraph.ReuseScope ignored = FamilyLayoutGraph.reuseTopology(state)) {
+        if (!layout(state, Collections.emptySet(), progress, totalPeople)) return false;
+        if (!reportLayoutProgress(progress, totalPeople, .22f, "Строим семейный граф")) return false;
+        // Unrelated cards must release the generation rows before any family
+        // packing or parent projection; moving them only at the end lets them
+        // obstruct positions that should be available throughout the rebuild.
+        if (rebuild) placeDisconnectedCardsBelowTree(state);
+        if (!reportLayoutProgress(progress, totalPeople, .25f, "Размещаем отдельные ветки")) return false;
+        FamilyLineageCentering.improve(state, null);
+        refineSavedRows(state, true);
+        if (!reportLayoutProgress(progress, totalPeople, .29f, "Выравниваем поколения")) return false;
+        if (rebuild) {
+            SiblingContourPacking.improve(state);
+            closeUpwardBranchGaps(state);
+            LineageBandReflow.improve(state);
+            if (!reportLayoutProgress(progress, totalPeople, .37f, "Собираем семейные полосы")) return false;
+            // Re-run the local sibling-gap pass after lineage reflow.  The
+            // latter may move complete bands and expose a new empty interval
+            // between two sibling households.
+            SiblingContourPacking.improve(state);
+            if (!reportLayoutProgress(progress, totalPeople, .43f, "Убираем разрывы между ветками")) return false;
+            // Band packing can leave a family centered against the old child
+            // span. Run the scalable centering pass once more after all row
+            // moves, so large imports receive the same correction as small
+            // trees.
+            FamilyLineageCentering.improve(state, null);
+            SiblingContourPacking.improve(state);
+            if (!reportLayoutProgress(progress, totalPeople, .50f, "Центрируем семейные группы")) return false;
+            // Child bands can expose a free slot after the initial leaf pass.
+            // Project free cards onto their actual parent anchor once the bands
+            // have reached their final positions.
+            refineSavedRows(state, true);
+            SiblingContourPacking.improve(state);
+            if (!reportLayoutProgress(progress, totalPeople, .57f, "Проецируем детей к родителям")) return false;
+            LineageBandReflow.alignParents(state);
+            SiblingContourPacking.compactAvailableGaps(state);
+            BranchSlackCompaction.improve(state);
+            LineageBandReflow.alignParents(state);
+            BranchSlackCompaction.improve(state);
+            LineageBandReflow.alignTogether(state);
+            BranchSlackCompaction.improve(state);
+            if (!reportLayoutProgress(progress, totalPeople, .69f, "Уплотняем свободные промежутки")) return false;
+            // Earlier row projections may strand free siblings on opposite
+            // sides of a foreign household. Reunite their bands only after
+            // the descendant-bearing contours have reached their final slots.
+            TerminalSiblingBands.improve(state);
+            FamilyAnchorProjection.improve(state);
+            SiblingBoundaryProjection.improve(state);
+            FamilyAnchorProjection.improve(state);
+            FamilyAnchorProjection.balanceCompetingOrigins(state);
+            BranchSlackCompaction.improve(state);
+            if (!reportLayoutProgress(progress, totalPeople, .79f, "Сверяем стороны родства")) return false;
+            // Local anchor projection can select a free slot on the wrong side
+            // of another family. Resolve inter-generation order jointly, keeping
+            // complete sibling runs and the two origins of a couple ordered.
+            OriginOrderProjection.improve(state);
+            // A continuing household must use the edge facing its other origin;
+            // free-sibling placement alone cannot move that household's contour.
+            ContinuingOriginProjection.improve(state);
+            FamilyBandRepair.improve(state);
+            // These wide-contour passes are intentionally limited to the
+            // medium-size import class they were designed for.  Very large
+            // graphs need the older corridor solver, whose global ordering
+            // is more conservative until a full contour optimizer is used.
+            if (state.people.size() >= 120 && state.people.size() <= 200) {
+                GenerationGapCompaction.improve(state);
+                FamilyChildBandCompaction.improve(state);
+                // Repack complete terminal sibling bands after contour moves.
+                // This is intentionally late: earlier projections can split a
+                // valid child run while resolving another branch.
+                TerminalSiblingBands.compactFreeBands(state);
+                TerminalRowSpacing.improve(state);
+                TerminalFamilyAlignment.improve(state);
+                // A compacted child run changes the measured parent anchor;
+                // one final pair of projections removes that residual drift.
+                TerminalSiblingBands.compactFreeBands(state);
+                TerminalFamilyAlignment.improve(state);
+                TerminalRowSpacing.improve(state);
+            }
+            placeDisconnectedCardsBelowTree(state);
+            if (!reportLayoutProgress(progress, totalPeople, .93f, "Проверяем пересечения")) return false;
+        }
+        expandWorkspaceToFit(state);
+        if (!reportLayoutProgress(progress, totalPeople, .98f, "Фиксируем размеры поля")) return false;
+        return true;
+        }
+    }
+
+
+    /** Keep truly unrelated cards out of the generation rows. */
+    private static void placeDisconnectedCardsBelowTree(TreeState state) {
+        if (state == null || state.people.size() < 2) return;
+        Set<String> linked = new HashSet<>();
+        for (Relation relation : state.links) {
+            if (relation == null) continue;
+            if (state.people.containsKey(relation.from)
+                && state.people.containsKey(relation.to)) {
+                linked.add(relation.from);
+                linked.add(relation.to);
+            }
+        }
+        List<Person> isolated = new ArrayList<>();
+        float bottom = MARGIN_Y;
+        float center = surfaceWidth(state) / 2f;
+        for (Person person : state.people.values()) {
+            if (person == null || linked.contains(person.id) || person.pinned) continue;
+            isolated.add(person);
+        }
+        if (isolated.isEmpty() || linked.isEmpty()) return;
+        for (Person person : state.people.values()) {
+            if (person == null || (!linked.contains(person.id) && !person.pinned) || !isValidPosition(person)) continue;
+            bottom = Math.max(bottom, person.y + CARD_H);
+        }
+        float rowY = snap(bottom + LEVEL_GAP - CARD_H / 2f);
+        float width = isolated.size() * CARD_W + Math.max(0, isolated.size() - 1) * SIBLING_GAP;
+        float cursor = Math.max(MARGIN_X, snap(center - width / 2f));
+        for (Person person : isolated) {
+            person.x = cursor;
+            person.y = rowY;
+            cursor += CARD_W + SIBLING_GAP;
+        }
+    }
+
+
     /**
-     * Rebuilds the saved tree by replaying deterministic relationship additions.
-     * This is the manual "Arrange" operation: it deliberately ignores old card
-     * coordinates and uses the same local rules as auto-arrange-on-add.
+     * Rebuilds the complete tree from relationships without treating the
+     * current coordinates as a layout constraint. This is the full-arrange
+     * path used for an arbitrary pile, row, or previously damaged layout.
+     * Explicitly pinned cards remain fixed.
      */
+    static void layoutFresh(TreeState state) {
+        layoutFresh(state, null);
+    }
+
+    static boolean layoutFresh(TreeState state, RebuildProgress progress) {
+        if (state == null || state.people.isEmpty()) return false;
+
+        int totalPeople = state.people.size();
+        if (!reportRebuildProgress(progress, 0, totalPeople, "Готовим семейный граф")) {
+            return false;
+        }
+
+        // A full arrange must be independent of the imported/saved geometry.
+        // Invalidating unpinned coordinates forces layout(...) onto its
+        // structural ordering path instead of the saved-order preservation path.
+        int prepared=0;
+        for (Person person : state.people.values()) {
+            if (person == null || person.pinned) continue;
+            person.x = Float.NaN;
+            person.y = Float.NaN;
+            prepared++;
+            if ((prepared & 15) == 0 && !reportLayoutProgress(
+                progress,
+                totalPeople,
+                .02f + .08f * prepared / Math.max(1f, totalPeople),
+                "Подготавливаем карточки")) return false;
+        }
+        if (!reportLayoutProgress(progress, totalPeople, .10f, "Подготавливаем карточки")) return false;
+        // Do not inherit a workspace enlarged by an earlier bad arrangement.
+        // applyPositions(...) will expand the canonical field when necessary.
+        state.workspaceWidth = (int) SURFACE_W;
+        state.workspaceHeight = (int) SURFACE_H;
+
+        if (!reportLayoutProgress(
+            progress,
+            totalPeople,
+            .11f,
+            "Распределяем поколения")) return false;
+
+        if (!layoutComplete(state, true, progress, totalPeople)) return false;
+        return reportRebuildProgress(progress, totalPeople, totalPeople, "Готово");
+    }
+
+    /** Rebuilds a tree from its relationships, preserving an already valid plan. */
     static void rebuildStepwise(TreeState state) {
         rebuildStepwise(state, null);
     }
@@ -121,6 +306,9 @@ final class TreeLayoutEngine {
 
         TreeState source = TreeStateCopier.copy(state);
         int totalPeople = source.people.size();
+        if (isAlreadyArranged(source)) {
+            return reportRebuildProgress(progress, totalPeople, totalPeople, "Готово");
+        }
         Relations finalRelations = buildRelations(source);
         Map<String, Integer> sourceOrder = new LinkedHashMap<>();
         int order = 0;
@@ -150,14 +338,11 @@ final class TreeLayoutEngine {
         }
         working.people.put(root.id, root);
         syncAvailableRelations(source, working);
-        if (!reportRebuildProgress(progress, working.people.size(), totalPeople, "Размещаем основную карточку")) {
-            return false;
-        }
+        if (!reportLayoutProgress(progress, totalPeople, .04f, "Размещаем основную карточку")) return false;
 
         while (working.people.size() < source.people.size()) {
-            if (!reportRebuildProgress(progress, working.people.size(), totalPeople, "Подбираем следующую семейную ветку")) {
-                return false;
-            }
+            float placedFraction = .04f + .70f * working.people.size() / Math.max(1f, totalPeople);
+            if (!reportLayoutProgress(progress, totalPeople, placedFraction, "Подбираем следующую семейную ветку")) return false;
             StepAction next = nextRebuildAction(
                 source,
                 working,
@@ -178,20 +363,16 @@ final class TreeLayoutEngine {
             }
                 working.people.put(seed.id, seed);
                 syncAvailableRelations(source, working);
-                if (!reportRebuildProgress(progress, working.people.size(), totalPeople, "Размещаем отдельную ветку")) {
-                    return false;
-                }
+                placedFraction = .04f + .70f * working.people.size() / Math.max(1f, totalPeople);
+                if (!reportLayoutProgress(progress, totalPeople, placedFraction, "Размещаем отдельную ветку")) return false;
                 continue;
             }
             addRebuildStep(source, working, next, sourceOrder);
-            if (!reportRebuildProgress(progress, working.people.size(), totalPeople, rebuildProgressDetail(next))) {
-                return false;
-            }
+            placedFraction = .04f + .70f * working.people.size() / Math.max(1f, totalPeople);
+            if (!reportLayoutProgress(progress, totalPeople, placedFraction, rebuildProgressDetail(next))) return false;
         }
 
-        if (!reportRebuildProgress(progress, totalPeople, totalPeople, "Уплотняем и проверяем раскладку")) {
-            return false;
-        }
+        if (!reportLayoutProgress(progress, totalPeople, .76f, "Уплотняем и проверяем раскладку")) return false;
         Person arrangedRoot = working.people.get(rootId);
         float rootTargetX = snap(surfaceWidth(working) / 2f - CARD_W / 2f);
         if (arrangedRoot != null) {
@@ -200,9 +381,14 @@ final class TreeLayoutEngine {
                 working.people.keySet(),
                 snap(rootTargetX - arrangedRoot.x));
         }
-        SmartLayoutSolver.compactRebuiltTree(working);
+        normalizeRebuiltGeometry(working);
+        if (!reportLayoutProgress(progress, totalPeople, .84f, "Нормализуем геометрию")) return false;
+        FamilyLineageCentering.improve(working, null);
+        refineSavedRows(working, false);
+        if (!reportLayoutProgress(progress, totalPeople, .91f, "Выравниваем семейные ряды")) return false;
         translateTreeInsideLeftBoundary(working);
         expandWorkspaceToFit(working);
+        if (!reportLayoutProgress(progress, totalPeople, .98f, "Проверяем итоговую раскладку")) return false;
 
         for (Person person : state.people.values()) {
             Person arranged = working.people.get(person.id);
@@ -212,7 +398,104 @@ final class TreeLayoutEngine {
         }
         state.workspaceWidth = working.workspaceWidth;
         state.workspaceHeight = working.workspaceHeight;
-        reportRebuildProgress(progress, totalPeople, totalPeople, "Готово");
+        return reportRebuildProgress(progress, totalPeople, totalPeople, "Готово");
+    }
+
+    private static boolean isAlreadyArranged(TreeState state) {
+        if (state.people.size() < 2 || !hasSavedPositions(state)) return false;
+        Relations relations = buildRelations(state);
+        UnitGraph graph = makeUnits(state, relations);
+        if (!assignLevelsFromSavedRows(state, graph, relations)) return false;
+        if (!new LayoutConstraints().validate(
+            FamilyLayoutGraph.from(state),
+            LayoutSnapshot.capture(state)).isValid()) return false;
+
+        for (Unit unit : graph.units) {
+            Float center = savedUnitCenter(unit);
+            if (center == null) return false;
+            unit.center = center;
+            float expected = unit.left();
+            for (int index = 0; index < unit.people.size(); index++) {
+                Person person = state.people.get(unit.people.get(index));
+                if (person == null || Math.abs(person.x - expected) > 0.5f) return false;
+                expected += CARD_W + PARTNER_GAP;
+            }
+        }
+        for (Relation relation : state.links) {
+            if (relation == null) continue;
+            Person from = state.people.get(relation.from);
+            Person to = state.people.get(relation.to);
+            if (from == null || to == null) continue;
+            if ("sibling".equals(relation.type)
+                && (("left".equals(relation.side) && to.x >= from.x)
+                    || (!"left".equals(relation.side) && to.x <= from.x))) {
+                return false;
+            }
+            if (!("partner".equals(relation.type) || "family".equals(relation.type))) {
+                continue;
+            }
+            String fromGender = inferGender(state, from.id);
+            String toGender = inferGender(state, to.id);
+            if (PersonGender.MALE.equals(fromGender)
+                && PersonGender.FEMALE.equals(toGender)
+                && from.x >= to.x) return false;
+            if (PersonGender.FEMALE.equals(fromGender)
+                && PersonGender.MALE.equals(toGender)
+                && to.x >= from.x) return false;
+        }
+        for (Unit unit : graph.units) {
+            Float childrenCenter = unambiguousFamilyChildrenCenter(unit, graph, relations);
+            if (childrenCenter != null && Math.abs(childrenCenter - unit.center) > 0.5f) {
+                return false;
+            }
+            if (unit.people.size() < 2) continue;
+            boolean hasMale = false;
+            boolean hasFemale = false;
+            for (String id : unit.people) {
+                hasMale |= PersonGender.MALE.equals(inferGender(state, id));
+                hasFemale |= PersonGender.FEMALE.equals(inferGender(state, id));
+            }
+            if (!hasMale || !hasFemale) continue;
+            for (int index = 0; index < unit.people.size(); index++) {
+                String id = unit.people.get(index);
+                String gender = inferGender(state, id);
+                if (!PersonGender.MALE.equals(gender)
+                    && !PersonGender.FEMALE.equals(gender)) continue;
+                float parentsCenter = 0f;
+                int count = 0;
+                for (String parentId : relations.parentsByChild.getOrDefault(
+                    id,
+                    Collections.emptySet())) {
+                    Person parent = state.people.get(parentId);
+                    if (parent == null) continue;
+                    parentsCenter += parent.x + CARD_W / 2f;
+                    count++;
+                }
+                if (count == 0) continue;
+                parentsCenter /= count;
+                float memberCenter = personCenter(unit, index);
+                if (PersonGender.MALE.equals(gender)
+                    && parentsCenter > memberCenter + 0.5f) return false;
+                if (PersonGender.FEMALE.equals(gender)
+                    && parentsCenter < memberCenter - 0.5f) return false;
+            }
+        }
+        Map<Integer, List<Unit>> rows = new TreeMap<>();
+        for (Unit unit : graph.units) {
+            rows.computeIfAbsent(unit.level, ignored -> new ArrayList<>()).add(unit);
+        }
+        for (List<Unit> row : rows.values()) {
+            row.sort(Comparator.comparingDouble(Unit::left));
+            for (int index = 1; index < row.size(); index++) {
+                Unit left = row.get(index - 1);
+                Unit right = row.get(index);
+                float actualGap = right.left() - left.right();
+                float requiredGap = gapBetween(left, right);
+                if (actualGap + 0.5f < requiredGap) return false;
+                if (areSiblings(left, right)
+                    && actualGap > requiredGap + GRID * 2f) return false;
+            }
+        }
         return true;
     }
 
@@ -243,7 +526,6 @@ final class TreeLayoutEngine {
             Person source = state.people.get(id);
             if (source == null) continue;
             Person copied = TreeStateCopier.copyPerson(source);
-            if (id.equals(scoped.rootId)) copied.pinned = true;
             scoped.people.put(id, copied);
         }
         for (Relation relation : state.links) {
@@ -307,6 +589,21 @@ final class TreeLayoutEngine {
         if (progress.isCancelled()) return false;
         progress.onProgress(Math.max(0, current), Math.max(1, total), detail == null ? "" : detail);
         return !progress.isCancelled();
+    }
+
+    private static boolean reportLayoutProgress(
+        RebuildProgress progress,
+        int total,
+        float fraction,
+        String detail
+    ) {
+        if (progress == null) return true;
+        float bounded = Math.max(0f, Math.min(1f, fraction));
+        return reportRebuildProgress(
+            progress,
+            Math.round(Math.max(1, total) * bounded),
+            Math.max(1, total),
+            detail);
     }
 
     private static String rebuildProgressDetail(StepAction action) {
@@ -683,17 +980,39 @@ final class TreeLayoutEngine {
                 }
                 reflowContainingSiblingGroup(state, relations, localAnchorId);
             } else {
-                arrangePartner(state, relations, existingAddedIds, existingParent);
+                arrangePartner(
+                    state,
+                    relations,
+                    existingAddedIds,
+                    existingParent);
                 reflowChildrenOfFamily(state, relations, existingParent);
                 reflowContainingSiblingGroup(state, relations, existingParent);
                 reflowContainingSiblingGroup(state, relations, localAnchorId);
             }
             reflowLineageParentFamiliesTowardRoot(state, relations, localAnchorId);
         } else if ("partner".equals(localAction)) {
-            arrangePartner(state, relations, existingAddedIds, localAnchorId);
-            reflowChildrenOfFamily(state, relations, localAnchorId);
-            reflowContainingSiblingGroup(state, relations, localAnchorId);
+            arrangePartner(
+                state,
+                relations,
+                existingAddedIds,
+                localAnchorId);
+            // Existing children with their own partner rows anchor established
+            // descendant families. Repacking their complete contours just
+            // because a parent gained a partner can drag those families across
+            // unrelated branches; the new pair must make room locally instead.
+            if (!hasPartneredChild(relations, localAnchorId)) {
+                reflowChildrenOfFamily(state, relations, localAnchorId);
+            }
+            makeRoomForAddedPartner(state, relations, existingAddedIds, localAnchorId);
+            reflowContainingSiblingGroup(state, relations, localAnchorId, true);
             keepAncestrySiblingGroupOutsidePartner(state, relations, localAnchorId);
+            if (!rebuildStep) {
+                repairAddedPartnerCollisions(
+                    state,
+                    relations,
+                    existingAddedIds,
+                    localAnchorId);
+            }
         }
         for (Map.Entry<String, Float> entry : preservedRows.entrySet()) {
             Person person = state.people.get(entry.getKey());
@@ -701,16 +1020,10 @@ final class TreeLayoutEngine {
         }
         repairConsensusGenerationRows(state, relations);
         translateTreeInsideLeftBoundary(state);
-        if (rebuildStep) {
-            SmartLayoutSolver.improveRebuildStep(
-                state,
-                existingAddedIds,
-                localAnchorId);
-        } else if (state.autoArrangeOnAdd) {
-            SmartLayoutSolver.improveAfterAddition(
-                state,
-                existingAddedIds,
-                localAnchorId);
+        if (!rebuildStep && state.autoArrangeOnAdd && !"partner".equals(localAction)) {
+            DeterministicAdditionLayout.repair(
+                state, existingAddedIds, localAction);
+            FamilyLineageCentering.improve(state, existingAddedIds);
         }
         expandWorkspaceToFit(state);
     }
@@ -783,10 +1096,12 @@ final class TreeLayoutEngine {
     private static String normalizeLocalAction(String action) {
         if (action == null) return "";
         String normalized = action.toLowerCase(java.util.Locale.ROOT);
+        // A partner may optionally be linked to existing children. That still
+        // changes the partner row, not the number or order of child branches.
+        if (normalized.contains("partner")) return "partner";
         if (normalized.contains("parent")) return "parents";
         if (normalized.contains("child") || normalized.contains("children")) return "children";
         if (normalized.contains("sibling")) return "siblings";
-        if (normalized.contains("partner")) return "partner";
         return "";
     }
 
@@ -1442,6 +1757,16 @@ final class TreeLayoutEngine {
                 queue.addLast(parent);
             }
         }
+        // The root and its collateral relatives form the stable visible trunk.
+        // When a descendant household becomes wider, move the descendant blocks
+        // under that trunk instead of dragging the root away from its siblings.
+        if (branch.contains(state.rootId)) {
+            LinkedHashSet<String> movingChildren = new LinkedHashSet<>();
+            for (LocalBlock child : children) movingChildren.addAll(child.people);
+            shiftPeople(state, movingChildren, -delta);
+            avoidStationaryCollisions(state, movingChildren);
+            return;
+        }
         shiftPeople(state, branch, delta);
         avoidStationaryCollisions(state, branch);
     }
@@ -1454,6 +1779,15 @@ final class TreeLayoutEngine {
         TreeState state,
         Relations relations,
         String memberId
+    ) {
+        reflowContainingSiblingGroup(state, relations, memberId, false);
+    }
+
+    private static void reflowContainingSiblingGroup(
+        TreeState state,
+        Relations relations,
+        String memberId,
+        boolean partnerAddition
     ) {
         if (!state.people.containsKey(memberId)) return;
         Set<String> parentIds = new LinkedHashSet<>(relations.parentsByChild.getOrDefault(
@@ -1518,7 +1852,8 @@ final class TreeLayoutEngine {
                 }
             }
         }
-        reflowExistingSiblingBlocks(state, blocks, stableRootId, anchor);
+        reflowExistingSiblingBlocks(
+            state, relations, blocks, stableRootId, anchor, partnerAddition);
         if (!parentIds.isEmpty()) {
             centerParentBranchOverChildren(state, relations, parentIds, blocks);
         }
@@ -1650,9 +1985,11 @@ final class TreeLayoutEngine {
 
     private static void reflowExistingSiblingBlocks(
         TreeState state,
+        Relations relations,
         List<LocalBlock> blocks,
         String changedRootId,
-        float anchor
+        float anchor,
+        boolean partnerAddition
     ) {
         int pivot = -1;
         for (int i = 0; i < blocks.size(); i++) {
@@ -1763,11 +2100,111 @@ final class TreeLayoutEngine {
         // an unrelated family. In that one case the final normalization below performs
         // only the smallest common translation needed to bring x back to zero.
         if (!crossesLeftBoundary) {
-            float commonShift = avoidStationaryCollisions(state, localGroup);
+            boolean externalClearance = partnerAddition
+                && moveObstructingAncestryBranches(state, relations, blocks, localGroup);
+            float commonShift = externalClearance
+                ? 0f
+                : avoidStationaryCollisions(state, localGroup);
             if (Math.abs(commonShift) >= 0.5f) {
                 for (LocalBlock block : blocks) block.shift(commonShift);
             }
         }
+    }
+
+    /** Moves the neighbouring ancestry block instead of translating both sibling subtrees. */
+    private static boolean moveObstructingAncestryBranches(
+        TreeState state,
+        Relations relations,
+        List<LocalBlock> blocks,
+        Set<String> localGroup
+    ) {
+        if (blocks.isEmpty()) return true;
+        float groupCenter = 0f;
+        for (LocalBlock block : blocks) groupCenter += block.rootCenter;
+        groupCenter /= blocks.size();
+        Set<String> shifted = new HashSet<>();
+        for (Person other : state.people.values()) {
+            if (localGroup.contains(other.id) || shifted.contains(other.id)
+                || !touchesBranch(state, other, localGroup)) continue;
+            Set<String> branch = collateralAncestryBranch(other.id, relations, state);
+            // A spouse or sibling may belong to both lineages. Its short
+            // family gap is intentional, not a five-cell branch collision.
+            if (!Collections.disjoint(branch, localGroup)) {
+                if (onlyDirectFamilyGaps(state, relations, other, localGroup)) continue;
+                return false;
+            }
+            if (branch.contains(state.rootId) || containsPinnedPerson(state, branch)) {
+                return false;
+            }
+            float branchCenter = 0f;
+            int count = 0;
+            for (String id : branch) {
+                Person person = state.people.get(id);
+                if (person == null) continue;
+                branchCenter += person.x + CARD_W / 2f;
+                count++;
+            }
+            if (count == 0) continue;
+            float direction = branchCenter / count < groupCenter ? -1f : 1f;
+            float needed = direction < 0f
+                ? leftBranchClearanceDelta(state, branch, localGroup, BRANCH_GAP)
+                : rightBranchClearanceDelta(state, localGroup, branch, BRANCH_GAP);
+            if (direction * needed > 0.5f) {
+                shiftPeople(state, branch, snap(needed));
+                shifted.addAll(branch);
+                pushCollateralNeighbours(
+                    state, relations, localGroup, branch, direction, shifted);
+            }
+        }
+        for (Person other : state.people.values()) {
+            if (localGroup.contains(other.id) || !touchesBranch(state, other, localGroup)) {
+                continue;
+            }
+            if (Collections.disjoint(
+                collateralAncestryBranch(other.id, relations, state), localGroup)
+                || !onlyDirectFamilyGaps(state, relations, other, localGroup)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean touchesBranch(
+        TreeState state,
+        Person person,
+        Collection<String> branch
+    ) {
+        for (String id : branch) {
+            Person member = state.people.get(id);
+            if (member != null && separateBranchesTooClose(
+                person.x, person.y, member.x, member.y)) return true;
+        }
+        return false;
+    }
+
+    private static boolean onlyDirectFamilyGaps(
+        TreeState state,
+        Relations relations,
+        Person person,
+        Collection<String> branch
+    ) {
+        for (String id : branch) {
+            Person member = state.people.get(id);
+            if (member == null || !separateBranchesTooClose(
+                person.x, person.y, member.x, member.y)) continue;
+            if (relations.partnersByPerson.getOrDefault(
+                person.id, Collections.emptySet()).contains(id)
+                || belongsToSameSiblingGroup(person.id, id, relations)
+                || !Collections.disjoint(
+                    relations.childrenByParent.getOrDefault(
+                        person.id, Collections.emptySet()),
+                    relations.childrenByParent.getOrDefault(
+                        id, Collections.emptySet()))) {
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private static float leftBranchClearanceDelta(
@@ -1922,8 +2359,10 @@ final class TreeLayoutEngine {
             allMoving.addAll(block.branch);
             float idealLeft = snap(block.childCenter() - block.width() / 2f);
             float delta = snap(idealLeft - block.left);
-            shiftPeople(state, block.branch, delta);
-            block.shift(delta);
+            if (!block.branch.contains(state.rootId)) {
+                shiftPeople(state, block.branch, delta);
+                block.shift(delta);
+            }
         }
         boolean mirroredPair = blocks.size() == 2
             && haveMatchingBranchContours(state, blocks.get(0), blocks.get(1));
@@ -1939,8 +2378,24 @@ final class TreeLayoutEngine {
                 : left.right + BRANCH_GAP - right.left;
             if (deficit <= 0f) continue;
             int steps = Math.max(1, Math.round(deficit / GRID));
-            float moveLeft = ((steps + 1) / 2) * GRID;
-            float moveRight = (steps / 2) * GRID;
+            boolean leftLocked = false;
+            boolean rightLocked = false;
+            for (int i = 0; i <= boundary; i++) {
+                if (blocks.get(i).branch.contains(state.rootId)) leftLocked = true;
+            }
+            for (int i = boundary + 1; i < blocks.size(); i++) {
+                if (blocks.get(i).branch.contains(state.rootId)) rightLocked = true;
+            }
+            float moveLeft = leftLocked && !rightLocked
+                ? 0f
+                : rightLocked && !leftLocked
+                    ? steps * GRID
+                    : ((steps + 1) / 2) * GRID;
+            float moveRight = rightLocked && !leftLocked
+                ? 0f
+                : leftLocked && !rightLocked
+                    ? steps * GRID
+                    : (steps / 2) * GRID;
             for (int i = 0; i <= boundary; i++) {
                 ParentFamilyBlock block = blocks.get(i);
                 shiftPeople(state, block.branch, -moveLeft);
@@ -1957,6 +2412,7 @@ final class TreeLayoutEngine {
         // an ancestor branch drag an unrelated far-left family with it, reopening
         // a gap that had just been compacted.
         for (ParentFamilyBlock block : blocks) {
+            if (block.branch.contains(state.rootId)) continue;
             float correction = avoidStationaryCollisions(state, block.branch, allMoving);
             block.shift(correction);
         }
@@ -2059,7 +2515,6 @@ final class TreeLayoutEngine {
         Person anchor = state.people.get(anchorId);
         if (anchor == null) return;
         boolean siblingRowCanReflow = hasContainingSiblings(anchorId, relations);
-        float cursor = anchor.x - CARD_W - PARTNER_GAP;
         Set<String> existingPartners = new LinkedHashSet<>(
             relations.partnersByPerson.getOrDefault(anchorId, Collections.emptySet()));
         existingPartners.removeAll(addedIds);
@@ -2071,7 +2526,8 @@ final class TreeLayoutEngine {
             Person added = state.people.get(id);
             if (added == null) continue;
             float target = existingPartners.isEmpty()
-                ? snap(cursor)
+                ? snap(anchor.x
+                    + partnerDirection(state, anchorId, id) * (CARD_W + PARTNER_GAP))
                 : nearestOpenPartnerSlot(
                     state,
                     anchorId,
@@ -2087,8 +2543,241 @@ final class TreeLayoutEngine {
             }
             ignore.remove(id);
             existingPartners.add(id);
-            cursor -= CARD_W + PARTNER_GAP;
         }
+    }
+
+    /** Opens space in the ancestry branch actually touched by a new partner. */
+    private static void makeRoomForAddedPartner(
+        TreeState state,
+        Relations relations,
+        Set<String> addedIds,
+        String anchorId
+    ) {
+        Set<String> changedBranch = downwardBranch(
+            anchorId,
+            Collections.emptySet(),
+            relations,
+            state);
+        Set<String> sameRowPartners = partnerRow(anchorId, relations, state);
+        Set<String> shifted = new HashSet<>();
+        for (String addedId : addedIds) {
+            Person added = state.people.get(addedId);
+            if (added == null) continue;
+            for (Person other : state.people.values()) {
+                if (changedBranch.contains(other.id)
+                    || sameRowPartners.contains(other.id)
+                    || shifted.contains(other.id)
+                    || belongsToSameSiblingGroup(anchorId, other.id, relations)
+                    || !separateBranchesTooClose(added.x, added.y, other.x, other.y)) {
+                    continue;
+                }
+                Set<String> branch = collateralAncestryBranch(other.id, relations, state);
+                // A sibling or parent family belongs to the common trunk. Its
+                // descendants are handled by the ordinary sibling reflow.
+                if (branch.contains(anchorId)
+                    || branch.contains(state.rootId)
+                    || containsPinnedPerson(state, branch)
+                    || !Collections.disjoint(branch, changedBranch)) continue;
+                float direction = other.x + CARD_W / 2f < added.x + CARD_W / 2f
+                    ? -1f : 1f;
+                float needed = 0f;
+                boolean crosses = false;
+                for (String id : branch) {
+                    Person member = state.people.get(id);
+                    if (member == null || !rowsOverlap(added, member)) continue;
+                    if (direction < 0f) {
+                        if (member.x + CARD_W / 2f > added.x + CARD_W / 2f) crosses = true;
+                        needed = Math.min(
+                            needed,
+                            added.x - CARD_W - BRANCH_GAP - member.x);
+                    } else {
+                        if (member.x + CARD_W / 2f < added.x + CARD_W / 2f) crosses = true;
+                        needed = Math.max(
+                            needed,
+                            added.x + CARD_W + BRANCH_GAP - member.x);
+                    }
+                }
+                if (crosses || Math.abs(needed) < 0.5f) continue;
+                shiftPeople(state, branch, snap(needed));
+                shifted.addAll(branch);
+                pushCollateralNeighbours(
+                    state,
+                    relations,
+                    changedBranch,
+                    branch,
+                    direction,
+                    shifted);
+            }
+        }
+    }
+
+    private static boolean belongsToSameSiblingGroup(
+        String firstId,
+        String secondId,
+        Relations relations
+    ) {
+        if (relations.siblingsByPerson.getOrDefault(firstId, Collections.emptySet())
+            .contains(secondId)) return true;
+        Set<String> firstParents = relations.parentsByChild.getOrDefault(
+            firstId, Collections.emptySet());
+        Set<String> secondParents = relations.parentsByChild.getOrDefault(
+            secondId, Collections.emptySet());
+        return !firstParents.isEmpty() && !Collections.disjoint(firstParents, secondParents);
+    }
+
+    private static boolean hasPartneredChild(Relations relations, String parentId) {
+        for (String childId : relations.childrenByParent.getOrDefault(
+            parentId, Collections.emptySet())) {
+            if (!relations.partnersByPerson.getOrDefault(
+                childId, Collections.emptySet()).isEmpty()) return true;
+        }
+        return false;
+    }
+
+    /** Propagates newly required clearance through neighbouring family blocks. */
+    private static void pushCollateralNeighbours(
+        TreeState state,
+        Relations relations,
+        Set<String> changedBranch,
+        Set<String> firstBranch,
+        float direction,
+        Set<String> shifted
+    ) {
+        ArrayDeque<Set<String>> queue = new ArrayDeque<>();
+        queue.add(firstBranch);
+        int remaining = state.people.size();
+        while (!queue.isEmpty() && remaining-- > 0) {
+            Set<String> moving = queue.removeFirst();
+            for (Person other : state.people.values()) {
+                if (changedBranch.contains(other.id) || shifted.contains(other.id)) continue;
+                boolean touchesOutwardSide = false;
+                for (String movingId : moving) {
+                    Person member = state.people.get(movingId);
+                    if (member != null
+                        && direction * (other.x - member.x) > 0f
+                        && separateBranchesTooClose(
+                            other.x, other.y, member.x, member.y)) {
+                        touchesOutwardSide = true;
+                        break;
+                    }
+                }
+                if (!touchesOutwardSide) continue;
+                Set<String> neighbour = collateralAncestryBranch(other.id, relations, state);
+                if (neighbour.contains(state.rootId)
+                    || containsPinnedPerson(state, neighbour)
+                    || !Collections.disjoint(neighbour, changedBranch)
+                    || !Collections.disjoint(neighbour, shifted)) continue;
+                float needed = direction > 0f
+                    ? rightBranchClearanceDelta(state, moving, neighbour, BRANCH_GAP)
+                    : leftBranchClearanceDelta(state, neighbour, moving, BRANCH_GAP);
+                if (direction * needed <= 0.5f) continue;
+                shiftPeople(state, neighbour, snap(needed));
+                shifted.addAll(neighbour);
+                queue.addLast(neighbour);
+            }
+        }
+    }
+
+    private static Set<String> collateralAncestryBranch(
+        String startId,
+        Relations relations,
+        TreeState state
+    ) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        queue.add(startId);
+        Set<String> scheduled = new HashSet<>();
+        scheduled.add(startId);
+        while (!queue.isEmpty()) {
+            String id = queue.removeFirst();
+            if (!state.people.containsKey(id) || !result.add(id)) continue;
+            for (String partner : relations.partnersByPerson.getOrDefault(
+                id, Collections.emptySet())) {
+                if (scheduled.add(partner)) queue.addLast(partner);
+            }
+            for (String parent : relations.parentsByChild.getOrDefault(
+                id, Collections.emptySet())) {
+                if (scheduled.add(parent)) queue.addLast(parent);
+            }
+            for (String sibling : relations.siblingsByPerson.getOrDefault(
+                id, Collections.emptySet())) {
+                if (scheduled.add(sibling)) queue.addLast(sibling);
+            }
+            Set<String> parents = relations.parentsByChild.getOrDefault(
+                id, Collections.emptySet());
+            if (!parents.isEmpty()) {
+                for (Map.Entry<String, Set<String>> entry : relations.parentsByChild.entrySet()) {
+                    if (entry.getValue().containsAll(parents)
+                        && scheduled.add(entry.getKey())) queue.addLast(entry.getKey());
+                }
+            }
+        }
+        return result;
+    }
+
+    private static boolean containsPinnedPerson(TreeState state, Collection<String> ids) {
+        for (String id : ids) {
+            Person person = state.people.get(id);
+            if (person != null && person.pinned) return true;
+        }
+        return false;
+    }
+
+    /** Moves only a still-overlapping newly added partner after local reflow. */
+    private static void repairAddedPartnerCollisions(
+        TreeState state,
+        Relations relations,
+        Collection<String> addedIds,
+        String anchorId
+    ) {
+        Person anchor = state.people.get(anchorId);
+        if (anchor == null) return;
+        for (String movingId : addedIds) {
+            Person moving = state.people.get(movingId);
+            if (moving == null || cardSpotIsOpen(
+                state,
+                movingId,
+                moving.x,
+                moving.y,
+                Collections.emptySet())) continue;
+            LinkedHashSet<String> existingPartners = new LinkedHashSet<>(
+                relations.partnersByPerson.getOrDefault(anchorId, Collections.emptySet()));
+            existingPartners.remove(movingId);
+            float target = nearestOpenPartnerSlot(
+                state,
+                anchorId,
+                movingId,
+                existingPartners,
+                Collections.emptySet());
+            if (Float.isFinite(target)) {
+                moving.x = target;
+                moving.y = anchor.y;
+            }
+        }
+    }
+
+    /** Returns -1 for left and +1 for right. Known parent roles take priority. */
+    private static int partnerDirection(TreeState state, String anchorId, String partnerId) {
+        Person anchor = state.people.get(anchorId);
+        Person partner = state.people.get(partnerId);
+        String anchorGender = PersonGender.resolve(anchor);
+        String partnerGender = PersonGender.resolve(partner);
+        if (PersonGender.MALE.equals(anchorGender)
+            && PersonGender.FEMALE.equals(partnerGender)) return 1;
+        if (PersonGender.FEMALE.equals(anchorGender)
+            && PersonGender.MALE.equals(partnerGender)) return -1;
+        for (Relation relation : state.links) {
+            if (!("partner".equals(relation.type) || "family".equals(relation.type))) continue;
+            if (anchorId.equals(relation.from) && partnerId.equals(relation.to)) {
+                if ("left".equals(relation.side)) return -1;
+            }
+            if (partnerId.equals(relation.from) && anchorId.equals(relation.to)) {
+                if ("left".equals(relation.side)) return 1;
+            }
+        }
+        // Relation.side defaults to "right", so it cannot prove an explicit
+        // choice. Preserve legacy left placement while both roles are unknown.
+        return -1;
     }
 
     /** Places additional partners around their shared person instead of stacking them. */
@@ -2101,6 +2790,28 @@ final class TreeLayoutEngine {
     ) {
         Person anchor = state.people.get(anchorId);
         if (anchor == null) return Float.NaN;
+        int roleDirection = partnerDirection(state, anchorId, movingId);
+        Person moving = state.people.get(movingId);
+        String anchorGender = PersonGender.resolve(anchor);
+        String movingGender = PersonGender.resolve(moving);
+        boolean roleKnown = (PersonGender.MALE.equals(anchorGender)
+            && PersonGender.FEMALE.equals(movingGender))
+            || (PersonGender.FEMALE.equals(anchorGender)
+                && PersonGender.MALE.equals(movingGender));
+        int limit = Math.max(4, state.people.size() + 1);
+        if (roleKnown) {
+            for (int distance = 1; distance <= limit; distance++) {
+                float target = snap(
+                    anchor.x + roleDirection * distance * (CARD_W + PARTNER_GAP));
+                if (cardSpotIsOpen(
+                    state,
+                    movingId,
+                    target,
+                    anchor.y,
+                    ignoredIds)) return target;
+            }
+            return Float.NaN;
+        }
         int leftCount = 0;
         int rightCount = 0;
         for (String partnerId : existingPartners) {
@@ -2110,7 +2821,6 @@ final class TreeLayoutEngine {
             else rightCount++;
         }
         boolean preferLeft = leftCount <= rightCount;
-        int limit = Math.max(4, state.people.size() + 1);
         for (int distance = 1; distance <= limit; distance++) {
             float offset = distance * (CARD_W + PARTNER_GAP);
             float first = snap(anchor.x + (preferLeft ? -offset : offset));
@@ -2251,12 +2961,25 @@ final class TreeLayoutEngine {
     }
 
     private static void layout(TreeState state, Set<String> addedIds) {
-        if (state == null || state.people.isEmpty()) return;
+        layout(state, addedIds, null, 0);
+    }
+
+    private static boolean layout(
+        TreeState state,
+        Set<String> addedIds,
+        RebuildProgress progress,
+        int totalPeople
+    ) {
+        if (state == null || state.people.isEmpty()) return true;
 
         Relations relations = buildRelations(state);
         UnitGraph graph = makeUnits(state, relations);
-        if (graph.units.isEmpty()) return;
+        if (!reportLayoutProgress(progress, totalPeople, .12f, "Строим семейный граф")) return false;
+        if (graph.units.isEmpty()) return true;
         boolean preserveSavedOrder = hasUsableSavedLayout(state, graph, relations);
+        if (!preserveSavedOrder) {
+            orderUnknownPartnerUnitsByAncestry(state, graph, relations);
+        }
 
         String rootId = state.people.containsKey(state.rootId)
             ? state.rootId
@@ -2267,9 +2990,15 @@ final class TreeLayoutEngine {
 
         LayoutAnchor anchor = preserveSavedOrder ? savedAnchor(state, root) : null;
         assignLevels(state, graph, relations, root);
+        if (!reportLayoutProgress(progress, totalPeople, .14f, "Распределяем поколения")) return false;
         if (preserveSavedOrder) assignOrderHintsFromSaved(graph);
         else assignOrderHints(state, graph, relations, root);
         Map<Integer, List<Unit>> rows = makeRows(state, graph);
+        if (!reportLayoutProgress(progress, totalPeople, .16f, "Формируем семейные ряды")) return false;
+        if (!preserveSavedOrder) {
+            orderRowsByFamilyStructure(state, graph, relations, rows);
+            orderChildFamilyComponentsByParents(graph, relations, rows);
+        }
         seedRows(rows, root, preserveSavedOrder);
         if (preserveSavedOrder && addedIds != null && !addedIds.isEmpty()) {
             centerFamiliesTouchedByAddition(state, graph, relations, rows, root, addedIds);
@@ -2277,10 +3006,1374 @@ final class TreeLayoutEngine {
         }
         if (!preserveSavedOrder) {
             alignRows(rows, graph, relations, root.level);
+            keepParentBranchesOutsidePartnerUnits(graph, relations, rows);
+            alignSingleChildParentUnits(graph, relations, rows);
+            alignLeafChildFamilies(graph, rows);
+            alignSingleChildParentUnits(graph, relations, rows);
+            closeTerminalSiblingGaps(rows);
+            realignAncestorRowsFromChildren(state, rows, graph, relations);
+            alignRows(rows, graph, relations, root.level);
+            alignSingleChildParentUnits(graph, relations, rows);
+            alignLeafChildFamilies(graph, rows);
+            balanceTightSingleChildFamilies(rows, graph, relations, root);
+            if (!reportLayoutProgress(progress, totalPeople, .19f, "Выравниваем ветки")) return false;
         }
         separateFamilyComponents(graph, relations, root);
         restoreSavedHorizontalAnchor(graph, anchor);
         applyPositions(state, graph, anchor, root.level);
+        return reportLayoutProgress(progress, totalPeople, .21f, "Применяем координаты");
+    }
+
+    /**
+     * Finishes a stepwise rebuild as a layered graph instead of a sequence of
+     * unrelated local moves. Every partner/co-parent unit is packed once per
+     * generation, then unambiguous parent families are centered bottom-up over
+     * their direct children. This makes the result independent of the order in
+     * which the cards happened to be replayed.
+     */
+    private static void normalizeRebuiltGeometry(TreeState state) {
+        if (state == null || state.people.size() < 2) return;
+        // A pinned card is an explicit coordinate constraint. The incremental
+        // rebuild already respects it; do not turn an impossible pinned system
+        // into a partially normalized one.
+        for (Person person : state.people.values()) {
+            if (person != null && person.pinned) return;
+        }
+
+        Relations relations = buildRelations(state);
+        UnitGraph graph = makeUnits(state, relations);
+        if (graph.units.isEmpty()) return;
+        String rootId = state.people.containsKey(state.rootId)
+            ? state.rootId
+            : state.people.keySet().iterator().next();
+        Unit root = graph.personToUnit.get(rootId);
+        if (root == null) root = graph.units.get(0);
+
+        LayoutAnchor anchor = savedAnchor(state, root);
+        assignLevels(state, graph, relations, root);
+        assignOrderHintsFromSaved(graph);
+        Map<Integer, List<Unit>> rows = makeRows(state, graph);
+        orderRowsByFamilyStructure(state, graph, relations, rows);
+        seedRows(rows, root, true);
+        alignRows(rows, graph, relations, root.level);
+
+        // Remove replay-order whitespace only after branch order has been
+        // established. This gives each adjacent family its exact row gap.
+        for (List<Unit> row : rows.values()) compactRowExactly(row);
+
+        List<Unit> rootRow = rows.get(root.level);
+        if (rootRow != null) {
+            packAlignedRow(
+                rootRow,
+                desiredCenters(rootRow, graph, relations, true));
+        }
+
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        levels.sort(Collections.reverseOrder());
+        for (Integer level : levels) {
+            List<Unit> row = rows.get(level);
+            if (row == null || row.isEmpty()) continue;
+            Map<String, Float> desired = new HashMap<>();
+            for (Unit unit : row) {
+                Float familyCenter = unambiguousFamilyChildrenCenter(
+                    unit,
+                    graph,
+                    relations);
+                desired.put(unit.id, familyCenter == null ? unit.center : familyCenter);
+            }
+            packRow(row, desired);
+        }
+        alignPartnerAncestryWithParentRows(state, graph, relations, rows);
+        applyPositions(state, graph, anchor, root.level);
+    }
+
+    private static void alignPartnerAncestryWithParentRows(
+        TreeState state,
+        UnitGraph graph,
+        Relations relations,
+        Map<Integer, List<Unit>> rows
+    ) {
+        for (Map.Entry<Integer, List<Unit>> entry : rows.entrySet()) {
+            List<Unit> row = entry.getValue();
+            for (int index = 0; index < row.size(); index++) {
+                Unit unit = row.get(index);
+                boolean hasMale = false;
+                boolean hasFemale = false;
+                for (String memberId : unit.people) {
+                    hasMale |= PersonGender.MALE.equals(inferGender(state, memberId));
+                    hasFemale |= PersonGender.FEMALE.equals(inferGender(state, memberId));
+                }
+                if (!hasMale || !hasFemale) continue;
+                float lowerBound = Float.NEGATIVE_INFINITY;
+                float upperBound = Float.POSITIVE_INFINITY;
+                for (int personIndex = 0; personIndex < unit.people.size(); personIndex++) {
+                    String personId = unit.people.get(personIndex);
+                    String gender = inferGender(state, personId);
+                    if (!PersonGender.MALE.equals(gender)
+                        && !PersonGender.FEMALE.equals(gender)) continue;
+                    Set<String> parentIds = relations.parentsByChild.getOrDefault(
+                        personId,
+                        Collections.emptySet());
+                    if (parentIds.isEmpty()) continue;
+                    float parentTotal = 0f;
+                    int parentCount = 0;
+                    for (String parentId : parentIds) {
+                        Unit parent = graph.personToUnit.get(parentId);
+                        if (parent == null || parent.level >= unit.level) continue;
+                        int parentIndex = parent.people.indexOf(parentId);
+                        if (parentIndex < 0) continue;
+                        parentTotal += personCenter(parent, parentIndex);
+                        parentCount++;
+                    }
+                    if (parentCount == 0) continue;
+                    float parentCenter = parentTotal / parentCount;
+                    float memberOffset = personCenter(unit, personIndex) - unit.center;
+                    if (PersonGender.MALE.equals(gender)) {
+                        lowerBound = Math.max(lowerBound, parentCenter - memberOffset);
+                    } else {
+                        upperBound = Math.min(upperBound, parentCenter - memberOffset);
+                    }
+                }
+                if (lowerBound <= upperBound) {
+                    if (unit.center < lowerBound - 0.5f) {
+                        shiftUnitAndFollowers(row, index, snapUp(lowerBound - unit.center));
+                    } else if (unit.center > upperBound + 0.5f) {
+                        shiftUnitAndPredecessors(row, index, -snapUp(unit.center - upperBound));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Keep broad collateral branches on their partner's side. A parent unit
+     * with only one child and no sibling branch is different: it should sit
+     * directly above that child's card, even when the child has a partner.
+     */
+    private static void keepParentBranchesOutsidePartnerUnits(
+        UnitGraph graph,
+        Relations relations,
+        Map<Integer, List<Unit>> rows
+    ) {
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        levels.sort(Collections.reverseOrder());
+        for (Integer level : levels) {
+            List<Unit> childRow = rows.get(level);
+            List<Unit> parentRow = rows.get(level - 1);
+            if (childRow == null || parentRow == null) continue;
+            boolean hasPinnedParent = false;
+            for (Unit parent : parentRow) {
+                if (pinnedCenter(parent) != null) {
+                    hasPinnedParent = true;
+                    break;
+                }
+            }
+            if (hasPinnedParent) continue;
+
+            Map<String, Float> upper = new HashMap<>();
+            Map<String, Float> lower = new HashMap<>();
+            for (Unit couple : childRow) {
+                if (couple.people.size() != 2) continue;
+                Set<Unit> leftParents = parentUnitsOf(
+                    couple.people.get(0), level - 1, graph, relations);
+                Set<Unit> rightParents = parentUnitsOf(
+                    couple.people.get(1), level - 1, graph, relations);
+                // A shared ancestor or a multiple-union loop cannot be placed
+                // on both sides of the same couple.
+                Set<Unit> shared = new HashSet<>(leftParents);
+                shared.retainAll(rightParents);
+                leftParents.removeAll(shared);
+                rightParents.removeAll(shared);
+                for (Unit parent : leftParents) {
+                    if (parent.children.size() < 2 && parent.siblings.isEmpty()) continue;
+                    float bound = couple.left() - GRID - parent.width / 2f;
+                    upper.merge(parent.id, bound, Math::min);
+                }
+                for (Unit parent : rightParents) {
+                    if (parent.children.size() < 2 && parent.siblings.isEmpty()) continue;
+                    float bound = couple.right() + GRID + parent.width / 2f;
+                    lower.merge(parent.id, bound, Math::max);
+                }
+            }
+
+            for (int index = 0; index < parentRow.size(); index++) {
+                Unit parent = parentRow.get(index);
+                Float bound = upper.get(parent.id);
+                Float opposite = lower.get(parent.id);
+                if (bound == null || (opposite != null && opposite > bound)) continue;
+                if (parent.center > bound + 0.5f) {
+                    shiftUnitAndPredecessors(
+                        parentRow, index, -snapUp(parent.center - bound));
+                }
+            }
+            for (int index = parentRow.size() - 1; index >= 0; index--) {
+                Unit parent = parentRow.get(index);
+                Float bound = lower.get(parent.id);
+                Float opposite = upper.get(parent.id);
+                if (bound == null || (opposite != null && bound > opposite)) continue;
+                if (parent.center < bound - 0.5f) {
+                    shiftUnitAndFollowers(
+                        parentRow, index, snapUp(bound - parent.center));
+                }
+            }
+        }
+    }
+
+    private static void alignSingleChildParentUnits(
+        UnitGraph graph,
+        Relations relations,
+        Map<Integer, List<Unit>> rows
+    ) {
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        levels.sort(Collections.reverseOrder());
+        for (Integer level : levels) {
+            List<Unit> row = rows.get(level);
+            if (row == null) continue;
+            for (int index = 0; index < row.size(); index++) {
+                Unit parent = row.get(index);
+                if (parent.children.size() != 1 || !parent.siblings.isEmpty()
+                    || pinnedCenter(parent) != null) continue;
+                List<Float> anchors = anchorsInChildren(parent, graph, relations);
+                if (anchors.size() != 1) continue;
+                float difference = snap(anchors.get(0) - parent.center);
+                if (difference > 0.5f) {
+                    shiftUnitAndFollowers(row, index, difference);
+                } else if (difference < -0.5f) {
+                    shiftUnitAndPredecessors(row, index, difference);
+                }
+            }
+        }
+    }
+
+    /**
+     * Treat leaf siblings as a block. Aligning their cards one by one to the
+     * same parent center leaves a whole family one grid cell off when the
+     * neighbouring family needs its branch gap. Make room on the left, then
+     * carry that movement back to the neighbouring parents.
+     */
+    private static void alignLeafChildFamilies(
+        UnitGraph graph,
+        Map<Integer, List<Unit>> rows
+    ) {
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        Collections.sort(levels);
+        for (Integer childLevel : levels) {
+            List<Unit> children = rows.get(childLevel);
+            List<Unit> parents = rows.get(childLevel - 1);
+            if (children == null || parents == null) continue;
+            boolean hasPinned = false;
+            for (Unit unit : children) hasPinned |= pinnedCenter(unit) != null;
+            for (Unit unit : parents) hasPinned |= pinnedCenter(unit) != null;
+            if (hasPinned) continue;
+
+            for (int parentIndex = parents.size() - 1; parentIndex >= 0; parentIndex--) {
+                Unit parent = parents.get(parentIndex);
+                if (parent.children.size() < 2) continue;
+                int first = children.size();
+                int last = -1;
+                boolean leafFamily = true;
+                for (String childId : parent.children) {
+                    Unit child = graph.unitById.get(childId);
+                    if (child == null || child.level != childLevel
+                        || child.people.size() != 1 || !child.children.isEmpty()) {
+                        leafFamily = false;
+                        break;
+                    }
+                    int childIndex = children.indexOf(child);
+                    if (childIndex < 0) {
+                        leafFamily = false;
+                        break;
+                    }
+                    first = Math.min(first, childIndex);
+                    last = Math.max(last, childIndex);
+                }
+                if (!leafFamily || last - first + 1 != parent.children.size()) continue;
+
+                float childCenter = (children.get(first).left()
+                    + children.get(last).right()) / 2f;
+                float difference = snap(parent.center - childCenter);
+                if (difference < -0.5f) {
+                    for (int index = first; index <= last; index++) {
+                        children.get(index).center += difference;
+                    }
+                    if (first > 0) {
+                        Unit previous = children.get(first - 1);
+                        float shortage = previous.right()
+                            + gapBetween(previous, children.get(first))
+                            - children.get(first).left();
+                        if (shortage > 0.5f) {
+                            shiftUnitAndPredecessors(
+                                children, first - 1, -snapUp(shortage));
+                        }
+                    }
+                } else if (difference > 0.5f) {
+                    if (last + 1 < children.size()) {
+                        Unit next = children.get(last + 1);
+                        float clearance = next.left() - children.get(last).right()
+                            - gapBetween(children.get(last), next);
+                        // The family to the right was already centered.
+                        // Let this family's parents follow their children
+                        // instead of pushing that settled family away.
+                        if (difference > clearance + 0.5f) continue;
+                    }
+                    for (int index = first; index <= last; index++) {
+                        children.get(index).center += difference;
+                    }
+                }
+            }
+
+            for (int parentIndex = parents.size() - 1; parentIndex >= 0; parentIndex--) {
+                Unit parent = parents.get(parentIndex);
+                if (parent.children.size() < 2) continue;
+                int first = children.size();
+                int last = -1;
+                boolean leafFamily = true;
+                for (String childId : parent.children) {
+                    Unit child = graph.unitById.get(childId);
+                    if (child == null || child.level != childLevel
+                        || child.people.size() != 1 || !child.children.isEmpty()) {
+                        leafFamily = false;
+                        break;
+                    }
+                    int childIndex = children.indexOf(child);
+                    first = Math.min(first, childIndex);
+                    last = Math.max(last, childIndex);
+                }
+                if (!leafFamily || last - first + 1 != parent.children.size()) continue;
+                float childCenter = (children.get(first).left()
+                    + children.get(last).right()) / 2f;
+                float difference = snap(childCenter - parent.center);
+                if (difference < -0.5f) {
+                    shiftUnitAndPredecessors(parents, parentIndex, difference);
+                } else if (difference > 0.5f) {
+                    shiftUnitAndFollowers(parents, parentIndex, difference);
+                }
+            }
+        }
+    }
+
+    /** Uses free row space after the layered layout has established family order. */
+    private static void refineSavedRows(TreeState state, boolean centerLeaves) {
+        if (state == null || state.people.size() < 2) return;
+        Relations relations = buildRelations(state);
+        UnitGraph graph = makeUnits(state, relations);
+        if (!assignLevelsFromSavedRows(state, graph, relations)) return;
+        Map<Integer, List<Unit>> rows = new TreeMap<>();
+        for (Unit unit : graph.units) {
+            Float center = savedUnitCenter(unit);
+            if (center == null) return;
+            unit.center = center;
+            rows.computeIfAbsent(unit.level, ignored -> new ArrayList<>()).add(unit);
+        }
+        for (List<Unit> row : rows.values()) {
+            row.sort(Comparator.comparingDouble(Unit::left));
+        }
+        Unit root = graph.personToUnit.get(state.rootId);
+        if (centerLeaves) centerFreeLeafUnitsUnderParents(graph, relations, rows, root);
+        if (!centerLeaves) balanceTightSingleChildFamilies(rows, graph, relations, root);
+        for (Unit unit : graph.units) {
+            if (centerLeaves && unit.people.size() != 1) continue;
+            for (int index = 0; index < unit.people.size(); index++) {
+                Person person = state.people.get(unit.people.get(index));
+                if (person != null && !person.pinned) {
+                    float positioned = snap(unit.left() + index * (CARD_W + PARTNER_GAP));
+                    if (Math.abs(person.x - positioned) >= GRID / 2f) person.x = positioned;
+                }
+            }
+        }
+    }
+
+    /**
+     * Close a row gap by moving the complete upper-left prefix through free
+     * space. The cut stops at the current row: descendants below it keep their
+     * positions. This preserves every internal household distance and allows
+     * neighbouring ancestor branches to share otherwise unused horizontal room.
+     */
+    private static void closeUpwardBranchGaps(TreeState state) {
+        if (state == null || state.people.size() < 3) return;
+        Relations relations = buildRelations(state);
+        UnitGraph units = makeUnits(state, relations);
+        if (!assignLevelsFromSavedRows(state, units, relations)) return;
+        Map<Integer, List<Unit>> rows = new TreeMap<>();
+        for (Unit unit : units.units) {
+            Float center = savedUnitCenter(unit);
+            if (center == null) return;
+            unit.center = center;
+            rows.computeIfAbsent(unit.level, ignored -> new ArrayList<>()).add(unit);
+        }
+        for (List<Unit> row : rows.values()) {
+            row.sort(Comparator.comparingDouble(Unit::left));
+        }
+
+        FamilyLayoutGraph familyGraph = FamilyLayoutGraph.from(state);
+        LayoutConstraints constraints = new LayoutConstraints();
+        LayoutSnapshot current = LayoutSnapshot.capture(state);
+        if (!constraints.validate(familyGraph, current).isValid()) return;
+        float[] centerErrors = familyCenterErrors(familyGraph, current);
+        for (List<Unit> row : rows.values()) {
+            for (int index = 0; index + 1 < row.size(); index++) {
+                Unit left = row.get(index);
+                Unit right = row.get(index + 1);
+                float excess = snapDown(
+                    right.left() - left.right() - gapBetween(left, right));
+                if (excess < GRID - 0.5f) continue;
+                float cutX = left.right() - CARD_W;
+                float cutY = left.personRefs.get(0).y;
+                Set<String> moving = new LinkedHashSet<>();
+                for (Person person : state.people.values()) {
+                    if (person.y <= cutY + 0.5f && person.x <= cutX + 0.5f) {
+                        if (person.pinned) {
+                            moving.clear();
+                            break;
+                        }
+                        moving.add(person.id);
+                    }
+                }
+                if (moving.isEmpty() || !moving.containsAll(left.people)
+                    || !Collections.disjoint(moving, right.people)) continue;
+                boolean splitHousehold = false;
+                float available = excess;
+                for (List<Unit> otherRow : rows.values()) {
+                    Unit lastMoving = null;
+                    Unit firstStationary = null;
+                    for (Unit unit : otherRow) {
+                        int included = 0;
+                        for (String id : unit.people) if (moving.contains(id)) included++;
+                        if (included > 0 && included < unit.people.size()) {
+                            splitHousehold = true;
+                            break;
+                        }
+                        if (included > 0) lastMoving = unit;
+                        else if (lastMoving != null && firstStationary == null) {
+                            firstStationary = unit;
+                        }
+                    }
+                    if (splitHousehold) break;
+                    if (lastMoving != null && firstStationary != null) {
+                        available = Math.min(available,
+                            firstStationary.left() - lastMoving.right()
+                                - gapBetween(lastMoving, firstStationary));
+                    }
+                }
+                if (splitHousehold) continue;
+                float shift = snapDown(available);
+                if (shift < GRID - 0.5f) continue;
+                LayoutSnapshot candidate = current.shifted(moving, shift, 0f);
+                if (!constraints.validate(familyGraph, candidate).isValid()) continue;
+                float[] changedErrors = familyCenterErrors(familyGraph, candidate);
+                if (changedErrors[0] > centerErrors[0] + 0.5f
+                    || changedErrors[1] > centerErrors[1] + 0.5f) continue;
+                candidate.applyTo(state);
+                current = candidate;
+                centerErrors = changedErrors;
+                for (Unit unit : units.units) {
+                    if (moving.contains(unit.people.get(0))) unit.center += shift;
+                }
+            }
+        }
+    }
+
+
+    /** Sum and largest magnitude of parent-to-child-span misalignment. */
+    private static float[] familyCenterErrors(
+        FamilyLayoutGraph graph, LayoutSnapshot snapshot
+    ) {
+        float total = 0f;
+        float largest = 0f;
+        for (FamilyLayoutGraph.ParentFamily family : graph.parentFamilies) {
+            if (family.parents.isEmpty() || family.children.isEmpty()) continue;
+            float parentCenter = 0f;
+            for (String parentId : family.parents) {
+                parentCenter += snapshot.positionOf(parentId).x + CARD_W / 2f;
+            }
+            parentCenter /= family.parents.size();
+            float left = Float.POSITIVE_INFINITY;
+            float right = Float.NEGATIVE_INFINITY;
+            for (String childId : family.children) {
+                float x = snapshot.positionOf(childId).x;
+                left = Math.min(left, x);
+                right = Math.max(right, x + CARD_W);
+            }
+            float error = Math.abs((left + right) / 2f - parentCenter);
+            total += error;
+            largest = Math.max(largest, error);
+        }
+        return new float[]{total, largest};
+    }
+
+    /**
+     * A child without a partner or descendants can use an empty slot beneath
+     * its parents without moving another household, including on the root row.
+     */
+    private static void centerFreeLeafUnitsUnderParents(
+        UnitGraph graph,
+        Relations relations,
+        Map<Integer, List<Unit>> rows,
+        Unit root
+    ) {
+        for (List<Unit> row : rows.values()) {
+            if (row.size() < 2) continue;
+            List<Unit> leaves = new ArrayList<>();
+            for (Unit unit : row) {
+                if (unit == root || unit.people.size() != 1 || !unit.children.isEmpty()
+                    || unit.parents.isEmpty() || pinnedCenter(unit) != null) continue;
+                String personId = unit.people.get(0);
+                if (!relations.siblingsByPerson.getOrDefault(
+                    personId, Collections.emptySet()).isEmpty()) continue;
+                if (!anchorsInParents(unit, graph, relations).isEmpty()) leaves.add(unit);
+            }
+            Map<String, List<Unit>> families = new LinkedHashMap<>();
+            for (Unit leaf : leaves) {
+                List<String> parents = new ArrayList<>(relations.parentsByChild.getOrDefault(
+                    leaf.people.get(0), Collections.emptySet()));
+                Collections.sort(parents);
+                families.computeIfAbsent(String.join("|", parents), ignored -> new ArrayList<>()).add(leaf);
+            }
+            List<List<Unit>> groups = new ArrayList<>(families.values());
+            groups.sort(Comparator.comparingDouble(group -> parentCenterForLeaf(group.get(0), graph, relations)));
+            leaves.clear();
+            for (List<Unit> group : groups) {
+                float average = 0f;
+                for (Unit leaf : group) average += leaf.center;
+                boolean movingRight = parentCenterForLeaf(group.get(0), graph, relations) > average / group.size();
+                // Release the leading slots before projecting trailing siblings.
+                // A left-to-right walk through a right-moving run left its first
+                // card blocked by a sibling that moved away later in the pass.
+                group.sort((a, b) -> movingRight
+                    ? Integer.compare(row.indexOf(b), row.indexOf(a))
+                    : Integer.compare(row.indexOf(a), row.indexOf(b)));
+                leaves.addAll(group);
+            }
+            for (Unit leaf : leaves) {
+                int attachedAt = row.indexOf(leaf);
+                Unit adjacentLeft = attachedAt > 0 ? row.get(attachedAt - 1) : null;
+                Unit adjacentRight = attachedAt + 1 < row.size() ? row.get(attachedAt + 1) : null;
+                if (tightTerminalSibling(leaf, adjacentLeft)
+                    || tightTerminalSibling(leaf, adjacentRight)) continue;
+                float target = parentCenterForLeaf(leaf, graph, relations);
+                if (!Float.isFinite(target)) continue;
+                float currentError = Math.abs(leaf.center - target);
+                if (currentError < GRID - 0.5f) continue;
+                int originalIndex = row.indexOf(leaf);
+                row.remove(originalIndex);
+                int minimumIndex = 0;
+                int maximumIndex = row.size();
+                for (String parentId : relations.parentsByChild.getOrDefault(
+                    leaf.people.get(0), Collections.emptySet())) {
+                    int leafOrder = 0;
+                    Set<String> siblings = relations.childrenByParent.getOrDefault(
+                        parentId, Collections.emptySet());
+                    for (String siblingId : siblings) {
+                        if (siblingId.equals(leaf.people.get(0))) break;
+                        leafOrder++;
+                    }
+                    int siblingOrder = 0;
+                    for (String siblingId : siblings) {
+                        Unit sibling = graph.personToUnit.get(siblingId);
+                        int siblingIndex = row.indexOf(sibling);
+                        if (siblingIndex >= 0 && sibling != leaf) {
+                            // Preserve an order supported by both the relationship
+                            // list and the current geometry. Conflicting hints are
+                            // flexible, allowing a stray free leaf to cross one.
+                            if (siblingOrder < leafOrder && siblingIndex < originalIndex) {
+                                minimumIndex = Math.max(minimumIndex, siblingIndex + 1);
+                            } else if (siblingOrder > leafOrder && siblingIndex >= originalIndex) {
+                                maximumIndex = Math.min(maximumIndex, siblingIndex);
+                            }
+                        }
+                        siblingOrder++;
+                    }
+                }
+                float bestLeft = leaf.left();
+                int bestIndex = originalIndex;
+                float bestError = currentError;
+                for (int index = minimumIndex; index <= maximumIndex; index++) {
+                    Unit before = index == 0 ? null : row.get(index - 1);
+                    Unit after = index == row.size() ? null : row.get(index);
+                    float minimum = before == null ? Float.NEGATIVE_INFINITY
+                        : snapCeil(before.right() + gapBetween(before, leaf));
+                    float maximum = after == null ? Float.POSITIVE_INFINITY
+                        : snapDown(after.left() - gapBetween(leaf, after) - leaf.width);
+                    if (minimum > maximum + 0.5f) continue;
+                    float projected = snap(target - leaf.width / 2f);
+                    if (Float.isFinite(minimum)) projected = Math.max(minimum, projected);
+                    if (Float.isFinite(maximum)) projected = Math.min(maximum, projected);
+                    float error = Math.abs(projected + leaf.width / 2f - target);
+                    if (error < bestError - 0.5f
+                        || (Math.abs(error - bestError) < 0.5f
+                            && Math.abs(index - originalIndex) < Math.abs(bestIndex - originalIndex))) {
+                        bestError = error;
+                        bestLeft = projected;
+                        bestIndex = index;
+                    }
+                }
+                leaf.center = bestLeft + leaf.width / 2f;
+                row.add(bestIndex, leaf);
+            }
+            for (int index = 0; index < row.size(); index++) {
+                row.get(index).structuralRank = index;
+            }
+        }
+    }
+
+    private static boolean tightTerminalSibling(Unit leaf, Unit neighbor) {
+        if (neighbor == null || neighbor.people.size() < 2 || !neighbor.children.isEmpty()
+            || !areSiblings(leaf, neighbor)) return false;
+        Unit left = leaf.left() < neighbor.left() ? leaf : neighbor;
+        Unit right = left == leaf ? neighbor : leaf;
+        return right.left() - left.right() <= gapBetween(left, right) + .5f;
+    }
+
+    private static float parentCenterForLeaf(
+        Unit leaf,
+        UnitGraph graph,
+        Relations relations
+    ) {
+        List<Float> anchors = anchorsInParents(leaf, graph, relations);
+        if (anchors.isEmpty()) return Float.NaN;
+        float total = 0f;
+        for (Float anchor : anchors) total += anchor;
+        return total / anchors.size();
+    }
+
+    private static float snapDown(float value) {
+        return (float) Math.floor(value / GRID) * GRID;
+    }
+
+    private static float snapCeil(float value) {
+        return (float) Math.ceil(value / GRID) * GRID;
+    }
+
+    /** Balance a packed run of households when their child anchors are closer together. */
+    private static void balanceTightSingleChildFamilies(
+        Map<Integer, List<Unit>> rows,
+        UnitGraph graph,
+        Relations relations,
+        Unit root
+    ) {
+        for (List<Unit> row : rows.values()) {
+            for (int first = 0; first < row.size();) {
+                if (!singleChildCouple(row.get(first), graph, relations, root)) {
+                    first++;
+                    continue;
+                }
+                int last = first;
+                while (last + 1 < row.size()
+                    && singleChildCouple(row.get(last + 1), graph, relations, root)
+                    && Math.abs(row.get(last + 1).left() - row.get(last).right()
+                        - gapBetween(row.get(last), row.get(last + 1))) < GRID / 2f) {
+                    last++;
+                }
+                if (last > first) {
+                    float smallest = Float.POSITIVE_INFINITY;
+                    float largest = Float.NEGATIVE_INFINITY;
+                    float previousTarget = Float.NEGATIVE_INFINITY;
+                    boolean ordered = true;
+                    for (int index = first; index <= last; index++) {
+                        Unit unit = row.get(index);
+                        float target = anchorsInChildren(unit, graph, relations).get(0);
+                        if (target < previousTarget - 0.5f) ordered = false;
+                        previousTarget = target;
+                        float error = target - unit.center;
+                        smallest = Math.min(smallest, error);
+                        largest = Math.max(largest, error);
+                    }
+                    if (ordered) {
+                        float shift = snap((smallest + largest) / 2f);
+                        float minimum = first == 0 ? Float.NEGATIVE_INFINITY
+                            : snapCeil(row.get(first - 1).right()
+                                + gapBetween(row.get(first - 1), row.get(first))
+                                - row.get(first).left());
+                        float maximum = last + 1 == row.size() ? Float.POSITIVE_INFINITY
+                            : snapDown(row.get(last + 1).left()
+                                - gapBetween(row.get(last), row.get(last + 1))
+                                - row.get(last).right());
+                        if (Float.isFinite(minimum)) shift = Math.max(minimum, shift);
+                        if (Float.isFinite(maximum)) shift = Math.min(maximum, shift);
+                        float before = Math.max(Math.abs(smallest), Math.abs(largest));
+                        float after = Math.max(Math.abs(smallest - shift), Math.abs(largest - shift));
+                        if (after < before - GRID / 2f) {
+                            for (int index = first; index <= last; index++) {
+                                row.get(index).center += shift;
+                            }
+                        }
+                    }
+                }
+                first = last + 1;
+            }
+        }
+    }
+
+    private static boolean singleChildCouple(
+        Unit unit,
+        UnitGraph graph,
+        Relations relations,
+        Unit root
+    ) {
+        return unit != root && unit.people.size() == 2 && unit.children.size() == 1
+            && pinnedCenter(unit) == null
+            && anchorsInChildren(unit, graph, relations).size() == 1;
+    }
+
+    /** Close excess space between terminal siblings and their nearest branch. */
+    private static void closeTerminalSiblingGaps(Map<Integer, List<Unit>> rows) {
+        for (List<Unit> row : rows.values()) {
+            for (int index = 0; index + 1 < row.size(); index++) {
+                Unit left = row.get(index);
+                Unit right = row.get(index + 1);
+                if (!areSiblings(left, right)) continue;
+                float excess = right.left() - left.right() - gapBetween(left, right);
+                if (excess < GRID - 0.5f) continue;
+                // Move a terminal sibling run, never a descendant-bearing
+                // branch whose position is needed by another generation.
+                if (left.people.size() == 1 && left.children.isEmpty()
+                    && pinnedCenter(left) == null
+                    && (right.people.size() > 1 || !right.children.isEmpty())) {
+                    shiftUnitAndFollowers(row, index, snap(excess));
+                } else if (right.people.size() == 1 && right.children.isEmpty()
+                    && pinnedCenter(right) == null
+                    && (left.people.size() > 1 || !left.children.isEmpty())) {
+                    int end = index + 1;
+                    while (end + 1 < row.size()
+                        && row.get(end + 1).people.size() == 1
+                        && row.get(end + 1).children.isEmpty()
+                        && pinnedCenter(row.get(end + 1)) == null
+                        && areSiblings(row.get(end), row.get(end + 1))) end++;
+                    for (int run = index + 1; run <= end; run++) {
+                        row.get(run).center -= snap(excess);
+                    }
+                }
+            }
+        }
+    }
+
+    private static Set<Unit> parentUnitsOf(
+        String personId,
+        int parentLevel,
+        UnitGraph graph,
+        Relations relations
+    ) {
+        Set<Unit> result = new LinkedHashSet<>();
+        for (String parentId : relations.parentsByChild.getOrDefault(
+            personId, Collections.emptySet())) {
+            Unit parent = graph.personToUnit.get(parentId);
+            if (parent != null && parent.level == parentLevel) result.add(parent);
+        }
+        return result;
+    }
+
+    private static void shiftUnitAndFollowers(List<Unit> row, int index, float shift) {
+        if (shift < 0.5f) return;
+        row.get(index).center += shift;
+        for (int next = index + 1; next < row.size(); next++) {
+            Unit previous = row.get(next - 1);
+            Unit current = row.get(next);
+            float shortage = previous.right() + gapBetween(previous, current) - current.left();
+            if (shortage <= 0.5f) break;
+            current.center += snapUp(shortage);
+        }
+    }
+
+    private static void shiftUnitAndPredecessors(List<Unit> row, int index, float shift) {
+        if (shift > -0.5f) return;
+        row.get(index).center += shift;
+        for (int previous = index - 1; previous >= 0; previous--) {
+            Unit left = row.get(previous);
+            Unit right = row.get(previous + 1);
+            float shortage = left.right() + gapBetween(left, right) - right.left();
+            if (shortage <= 0.5f) break;
+            left.center -= snapUp(shortage);
+        }
+    }
+
+    private static float snapUp(float value) {
+        return value <= 0f ? 0f : (float) Math.ceil(value / GRID) * GRID;
+    }
+
+    private static void compactRowExactly(List<Unit> row) {
+        if (row == null || row.isEmpty()) return;
+        float cursor = snap(row.get(0).left());
+        Unit previous = null;
+        for (Unit unit : row) {
+            if (previous != null) cursor = previous.right() + gapBetween(previous, unit);
+            cursor = snap(cursor);
+            unit.center = cursor + unit.width / 2f;
+            previous = unit;
+        }
+    }
+
+    /**
+     * Builds a deterministic branch order from the relationship graph. Explicit
+     * sibling direction keeps a sibling branch contiguous, while the order of
+     * people in a lower partner block orders their parent branches. Coordinates,
+     * UUIDs and scoring weights are not used.
+     */
+    private static void orderRowsByFamilyStructure(
+        TreeState state,
+        UnitGraph graph,
+        Relations relations,
+        Map<Integer, List<Unit>> rows
+    ) {
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        levels.sort(Collections.reverseOrder());
+        for (Integer level : levels) {
+            List<Unit> row = rows.get(level);
+            if (row == null || row.isEmpty()) continue;
+            if (row.size() == 1) {
+                row.get(0).structuralRank = 0;
+                continue;
+            }
+            Map<String, Integer> originalIndex = new HashMap<>();
+            Map<String, Set<String>> edges = new LinkedHashMap<>();
+            Disjoint components = new Disjoint(unitIds(row));
+            for (int index = 0; index < row.size(); index++) {
+                Unit unit = row.get(index);
+                originalIndex.put(unit.id, index);
+                edges.put(unit.id, new LinkedHashSet<>());
+            }
+
+            for (Relation relation : state.links) {
+                if (relation == null || !"sibling".equals(relation.type)) continue;
+                Unit from = graph.personToUnit.get(relation.from);
+                Unit to = graph.personToUnit.get(relation.to);
+                if (!sameRow(from, to, level) || from == to) continue;
+                components.union(from.id, to.id);
+                addSiblingBranchOrder(graph, edges, relation, from, to);
+            }
+
+            for (Set<String> children : relations.childrenByParent.values()) {
+                Unit previous = null;
+                String previousChildId = null;
+                for (String childId : children) {
+                    Unit child = graph.personToUnit.get(childId);
+                    if (child == null || child.level != level) continue;
+                    if (previous != null && previous != child) {
+                        components.union(previous.id, child.id);
+                        if (!hasExplicitSiblingOrder(state, previous, child)) {
+                            addImplicitSiblingBranchOrder(
+                                graph,
+                                edges,
+                                previous,
+                                previousChildId,
+                                child,
+                                childId);
+                        }
+                    }
+                    previous = child;
+                    previousChildId = childId;
+                }
+            }
+
+            for (Unit childUnit : graph.units) {
+                if (childUnit.level != level + 1 || childUnit.people.size() < 2) continue;
+                for (int leftIndex = 0; leftIndex < childUnit.people.size(); leftIndex++) {
+                    for (int rightIndex = leftIndex + 1;
+                         rightIndex < childUnit.people.size();
+                         rightIndex++) {
+                        addParentBranchOrder(
+                            relations,
+                            graph,
+                            edges,
+                            childUnit.people.get(leftIndex),
+                            childUnit.people.get(rightIndex),
+                            level);
+                    }
+                }
+            }
+
+            Map<String, List<Unit>> membersByComponent = new LinkedHashMap<>();
+            for (Unit unit : row) {
+                membersByComponent.computeIfAbsent(
+                    components.find(unit.id),
+                    ignored -> new ArrayList<>()).add(unit);
+            }
+            Map<String, Set<String>> componentEdges = new LinkedHashMap<>();
+            for (String id : membersByComponent.keySet()) {
+                componentEdges.put(id, new LinkedHashSet<>());
+            }
+            for (Map.Entry<String, Set<String>> edge : edges.entrySet()) {
+                String before = components.find(edge.getKey());
+                for (String afterId : edge.getValue()) {
+                    String after = components.find(afterId);
+                    if (!before.equals(after)) addOrderEdge(componentEdges, before, after);
+                }
+            }
+
+            List<String> componentOrder = topologicalOrder(
+                new ArrayList<>(membersByComponent.keySet()),
+                componentEdges,
+                (first, second) -> {
+                    int downstream = Double.compare(
+                        downstreamRank(membersByComponent.get(first), graph),
+                        downstreamRank(membersByComponent.get(second), graph));
+                    return downstream != 0 ? downstream : Integer.compare(
+                        firstIndex(membersByComponent.get(first), originalIndex),
+                        firstIndex(membersByComponent.get(second), originalIndex));
+                });
+            List<Unit> ordered = new ArrayList<>();
+            for (String componentId : componentOrder) {
+                List<String> memberIds = new ArrayList<>();
+                for (Unit unit : membersByComponent.get(componentId)) memberIds.add(unit.id);
+                List<String> orderedIds = topologicalOrder(
+                    memberIds,
+                    edges,
+                    (first, second) -> Integer.compare(
+                        originalIndex.getOrDefault(first, Integer.MAX_VALUE),
+                        originalIndex.getOrDefault(second, Integer.MAX_VALUE)));
+                for (String id : orderedIds) ordered.add(graph.unitById.get(id));
+            }
+            row.clear();
+            row.addAll(ordered);
+            for (int index = 0; index < row.size(); index++) {
+                row.get(index).structuralRank = index;
+            }
+        }
+    }
+
+    /** Place a compact leaf family by its parents even inside a broad sibling group. */
+    private static void interleaveIndependentLeafChildren(List<Unit> row, UnitGraph graph) {
+        Map<String, List<Unit>> leafFamilies = new LinkedHashMap<>();
+        for (Unit child : row) {
+            if (child.people.size() != 1 || !child.children.isEmpty()
+                || child.parents.size() != 1) continue;
+            String parentId = child.parents.iterator().next();
+            Unit parent = graph.unitById.get(parentId);
+            if (parent == null || parent.people.size() != 2 || parent.siblings.isEmpty()
+                || !parent.parents.isEmpty()
+                || parent.structuralRank == Integer.MAX_VALUE) continue;
+            leafFamilies.computeIfAbsent(parentId, ignored -> new ArrayList<>()).add(child);
+        }
+        for (Map.Entry<String, List<Unit>> entry : leafFamilies.entrySet()) {
+            Unit parent = graph.unitById.get(entry.getKey());
+            List<Unit> family = entry.getValue();
+            Set<String> familyIds = new HashSet<>();
+            for (Unit child : family) familyIds.add(child.id);
+            boolean externalSibling = false;
+            for (Unit child : family) {
+                if (!familyIds.containsAll(child.siblings)) {
+                    externalSibling = true;
+                    break;
+                }
+            }
+            if (externalSibling) continue;
+            row.removeAll(family);
+            int insertion = row.size();
+            for (int index = 0; index < row.size(); index++) {
+                Unit other = row.get(index);
+                if (maxParentStructuralRank(other, graph) > parent.structuralRank) {
+                    insertion = index;
+                    break;
+                }
+            }
+            row.addAll(insertion, family);
+        }
+    }
+
+    private static int maxParentStructuralRank(Unit unit, UnitGraph graph) {
+        int result = -1;
+        for (String parentId : unit.parents) {
+            Unit parent = graph.unitById.get(parentId);
+            if (parent != null && parent.structuralRank != Integer.MAX_VALUE) {
+                result = Math.max(result, parent.structuralRank);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Keeps a person's collateral branch on the outside of that person's
+     * partner block when either branch has ancestry or descendants to keep
+     * together. A free leaf sibling instead follows its declared left/right
+     * order, so an otherwise empty slot beside a couple can be used.
+     */
+    private static void addSiblingBranchOrder(
+        UnitGraph graph,
+        Map<String, Set<String>> edges,
+        Relation relation,
+        Unit from,
+        Unit to
+    ) {
+        if (canFloatLeafPastFamily(from, to, graph)) {
+            addOrderEdge(edges, to.id, from.id);
+            return;
+        }
+        if (canFloatLeafPastFamily(to, from, graph)) {
+            addOrderEdge(edges, from.id, to.id);
+            return;
+        }
+        if (from.people.size() > 1
+            && (!isFreeLeafSibling(to) || !from.parents.isEmpty())) {
+            int memberIndex = from.people.indexOf(relation.from);
+            if (memberIndex >= 0) {
+                addOutsidePartnerOrder(edges, from, to, memberIndex);
+                return;
+            }
+        }
+        if (to.people.size() > 1
+            && (!isFreeLeafSibling(from) || !to.parents.isEmpty())) {
+            int memberIndex = to.people.indexOf(relation.to);
+            if (memberIndex >= 0) {
+                addOutsidePartnerOrder(edges, to, from, memberIndex);
+                return;
+            }
+        }
+        if ("left".equals(relation.side)) {
+            addOrderEdge(edges, to.id, from.id);
+        } else {
+            addOrderEdge(edges, from.id, to.id);
+        }
+    }
+
+    /** A leaf sibling may follow the declared sibling order through a couple's open side. */
+    private static boolean isFreeLeafSibling(Unit unit) {
+        return unit.people.size() == 1 && unit.children.isEmpty();
+    }
+
+    private static boolean canFloatLeafPastFamily(Unit leaf, Unit family, UnitGraph graph) {
+        if (!isFreeLeafSibling(leaf) || !leaf.parents.isEmpty()
+            || family.people.size() != 2 || !family.parents.isEmpty()) return false;
+        int descendantCards = 0;
+        for (String childUnitId : family.children) {
+            Unit child = graph.unitById.get(childUnitId);
+            if (child == null) continue;
+            descendantCards += child.people.size();
+            if (descendantCards >= 2 || !child.children.isEmpty()) return true;
+        }
+        return false;
+    }
+
+    private static void addOutsidePartnerOrder(
+        Map<String, Set<String>> edges,
+        Unit partnerUnit,
+        Unit siblingUnit,
+        int memberIndex
+    ) {
+        int mirroredIndex = partnerUnit.people.size() - 1 - memberIndex;
+        if (memberIndex < mirroredIndex) {
+            addOrderEdge(edges, siblingUnit.id, partnerUnit.id);
+        } else if (memberIndex > mirroredIndex) {
+            addOrderEdge(edges, partnerUnit.id, siblingUnit.id);
+        }
+    }
+
+    private static void addImplicitSiblingBranchOrder(
+        UnitGraph graph,
+        Map<String, Set<String>> edges,
+        Unit first,
+        String firstPersonId,
+        Unit second,
+        String secondPersonId
+    ) {
+        if (canFloatLeafPastFamily(first, second, graph)) {
+            addOrderEdge(edges, second.id, first.id);
+            return;
+        }
+        if (canFloatLeafPastFamily(second, first, graph)) {
+            addOrderEdge(edges, first.id, second.id);
+            return;
+        }
+        if (first.people.size() > 1
+            && (!isFreeLeafSibling(second) || !first.parents.isEmpty())) {
+            int memberIndex = first.people.indexOf(firstPersonId);
+            if (memberIndex >= 0) {
+                addOutsidePartnerOrder(edges, first, second, memberIndex);
+                return;
+            }
+        }
+        if (second.people.size() > 1
+            && (!isFreeLeafSibling(first) || !second.parents.isEmpty())) {
+            int memberIndex = second.people.indexOf(secondPersonId);
+            if (memberIndex >= 0) {
+                addOutsidePartnerOrder(edges, second, first, memberIndex);
+                return;
+            }
+        }
+        addOrderEdge(edges, first.id, second.id);
+    }
+
+    /**
+     * The bottom-up structural pass establishes the order of parent branches.
+     * Mirror that order into the next generation as whole sibling-family
+     * components. Otherwise two valid sibling groups can remain in creation
+     * order and end up below each other's parents, producing crossed lines.
+     */
+    private static void orderChildFamilyComponentsByParents(
+        UnitGraph graph,
+        Relations relations,
+        Map<Integer, List<Unit>> rows
+    ) {
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        Collections.sort(levels);
+        for (Integer level : levels) {
+            List<Unit> row = rows.get(level);
+            if (row == null || row.size() < 2) continue;
+
+            Disjoint components = new Disjoint(unitIds(row));
+            for (Map.Entry<String, Set<String>> entry : relations.siblingsByPerson.entrySet()) {
+                Unit first = graph.personToUnit.get(entry.getKey());
+                if (first == null || first.level != level) continue;
+                for (String siblingId : entry.getValue()) {
+                    Unit second = graph.personToUnit.get(siblingId);
+                    if (second != null && second.level == level && second != first) {
+                        components.union(first.id, second.id);
+                    }
+                }
+            }
+
+            Map<String, Unit> firstUnitByFamily = new LinkedHashMap<>();
+            for (Unit unit : row) {
+                for (String personId : unit.people) {
+                    Set<String> parentIds = relations.parentsByChild.getOrDefault(
+                        personId,
+                        Collections.emptySet());
+                    if (parentIds.isEmpty()) continue;
+                    List<String> orderedParents = new ArrayList<>(parentIds);
+                    Collections.sort(orderedParents);
+                    String familyKey = String.join("|", orderedParents);
+                    Unit first = firstUnitByFamily.putIfAbsent(familyKey, unit);
+                    if (first != null && first != unit) components.union(first.id, unit.id);
+                }
+            }
+
+            Map<String, Integer> originalIndex = new HashMap<>();
+            Map<String, List<Unit>> membersByComponent = new LinkedHashMap<>();
+            for (int index = 0; index < row.size(); index++) {
+                Unit unit = row.get(index);
+                originalIndex.put(unit.id, index);
+                membersByComponent.computeIfAbsent(
+                    components.find(unit.id),
+                    ignored -> new ArrayList<>()).add(unit);
+            }
+
+            List<String> componentOrder = new ArrayList<>(membersByComponent.keySet());
+            componentOrder.sort((first, second) -> {
+                double firstRank = parentStructuralRank(
+                    membersByComponent.get(first),
+                    graph,
+                    relations,
+                    firstComponentIndex(membersByComponent.get(first), originalIndex));
+                double secondRank = parentStructuralRank(
+                    membersByComponent.get(second),
+                    graph,
+                    relations,
+                    firstComponentIndex(membersByComponent.get(second), originalIndex));
+                int rank = Double.compare(firstRank, secondRank);
+                return rank != 0 ? rank : Integer.compare(
+                    firstComponentIndex(membersByComponent.get(first), originalIndex),
+                    firstComponentIndex(membersByComponent.get(second), originalIndex));
+            });
+
+            List<Unit> ordered = new ArrayList<>();
+            for (String componentId : componentOrder) {
+                ordered.addAll(membersByComponent.get(componentId));
+            }
+            row.clear();
+            row.addAll(ordered);
+            interleaveIndependentLeafChildren(row, graph);
+            for (int index = 0; index < row.size(); index++) {
+                row.get(index).structuralRank = index;
+            }
+        }
+    }
+
+
+
+    private static double parentStructuralRank(
+        List<Unit> units,
+        UnitGraph graph,
+        Relations relations,
+        int fallback
+    ) {
+        Set<String> parentUnits = new LinkedHashSet<>();
+        for (Unit unit : units) {
+            for (String personId : unit.people) {
+                for (String parentId : relations.parentsByChild.getOrDefault(
+                    personId,
+                    Collections.emptySet())) {
+                    Unit parent = graph.personToUnit.get(parentId);
+                    if (parent != null) parentUnits.add(parent.id);
+                }
+            }
+        }
+        double total = 0d;
+        int count = 0;
+        for (String parentUnitId : parentUnits) {
+            Unit parent = graph.unitById.get(parentUnitId);
+            if (parent == null || parent.structuralRank == Integer.MAX_VALUE) continue;
+            total += parent.structuralRank;
+            count++;
+        }
+        return count == 0 ? fallback : total / count;
+    }
+
+    private static int firstComponentIndex(
+        List<Unit> units,
+        Map<String, Integer> originalIndex
+    ) {
+        int result = Integer.MAX_VALUE;
+        for (Unit unit : units) {
+            result = Math.min(result, originalIndex.getOrDefault(unit.id, Integer.MAX_VALUE));
+        }
+        return result;
+    }
+
+    private static void addParentBranchOrder(
+        Relations relations,
+        UnitGraph graph,
+        Map<String, Set<String>> edges,
+        String leftChild,
+        String rightChild,
+        int parentLevel
+    ) {
+        for (String leftParentId : relations.parentsByChild.getOrDefault(
+            leftChild,
+            Collections.emptySet())) {
+            Unit leftParent = graph.personToUnit.get(leftParentId);
+            if (leftParent == null || leftParent.level != parentLevel) continue;
+            for (String rightParentId : relations.parentsByChild.getOrDefault(
+                rightChild,
+                Collections.emptySet())) {
+                Unit rightParent = graph.personToUnit.get(rightParentId);
+                if (rightParent == null
+                    || rightParent == leftParent
+                    || rightParent.level != parentLevel) continue;
+                addOrderEdge(edges, leftParent.id, rightParent.id);
+            }
+        }
+    }
+
+    private static List<String> unitIds(List<Unit> units) {
+        List<String> result = new ArrayList<>();
+        for (Unit unit : units) result.add(unit.id);
+        return result;
+    }
+
+    private static boolean sameRow(Unit first, Unit second, int level) {
+        return first != null && second != null
+            && first.level == level && second.level == level;
+    }
+
+    private static boolean hasExplicitSiblingOrder(
+        TreeState state,
+        Unit first,
+        Unit second
+    ) {
+        for (Relation relation : state.links) {
+            if (relation == null || !"sibling".equals(relation.type)) continue;
+            boolean direct = first.people.contains(relation.from)
+                && second.people.contains(relation.to);
+            boolean reverse = first.people.contains(relation.to)
+                && second.people.contains(relation.from);
+            if (direct || reverse) return true;
+        }
+        return false;
+    }
+
+    private static int firstIndex(List<Unit> units, Map<String, Integer> indices) {
+        int result = Integer.MAX_VALUE;
+        if (units == null) return result;
+        for (Unit unit : units) {
+            result = Math.min(result, indices.getOrDefault(unit.id, Integer.MAX_VALUE));
+        }
+        return result;
+    }
+
+    private static double downstreamRank(List<Unit> units, UnitGraph graph) {
+        if (units == null) return Double.POSITIVE_INFINITY;
+        // The leftmost descendant anchors a whole sibling component. Averaging
+        // in a late leaf child can push that entire ancestral branch past an
+        // unrelated family on the previous row.
+        double leftmost = Double.POSITIVE_INFINITY;
+        for (Unit unit : units) {
+            for (String childId : unit.children) {
+                Unit child = graph.unitById.get(childId);
+                if (child == null || child.structuralRank == Integer.MAX_VALUE) continue;
+                leftmost = Math.min(leftmost, child.structuralRank);
+            }
+        }
+        return leftmost;
+    }
+
+    private static void addOrderEdge(
+        Map<String, Set<String>> edges,
+        String before,
+        String after
+    ) {
+        if (before == null || after == null || before.equals(after)) return;
+        Set<String> outgoing = edges.get(before);
+        if (outgoing != null && edges.containsKey(after)) outgoing.add(after);
+    }
+
+    private static <T> List<T> topologicalOrder(
+        List<T> values,
+        Map<T, Set<T>> edges,
+        Comparator<T> fallback
+    ) {
+        Map<T, Integer> indegree = new LinkedHashMap<>();
+        for (T value : values) indegree.put(value, 0);
+        for (Map.Entry<T, Set<T>> edge : edges.entrySet()) {
+            if (!indegree.containsKey(edge.getKey())) continue;
+            for (T target : edge.getValue()) {
+                if (indegree.containsKey(target)) indegree.put(target, indegree.get(target) + 1);
+            }
+        }
+        List<T> ready = new ArrayList<>();
+        for (T value : values) if (indegree.get(value) == 0) ready.add(value);
+        ready.sort(fallback);
+        List<T> result = new ArrayList<>();
+        while (!ready.isEmpty()) {
+            T next = ready.remove(0);
+            result.add(next);
+            for (T target : edges.getOrDefault(next, Collections.emptySet())) {
+                if (!indegree.containsKey(target)) continue;
+                int remaining = indegree.get(target) - 1;
+                indegree.put(target, remaining);
+                if (remaining == 0) {
+                    ready.add(target);
+                    ready.sort(fallback);
+                }
+            }
+        }
+        if (result.size() != values.size()) {
+            List<T> unresolved = new ArrayList<>();
+            for (T value : values) if (!result.contains(value)) unresolved.add(value);
+            unresolved.sort(fallback);
+            result.addAll(unresolved);
+        }
+        return result;
+    }
+
+    /** Returns a center only when one visual unit represents one parent family. */
+    private static Float unambiguousFamilyChildrenCenter(
+        Unit parentUnit,
+        UnitGraph graph,
+        Relations relations
+    ) {
+        if (parentUnit == null || parentUnit.people.size() < 2) return null;
+        String familyKey = null;
+        float left = Float.MAX_VALUE;
+        float right = -Float.MAX_VALUE;
+        for (Map.Entry<String, Set<String>> entry : relations.parentsByChild.entrySet()) {
+            List<String> familyParents = new ArrayList<>();
+            for (String parentId : entry.getValue()) {
+                if (parentUnit.people.contains(parentId)) familyParents.add(parentId);
+            }
+            if (familyParents.size() < 2) continue;
+            if (familyParents.size() != parentUnit.people.size()) return null;
+            Collections.sort(familyParents);
+            String candidateKey = String.join("|", familyParents);
+            if (familyKey != null && !familyKey.equals(candidateKey)) return null;
+
+            Unit childUnit = graph.personToUnit.get(entry.getKey());
+            if (childUnit == null) continue;
+            int childIndex = childUnit.people.indexOf(entry.getKey());
+            if (childIndex < 0) continue;
+            float center = personCenter(childUnit, childIndex);
+            familyKey = candidateKey;
+            left = Math.min(left, center);
+            right = Math.max(right, center);
+        }
+        return familyKey == null ? null : (left + right) / 2f;
     }
 
     private static void centerFamiliesTouchedByAddition(
@@ -2467,7 +4560,11 @@ final class TreeLayoutEngine {
             }
         }
         if (allSimple) {
-            float siblingStep = siblings.size() <= 3 ? CARD_W + SIBLING_GAP : 340f;
+            // A plain sibling run has no visual branch between its cards. Keep
+            // the same one-cell rhythm regardless of its length; the larger
+            // five-cell separation is reserved for a sibling household that
+            // owns its own partner/descendant branch.
+            float siblingStep = CARD_W + SIBLING_GAP;
             float start = -((siblings.size() - 1) * siblingStep) / 2f;
             float anchorLeft = anchor - CARD_W / 2f;
             for (int i = 0; i < siblings.size(); i++) {
@@ -2556,18 +4653,23 @@ final class TreeLayoutEngine {
     private static UnitGraph makeUnits(TreeState state, Relations relations) {
         List<String> ids = new ArrayList<>(state.people.keySet());
         Disjoint disjoint = new Disjoint(ids);
+        GenerationPlan generationPlan = GenerationPlan.from(state);
 
-        for (Map.Entry<String, Set<String>> entry : relations.partnersByPerson.entrySet()) {
-            for (String partner : entry.getValue()) disjoint.union(entry.getKey(), partner);
-        }
-        // Co-parents form the same visual family block even when the partner
-        // relation was not explicitly entered.
-        for (Set<String> parents : relations.parentsByChild.values()) {
-            String first = null;
-            for (String parent : parents) {
-                if (!state.people.containsKey(parent)) continue;
-                if (first == null) first = parent;
-                else disjoint.union(first, parent);
+        if (generationPlan.relaxed) {
+            for (String id : ids) disjoint.union(id, generationPlan.partnerGroups.get(id));
+        } else {
+            for (Map.Entry<String, Set<String>> entry : relations.partnersByPerson.entrySet()) {
+                for (String partner : entry.getValue()) disjoint.union(entry.getKey(), partner);
+            }
+            // Co-parents form the same visual family block even when the partner
+            // relation was not explicitly entered.
+            for (Set<String> parents : relations.parentsByChild.values()) {
+                String first = null;
+                for (String parent : parents) {
+                    if (!state.people.containsKey(parent)) continue;
+                    if (first == null) first = parent;
+                    else disjoint.union(first, parent);
+                }
             }
         }
 
@@ -2577,8 +4679,9 @@ final class TreeLayoutEngine {
         }
 
         UnitGraph graph = new UnitGraph();
+        graph.generationPlan = generationPlan;
         for (List<String> people : groups.values()) {
-            people.sort((a, b) -> comparePeopleBySavedPosition(state, relations, a, b));
+            orderPeopleInUnit(state, relations, people);
             Unit unit = new Unit(String.join("|", people), people);
             for (String id : people) unit.personRefs.add(state.people.get(id));
             graph.units.add(unit);
@@ -2610,6 +4713,13 @@ final class TreeLayoutEngine {
         // single imported line must be rebuilt from the relationship graph.
         if (assignLevelsFromSavedRows(state, graph, relations)) return;
 
+        if (graph.generationPlan.relaxed) {
+            for (Unit unit : graph.units) {
+                unit.level = graph.generationPlan.levels.get(unit.people.get(0));
+            }
+            return;
+        }
+
         Map<String, Integer> assigned = new HashMap<>();
         assignComponentLevels(root, 0, assigned, graph, relations);
 
@@ -2627,23 +4737,6 @@ final class TreeLayoutEngine {
         }
 
         for (Unit unit : graph.units) unit.level = assigned.getOrDefault(unit.id, 0);
-
-        // Repair ambiguous/cyclic data conservatively while keeping the focal
-        // generation stable whenever it participates in the conflict.
-        for (int pass = 0; pass < graph.units.size() + 2; pass++) {
-            boolean changed = false;
-            for (Unit parent : graph.units) {
-                for (String childId : parent.children) {
-                    Unit child = graph.unitById.get(childId);
-                    if (child == null || child.level > parent.level) continue;
-                    if (edgeBelongsToCycle(parent, child, graph)) continue;
-                    if (child == root) parent.level = child.level - 1;
-                    else child.level = parent.level + 1;
-                    changed = true;
-                }
-            }
-            if (!changed) break;
-        }
 
         int min = Integer.MAX_VALUE;
         for (Unit unit : graph.units) min = Math.min(min, unit.level);
@@ -2681,7 +4774,7 @@ final class TreeLayoutEngine {
             rows.set(last, snap((rows.get(last) * count + value) / (count + 1f)));
             counts.set(last, count + 1);
         }
-        if (rows.size() > 16 || rows.size() > Math.max(4, state.people.size() / 3)) {
+        if (rows.size() > Math.max(4, state.people.size() / 3)) {
             return false;
         }
 
@@ -3007,20 +5100,98 @@ final class TreeLayoutEngine {
     }
 
     /**
+     * The first ordering pass uses structural hints before final child rows exist.
+     * Reconcile only genuine order conflicts after descendants are placed. A
+     * broad sibling family may be off-center because its children's spouses
+     * occupy the same parent row; do not move it through already aligned,
+     * compact households just to center that broad span.
+     */
+    private static void realignAncestorRowsFromChildren(
+        TreeState state,
+        Map<Integer, List<Unit>> rows,
+        UnitGraph graph,
+        Relations relations
+    ) {
+        List<Integer> levels = new ArrayList<>(rows.keySet());
+        levels.sort(Collections.reverseOrder());
+        for (Integer level : levels) {
+            List<Unit> row = rows.get(level);
+            if (row == null || row.size() < 2) continue;
+            boolean hasPinned = false;
+            for (Unit unit : row) hasPinned |= pinnedCenter(unit) != null;
+            if (hasPinned) continue;
+            Map<String, Float> targets = desiredCenters(row, graph, relations, true);
+            boolean reversedFamilies = false;
+            for (int first = 0; first < row.size() && !reversedFamilies; first++) {
+                Unit a = row.get(first);
+                if (a.children.isEmpty()) continue;
+                for (int second = first + 1; second < row.size(); second++) {
+                    Unit b = row.get(second);
+                    if (b.children.isEmpty()
+                        || targets.get(a.id) <= targets.get(b.id) + GRID) continue;
+                    boolean compactA = a.children.size() <= 2;
+                    boolean compactB = b.children.size() <= 2;
+                    if ((compactA && compactB)
+                        || (compactA && Math.abs(a.center - targets.get(a.id)) > GRID)
+                        || (compactB && Math.abs(b.center - targets.get(b.id)) > GRID)) {
+                        reversedFamilies = true;
+                        break;
+                    }
+                }
+            }
+            if (!reversedFamilies) continue;
+            Map<String, Integer> oldIndex = new HashMap<>();
+            Map<String, Set<String>> edges = new LinkedHashMap<>();
+            for (int index = 0; index < row.size(); index++) {
+                Unit unit = row.get(index);
+                oldIndex.put(unit.id, index);
+                edges.put(unit.id, new LinkedHashSet<>());
+            }
+            for (Relation relation : state.links) {
+                if (relation == null || !"sibling".equals(relation.type)) continue;
+                Unit from = graph.personToUnit.get(relation.from);
+                Unit to = graph.personToUnit.get(relation.to);
+                if (!sameRow(from, to, level) || from == to) continue;
+                addSiblingBranchOrder(graph, edges, relation, from, to);
+            }
+            List<String> order = topologicalOrder(
+                unitIds(row), edges, (a, b) -> {
+                    int target = Float.compare(targets.get(a), targets.get(b));
+                    return target != 0 ? target : Integer.compare(oldIndex.get(a), oldIndex.get(b));
+                });
+            List<Unit> ordered = new ArrayList<>();
+            for (String id : order) ordered.add(graph.unitById.get(id));
+            row.clear();
+            row.addAll(ordered);
+            for (int index = 0; index < row.size(); index++) {
+                row.get(index).structuralRank = index;
+            }
+            packRow(row, targets);
+        }
+    }
+
+    /**
      * Barycentric row ordering reduces parent-line crossings before the exact
-     * spacing pass. The id fallback keeps the result deterministic.
+     * spacing pass. Java's stable sort preserves the row's semantic order when
+     * both the family anchor and the order hint are equal. Falling back to an
+     * internal UUID here made identical GEDCOM imports choose different branch
+     * directions from run to run.
      */
     private static void packAlignedRow(
         List<Unit> row,
         Map<String, Float> desired
     ) {
         row.sort((first, second) -> {
+            if (first.structuralRank != Integer.MAX_VALUE
+                && second.structuralRank != Integer.MAX_VALUE) {
+                return Integer.compare(first.structuralRank, second.structuralRank);
+            }
             int target = Float.compare(
                 desired.getOrDefault(first.id, first.center),
                 desired.getOrDefault(second.id, second.center));
             if (target != 0) return target;
             int hint = Double.compare(first.orderHint, second.orderHint);
-            return hint != 0 ? hint : first.id.compareTo(second.id);
+            return hint;
         });
         packRow(row, desired);
     }
@@ -3046,11 +5217,21 @@ final class TreeLayoutEngine {
                 continue;
             }
             Collections.sort(anchors);
-            float median;
-            int middle = anchors.size() / 2;
-            if ((anchors.size() & 1) == 1) median = anchors.get(middle);
-            else median = (anchors.get(middle - 1) + anchors.get(middle)) / 2f;
-            desired.put(unit.id, unit.center * 0.18f + median * 0.82f);
+            float targetCenter;
+            if (useChildren) {
+                // The household is centered over the complete child span, not
+                // over the median child in an unevenly spaced sibling row.
+                targetCenter = (anchors.get(0) + anchors.get(anchors.size() - 1)) / 2f;
+            } else {
+                int middle = anchors.size() / 2;
+                if ((anchors.size() & 1) == 1) targetCenter = anchors.get(middle);
+                else targetCenter = (anchors.get(middle - 1) + anchors.get(middle)) / 2f;
+            }
+            // Keep every connected generation anchored to its actual family.
+            // Blending the anchor with the initial row seed made the offset of
+            // a long lineage decay toward that seed, turning a diagonal branch
+            // into a vertical column after several dozen generations.
+            desired.put(unit.id, targetCenter);
         }
         return desired;
     }
@@ -3188,7 +5369,7 @@ final class TreeLayoutEngine {
         if (areSiblings(left, right)) {
             boolean leftSimple = left.people.size() == 1 && left.children.isEmpty();
             boolean rightSimple = right.people.size() == 1 && right.children.isEmpty();
-            return leftSimple && rightSimple ? SIBLING_GAP : SIBLING_FAMILY_GAP;
+            return leftSimple && rightSimple ? SIBLING_GAP : BRANCH_GAP;
         }
         return BRANCH_GAP;
     }
@@ -3230,7 +5411,7 @@ final class TreeLayoutEngine {
             if (min == Float.MAX_VALUE) continue;
             float shift = componentHasPinned(component) ? 0f : snap(cursor - min);
             for (Unit unit : component) unit.center += shift;
-            cursor = Math.max(cursor, max + shift + BRANCH_GAP);
+            cursor = Math.max(cursor, max + shift + COMPONENT_GAP);
         }
     }
 
@@ -3323,6 +5504,19 @@ final class TreeLayoutEngine {
         LayoutAnchor anchor,
         int rootLevel
     ) {
+        float leftmost = Float.MAX_VALUE;
+        boolean hasPinned = false;
+        for (Unit unit : graph.units) {
+            leftmost = Math.min(leftmost, unit.left());
+            hasPinned |= pinnedCenter(unit) != null;
+        }
+        // Clamp only after translating the complete layout. Clamping each
+        // negative card independently collapses several family blocks onto X=0
+        // on wide trees and creates overlaps that no later translation can fix.
+        if (!hasPinned && leftmost < MARGIN_X) {
+            float shift = snapUp(MARGIN_X - leftmost);
+            for (Unit unit : graph.units) unit.center += shift;
+        }
         int maxLevel = 0;
         for (Unit unit : graph.units) maxLevel = Math.max(maxLevel, unit.level);
         Float savedFirstRow = anchor == null
@@ -3466,21 +5660,258 @@ final class TreeLayoutEngine {
         return name != 0 ? name : first.compareTo(second);
     }
 
-    private static int comparePeopleBySavedPosition(
+    private static void orderPeopleInUnit(
         TreeState state,
         Relations relations,
-        String first,
-        String second
+        List<String> people
     ) {
-        Person firstPerson = state.people.get(first);
-        Person secondPerson = state.people.get(second);
-        if (isValidPosition(firstPerson)
-            && isValidPosition(secondPerson)
-            && Math.abs(firstPerson.y - secondPerson.y) <= GRID * 2f) {
-            int saved = Float.compare(firstPerson.x, secondPerson.x);
-            if (saved != 0) return saved;
+        if (people == null || people.size() < 2) return;
+        if (orderTwoUnionPeople(state, relations, people)) return;
+        Map<String, Set<String>> edges = new LinkedHashMap<>();
+        for (String id : people) edges.put(id, new LinkedHashSet<>());
+        for (Relation relation : state.links) {
+            if (relation == null
+                || !("partner".equals(relation.type) || "family".equals(relation.type))
+                || !edges.containsKey(relation.from)
+                || !edges.containsKey(relation.to)) {
+                continue;
+            }
+            String fromGender = inferGender(state, relation.from);
+            String toGender = inferGender(state, relation.to);
+            if ((PersonGender.MALE.equals(fromGender)
+                && PersonGender.FEMALE.equals(toGender))
+                || (PersonGender.FEMALE.equals(fromGender)
+                    && PersonGender.MALE.equals(toGender))) {
+                addOrderEdge(
+                    edges,
+                    PersonGender.MALE.equals(fromGender) ? relation.from : relation.to,
+                    PersonGender.FEMALE.equals(fromGender) ? relation.from : relation.to);
+                continue;
+            }
+            if ("left".equals(relation.side)) {
+                addOrderEdge(edges, relation.to, relation.from);
+            } else {
+                addOrderEdge(edges, relation.from, relation.to);
+            }
         }
-        return comparePeople(state, relations, first, second);
+        for (String first : people) {
+            for (String second : people) {
+                if (first.equals(second)) continue;
+                String firstGender = inferGender(state, first);
+                String secondGender = inferGender(state, second);
+                if (PersonGender.MALE.equals(firstGender)
+                    && PersonGender.FEMALE.equals(secondGender)
+                    && !hasOrderPath(edges, second, first)) {
+                    addOrderEdge(edges, first, second);
+                }
+            }
+        }
+        List<String> ordered = topologicalOrder(
+            new ArrayList<>(people),
+            edges,
+            (first, second) -> comparePeople(state, relations, first, second));
+        people.clear();
+        people.addAll(ordered);
+        orderUnionPath(state, relations, people);
+    }
+
+    /** Every edge of a path of unions can be adjacent, including implicit co-parents. */
+    private static boolean orderUnionPath(TreeState state, Relations relations, List<String> people) {
+        if (people.size() < 4) return false;
+        Map<String, Set<String>> neighbors = new LinkedHashMap<>();
+        for (String id : people) neighbors.put(id, new LinkedHashSet<>());
+        for (String id : people) {
+            Set<String> peers = new LinkedHashSet<>(relations.partnersByPerson.getOrDefault(id, Collections.emptySet()));
+            for (String child : relations.childrenByParent.getOrDefault(id, Collections.emptySet()))
+                peers.addAll(relations.parentsByChild.getOrDefault(child, Collections.emptySet()));
+            for (String peer : peers) if (!peer.equals(id) && neighbors.containsKey(peer)) {
+                neighbors.get(id).add(peer); neighbors.get(peer).add(id);
+            }
+        }
+        List<String> ends = new ArrayList<>();
+        for (String id : people) { int degree = neighbors.get(id).size(); if (degree == 1) ends.add(id); else if (degree != 2) return false; }
+        if (ends.size() != 2) return false;
+        List<String> path = new ArrayList<>(); String current = ends.get(0), previous = null;
+        while (current != null && !path.contains(current)) {
+            path.add(current); String next = null;
+            for (String peer : neighbors.get(current)) if (!peer.equals(previous)) { next = peer; break; }
+            previous = current; current = next;
+        }
+        if (path.size() != people.size()) return false;
+        int forward = 0, reverse = 0;
+        for (int i = 0; i < path.size(); i++) { int old = people.indexOf(path.get(i)); forward += Math.abs(i - old); reverse += Math.abs(path.size() - 1 - i - old); }
+        if (reverse < forward) Collections.reverse(path);
+        people.clear(); people.addAll(path); return true;
+    }
+
+    /** The common member of two unions sits between the two partners. */
+    private static boolean orderTwoUnionPeople(
+        TreeState state, Relations relations, List<String> people
+    ) {
+        String shared = twoUnionPivot(people, relations);
+        if (shared == null) return false;
+        List<String> partners = new ArrayList<>(people);
+        partners.remove(shared);
+        Person center = state.people.get(shared);
+        Person first = state.people.get(partners.get(0));
+        Person second = state.people.get(partners.get(1));
+        boolean savedFlanks = isValidPosition(center) && isValidPosition(first)
+            && isValidPosition(second)
+            && ((first.x < center.x && center.x < second.x)
+                || (second.x < center.x && center.x < first.x));
+        if (!savedFlanks && (isValidPosition(center) || isValidPosition(first)
+            || isValidPosition(second))) return false;
+        if (savedFlanks) {
+            partners.sort(Comparator.comparingDouble(id -> state.people.get(id).x));
+        } else {
+            partners.sort((left, right) -> {
+                int leftChildren = sharedChildrenCount(shared, left, relations);
+                int rightChildren = sharedChildrenCount(shared, right, relations);
+                if (leftChildren != rightChildren) {
+                    return Integer.compare(rightChildren, leftChildren);
+                }
+                return comparePeople(state, relations, left, right);
+            });
+        }
+        people.clear();
+        people.add(partners.get(0));
+        people.add(shared);
+        people.add(partners.get(1));
+        return true;
+    }
+
+    private static String twoUnionPivot(List<String> people, Relations relations) {
+        if (people.size() != 3) return null;
+        for (String candidate : people) {
+            Set<String> partners = new LinkedHashSet<>(relations.partnersByPerson.getOrDefault(
+                candidate, Collections.emptySet()));
+            for (String childId : relations.childrenByParent.getOrDefault(
+                candidate, Collections.emptySet())) {
+                for (String coParent : relations.parentsByChild.getOrDefault(
+                    childId, Collections.emptySet())) {
+                    if (!candidate.equals(coParent)) partners.add(coParent);
+                }
+            }
+            partners.retainAll(people);
+            partners.remove(candidate);
+            List<String> others = new ArrayList<>(people);
+            others.remove(candidate);
+            if (!partners.containsAll(others)) continue;
+            boolean partnersTogether = relations.partnersByPerson.getOrDefault(
+                others.get(0), Collections.emptySet()).contains(others.get(1));
+            if (!partnersTogether) return candidate;
+        }
+        return null;
+    }
+
+    private static int sharedChildrenCount(
+        String first, String second, Relations relations
+    ) {
+        int count = 0;
+        for (String childId : relations.childrenByParent.getOrDefault(
+            first, Collections.emptySet())) {
+            if (relations.parentsByChild.getOrDefault(
+                childId, Collections.emptySet()).contains(second)) count++;
+        }
+        return count;
+    }
+
+    /** Applies ancestry-based partner order only during a fresh global layout. */
+    private static void orderUnknownPartnerUnitsByAncestry(
+        TreeState state,
+        UnitGraph graph,
+        Relations relations
+    ) {
+        for (Unit unit : graph.units) {
+            if (unit.people.size() < 2) continue;
+            if (orderUnionPath(state, relations, unit.people)) {
+                unit.personRefs.clear();
+                for (String id : unit.people) unit.personRefs.add(state.people.get(id));
+                continue;
+            }
+            String pivot = twoUnionPivot(unit.people, relations);
+            if (pivot != null && unit.people.indexOf(pivot) == 1) continue;
+            Map<String, Integer> originalIndex = new HashMap<>();
+            for (int index = 0; index < unit.people.size(); index++) {
+                originalIndex.put(unit.people.get(index), index);
+            }
+            unit.people.sort((first, second) -> {
+                String firstGender = inferGender(state, first);
+                String secondGender = inferGender(state, second);
+                int firstRole = partnerRoleRank(firstGender);
+                int secondRole = partnerRoleRank(secondGender);
+                if (firstRole != secondRole) return Integer.compare(firstRole, secondRole);
+                if (PersonGender.UNKNOWN.equals(firstGender)
+                    && PersonGender.UNKNOWN.equals(secondGender)) {
+                    int firstBranch = ancestryBranchWeight(relations, first, unit.people);
+                    int secondBranch = ancestryBranchWeight(relations, second, unit.people);
+                    if (firstBranch != secondBranch) {
+                        return Integer.compare(secondBranch, firstBranch);
+                    }
+                }
+                return Integer.compare(
+                    originalIndex.getOrDefault(first, Integer.MAX_VALUE),
+                    originalIndex.getOrDefault(second, Integer.MAX_VALUE));
+            });
+            unit.personRefs.clear();
+            for (String id : unit.people) unit.personRefs.add(state.people.get(id));
+        }
+    }
+
+    private static int partnerRoleRank(String gender) {
+        if (PersonGender.MALE.equals(gender)) return 0;
+        if (PersonGender.FEMALE.equals(gender)) return 2;
+        return 1;
+    }
+
+    /**
+     * Counts the ancestry and collateral relatives visible above one partner.
+     * It deliberately does not follow children, so the shared descendant tree
+     * cannot make two otherwise different ancestry branches look identical.
+     */
+    private static int ancestryBranchWeight(
+        Relations relations,
+        String personId,
+        Collection<String> partnerUnit
+    ) {
+        Set<String> excluded = new HashSet<>(partnerUnit);
+        Set<String> ancestors = new LinkedHashSet<>();
+        Set<String> collateral = new LinkedHashSet<>();
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        queue.add(personId);
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            for (String sibling : relations.siblingsByPerson.getOrDefault(
+                current,
+                Collections.emptySet())) {
+                if (!excluded.contains(sibling)) collateral.add(sibling);
+            }
+            for (String parent : relations.parentsByChild.getOrDefault(
+                current,
+                Collections.emptySet())) {
+                if (excluded.contains(parent) || !ancestors.add(parent)) continue;
+                queue.addLast(parent);
+            }
+        }
+        collateral.removeAll(ancestors);
+        return ancestors.size() * 4 + collateral.size();
+    }
+
+    private static boolean hasOrderPath(
+        Map<String, Set<String>> edges,
+        String from,
+        String to
+    ) {
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        Set<String> seen = new HashSet<>();
+        queue.add(from);
+        while (!queue.isEmpty()) {
+            String current = queue.removeFirst();
+            if (!seen.add(current)) continue;
+            if (current.equals(to)) return true;
+            queue.addAll(edges.getOrDefault(current, Collections.emptySet()));
+        }
+        return false;
     }
 
     private static Float savedUnitCenter(Unit unit) {
@@ -3792,6 +6223,7 @@ final class TreeLayoutEngine {
         float center;
         double orderHint;
         int orderSamples;
+        int structuralRank = Integer.MAX_VALUE;
 
         Unit(String id, List<String> people) {
             this.id = id;
@@ -3819,6 +6251,7 @@ final class TreeLayoutEngine {
     }
 
     private static final class UnitGraph {
+        GenerationPlan generationPlan;
         final List<Unit> units = new ArrayList<>();
         final Map<String, Unit> unitById = new HashMap<>();
         final Map<String, Unit> personToUnit = new HashMap<>();

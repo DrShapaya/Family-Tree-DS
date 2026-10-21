@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 final class TreeStore {
+    private static final Object CURRENT_FILE_LOCK = new Object();
     private static final int PHOTO_DATA_LIMIT = 60_000_000;
     private static final long MAX_INTERNAL_TREE_BYTES = 256L * 1024L * 1024L;
     private static final int VERSION_LIMIT = 10;
@@ -62,6 +63,10 @@ final class TreeStore {
     }
 
     TreeState load() {
+        synchronized (CURRENT_FILE_LOCK) { return loadLocked(); }
+    }
+
+    private TreeState loadLocked() {
         boolean interruptedWrite = backupFileFor(file).exists();
         if (file.exists() || interruptedWrite) {
             try {
@@ -91,9 +96,13 @@ final class TreeStore {
     }
 
     boolean save(TreeState state) {
+        synchronized (CURRENT_FILE_LOCK) { return saveLocked(state); }
+    }
+
+    private boolean saveLocked(TreeState state) {
         byte[] data;
         try {
-            data = toJson(state).toString(2).getBytes(StandardCharsets.UTF_8);
+            data = toJson(state).toString().getBytes(StandardCharsets.UTF_8);
             writeCurrent(data);
         } catch (Exception error) {
             DiagnosticsLogger.handled(appContext, "save.current", error);
@@ -286,7 +295,7 @@ final class TreeStore {
     }
 
     TreeState parse(String text) throws Exception {
-        String value = text == null ? "" : text.trim();
+        String value = normalizeImportedText(text);
         if (looksLikeGedcom(value)) return parseGedcom(value);
 
         JSONObject document = new JSONObject(value);
@@ -296,6 +305,7 @@ final class TreeStore {
 
         TreeState state = new TreeState();
         JSONObject people = root.optJSONObject("people");
+        if (people == null) throw new java.io.IOException("В файле отсутствует структура персон дерева");
         JSONObject positions = root.optJSONObject("positions");
         Map<String, String> idMap = new HashMap<>();
         Set<String> usedIds = new HashSet<>();
@@ -361,6 +371,9 @@ final class TreeStore {
             JSONObject item = new JSONObject();
             item.put("id", person.id);
             item.put("name", person.name);
+            item.put("surname", person.surname).put("givenName", person.givenName).put("patronymic", person.patronymic);
+            item.put("maidenName", person.maidenName).put("namePartsSet", person.namePartsSet);
+            item.put("maidenNameEnabled", person.maidenNameEnabled).put("surnameDisplay", person.surnameDisplay);
             item.put("born", person.born);
             item.put("died", person.died);
             item.put("bornDay", person.bornDay);
@@ -378,6 +391,7 @@ final class TreeStore {
             item.put("avatarOffsetY", safeAvatarOffset(person.avatarOffsetY));
             item.put("gender", PersonGender.resolve(person));
             item.put("genderManual", person.genderManual);
+            item.put("lifeStatus", PersonLifeStatus.normalize(person.lifeStatus));
             item.put("memories", memoriesToJson(person));
             item.put("pinned", person.pinned);
             item.put("colorMode", normalizeColorMode(person.colorMode));
@@ -457,17 +471,21 @@ final class TreeStore {
     }
 
     private static void parsePhotoAlbums(JSONObject root, TreeState state, Map<String, String> idMap) {
+        for (String field : Arrays.asList("photoAlbums", "photoAlbumMedia", "familyAlbumMedia",
+                "personAlbumMedia", "photoAlbumFolders", "familyAlbums")) {
+            if (!root.has(field)) state.omittedAlbumFields.add(field);
+        }
         JSONObject albums = root.optJSONObject("photoAlbums");
         if (albums != null) {
             Iterator<String> names = albums.keys();
             int count = 0;
-            while (names.hasNext() && count++ < 100) {
+            while (names.hasNext()) {
                 String rawName = names.next();
                 String name = safeText(rawName, 80);
                 if (name.isEmpty()) continue;
                 JSONArray ids = albums.optJSONArray(rawName);
                 List<String> people = new ArrayList<>();
-                if (ids != null) for (int i = 0; i < Math.min(500, ids.length()); i++) {
+                if (ids != null) for (int i = 0; i < ids.length(); i++) {
                     String id = remapId(idMap, ids.optString(i));
                     if (state.people.containsKey(id) && !people.contains(id)) people.add(id);
                 }
@@ -475,7 +493,7 @@ final class TreeStore {
             }
         }
         JSONArray families = root.optJSONArray("familyAlbums");
-        if (families != null) for (int i = 0; i < Math.min(500, families.length()); i++) {
+        if (families != null) for (int i = 0; i < families.length(); i++) {
             String surname = safeText(families.optString(i), 80).toLowerCase(Locale.ROOT);
             if (!surname.isEmpty()) state.familyAlbums.add(surname);
         }
@@ -486,14 +504,14 @@ final class TreeStore {
         if (folderAlbums != null) {
             Iterator<String> albumNames = folderAlbums.keys();
             int albumCount = 0;
-            while (albumNames.hasNext() && albumCount++ < 100) {
+            while (albumNames.hasNext()) {
                 String rawAlbumName = albumNames.next();
                 String albumName = safeText(rawAlbumName, 80);
                 if (albumName.isEmpty()) continue;
                 JSONArray folders = folderAlbums.optJSONArray(rawAlbumName);
                 if (folders == null) continue;
                 List<PhotoAlbumFolder> parsed = new ArrayList<>();
-                for (int i = 0; i < Math.min(200, folders.length()); i++) {
+                for (int i = 0; i < folders.length(); i++) {
                     JSONObject item = folders.optJSONObject(i);
                     if (item == null) continue;
                     PhotoAlbumFolder folder = new PhotoAlbumFolder();
@@ -502,7 +520,7 @@ final class TreeStore {
                     String name = safeText(item.optString("name", ""), 80);
                     if (!name.isEmpty()) folder.name = name;
                     JSONArray peopleIds = item.optJSONArray("people");
-                    if (peopleIds != null) for (int p = 0; p < Math.min(500, peopleIds.length()); p++) {
+                    if (peopleIds != null) for (int p = 0; p < peopleIds.length(); p++) {
                         String personId = remapId(idMap, peopleIds.optString(p));
                         if (state.people.containsKey(personId) && !folder.personIds.contains(personId)) {
                             folder.personIds.add(personId);
@@ -524,7 +542,7 @@ final class TreeStore {
         if (source == null) return;
         Iterator<String> keys = source.keys();
         int count = 0;
-        while (keys.hasNext() && count++ < 500) {
+        while (keys.hasNext()) {
             String rawKey = keys.next();
             String key = safeText(rawKey, keyLimit);
             if (key.isEmpty()) continue;
@@ -543,7 +561,7 @@ final class TreeStore {
         if (source == null) return;
         Iterator<String> keys = source.keys();
         int count = 0;
-        while (keys.hasNext() && count++ < 500) {
+        while (keys.hasNext()) {
             String rawId = keys.next();
             String personId = remapId(idMap, safeText(rawId, 160));
             if (!state.people.containsKey(personId)) continue;
@@ -555,7 +573,7 @@ final class TreeStore {
 
     private static void parseMediaList(JSONArray source, List<String> target) {
         if (source == null) return;
-        for (int i = 0; i < Math.min(2000, source.length()); i++) {
+        for (int i = 0; i < source.length(); i++) {
             String mediaId = safeMediaId(source.optString(i));
             if (!mediaId.isEmpty() && !target.contains(mediaId)) target.add(mediaId);
         }
@@ -578,7 +596,16 @@ final class TreeStore {
 
     private static Person parsePerson(String key, JSONObject item, int index) {
         Person person = new Person(item.optString("id", key));
-        person.name = safeText(item.optString("name", "Без имени"), 160);
+        person.name = safeText(item.optString("name", "Без имени"), 480);
+        person.surname = safeText(item.optString("surname", ""), 160);
+        person.givenName = safeText(item.optString("givenName", ""), 160);
+        person.patronymic = safeText(item.optString("patronymic", ""), 160);
+        person.maidenName = safeText(item.optString("maidenName", ""), 160);
+        person.namePartsSet = item.optBoolean("namePartsSet", false);
+        person.maidenNameEnabled = item.optBoolean("maidenNameEnabled", !person.maidenName.isEmpty());
+        person.surnameDisplay = PersonNames.mode(item.optString("surnameDisplay", "inherit"));
+        if (person.namePartsSet) PersonNames.set(person, person.surname, person.givenName, person.patronymic);
+        PersonNames.migrateLegacy(person);
         person.born = safeText(item.optString("born", ""), 32);
         person.died = safeText(item.optString("died", ""), 32);
         DateParts born = parseLooseDate(person.born);
@@ -586,19 +613,21 @@ final class TreeStore {
         person.bornDay = safeDatePart(item.optString("bornDay", born.day), 31);
         person.bornMonth = safeDatePart(item.optString("bornMonth", born.month), 12);
         person.bornYear = safeYear(item.optString("bornYear", item.optString("bornYear", born.year)));
-        if (person.bornYear.isEmpty()) person.bornYear = safeYear(item.optString("born", ""));
+        if (person.bornYear.isEmpty()) person.bornYear = looseYear(person.born);
         person.diedDay = safeDatePart(item.optString("diedDay", died.day), 31);
         person.diedMonth = safeDatePart(item.optString("diedMonth", died.month), 12);
         person.diedYear = safeYear(item.optString("diedYear", died.year));
-        if (person.diedYear.isEmpty()) person.diedYear = safeYear(item.optString("died", ""));
+        if (person.diedYear.isEmpty()) person.diedYear = looseYear(person.died);
         person.place = safeText(item.optString("place", ""), 240);
-        person.notes = safeText(item.optString("notes", ""), 4000);
+        // The input file already has a size limit. Imported biographies must survive reloads.
+        person.notes = item.optString("notes", "").replace('\u0000',' ');
         person.photoMediaId = safeMediaId(item.optString("photoId", ""));
         person.photo = safeDataUrl(firstPhotoValue(item));
         person.avatarScale = safeAvatarScale((float) item.optDouble("avatarScale", 1d));
         person.avatarOffsetX = safeAvatarOffset((float) item.optDouble("avatarOffsetX", 0d));
         person.avatarOffsetY = safeAvatarOffset((float) item.optDouble("avatarOffsetY", 0d));
         person.genderManual = item.optBoolean("genderManual", item.has("gender"));
+        person.lifeStatus = PersonLifeStatus.normalize(item.optString("lifeStatus", ""));
         person.gender = PersonGender.normalize(item.optString("gender", ""));
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
         parseMemories(item.optJSONArray("memories"), person);
@@ -619,7 +648,7 @@ final class TreeStore {
 
     private static void parseMemories(JSONArray source, Person person) {
         if (source == null) return;
-        int count = Math.min(80, source.length());
+        int count = source.length();
         for (int i = 0; i < count; i++) {
             JSONObject item = source.optJSONObject(i);
             if (item == null) continue;
@@ -627,7 +656,7 @@ final class TreeStore {
             memory.id = item.optString("id", makeId("m"));
             memory.type = normalizeMemoryType(item.optString("type", "story"));
             memory.title = safeText(item.optString("title", "Воспоминание"), 120);
-            memory.text = safeText(item.optString("text", item.optString("note", "")), 6000);
+            memory.text = item.optString("text", item.optString("note", "")).replace('\u0000', ' ');
             memory.filename = safeText(item.optString("filename", ""), 180);
             memory.mimeType = safeText(item.optString("mimeType", ""), 120);
             String legacyData = item.optString("data", item.optString("src", ""));
@@ -637,7 +666,7 @@ final class TreeStore {
             memory.at = safeText(item.optString("at", isoNow()), 40);
             JSONArray attachments = item.optJSONArray("attachments");
             if (attachments != null) {
-                int attachmentCount = Math.min(24, attachments.length());
+                int attachmentCount = attachments.length();
                 for (int attachmentIndex = 0; attachmentIndex < attachmentCount; attachmentIndex++) {
                     JSONObject attachmentItem = attachments.optJSONObject(attachmentIndex);
                     if (attachmentItem == null) continue;
@@ -688,7 +717,7 @@ final class TreeStore {
                 .put("id", emptyToId(memory.id, "m"))
                 .put("type", normalizeMemoryType(memory.type))
                 .put("title", safeText(memory.title, 120))
-                .put("text", safeText(memory.text, 6000))
+                .put("text", memory.text == null ? "" : memory.text.replace('\u0000', ' '))
                 .put("filename", memory.attachments.isEmpty() ? safeText(memory.filename, 180) : "")
                 .put("mimeType", memory.attachments.isEmpty() ? safeText(memory.mimeType, 120) : "")
                 .put("data", memory.attachments.isEmpty() ? safeAttachmentDataUrl(memory.data) : "")
@@ -787,6 +816,10 @@ final class TreeStore {
         state.onboardingOffered = settings.optBoolean("onboardingOffered", state.onboardingOffered);
         state.guidesVisible = !settings.has("guidesVisible") || settings.optBoolean("guidesVisible", true);
         state.hideCardDetails = settings.optBoolean("hideCardDetails", state.hideCardDetails);
+        state.useMaidenNames = settings.optBoolean("useMaidenNames", false);
+        state.showQualityBadge = settings.optBoolean("showQualityBadge", true);
+        state.showLifeStatusBadge = settings.optBoolean("showLifeStatusBadge", false);
+        state.lifeStatusAppearance = LifeStatusAppearance.decode(settings.optString("lifeStatusAppearance", ""));
         state.compactCards = settings.optBoolean("compactCards", state.compactCards);
         state.focusTree = settings.optBoolean("focusTree", state.focusTree);
         state.autoArrangeOnAdd = settings.optBoolean("autoArrangeOnAdd", state.autoArrangeOnAdd);
@@ -795,6 +828,9 @@ final class TreeStore {
         state.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(
             settings.optInt("workspaceHeight", state.workspaceHeight));
         state.parentLineMode = "orthogonal".equals(settings.optString("parentLineMode", "smart")) ? "orthogonal" : "smart";
+        state.familyLineMode = "individual".equals(settings.optString("familyLineMode", "centered"))
+            ? "individual"
+            : "centered";
     }
 
     private static JSONObject settingsToJson(TreeState state) throws Exception {
@@ -812,12 +848,17 @@ final class TreeStore {
             .put("onboardingOffered", state.onboardingOffered)
             .put("guidesVisible", state.guidesVisible)
             .put("hideCardDetails", state.hideCardDetails)
+            .put("useMaidenNames", state.useMaidenNames)
+            .put("showQualityBadge", state.showQualityBadge)
+            .put("showLifeStatusBadge", state.showLifeStatusBadge)
+            .put("lifeStatusAppearance", state.lifeStatusAppearance.encode())
             .put("compactCards", state.compactCards)
             .put("focusTree", state.focusTree)
             .put("autoArrangeOnAdd", state.autoArrangeOnAdd)
             .put("workspaceWidth", TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth))
             .put("workspaceHeight", TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight))
-            .put("parentLineMode", "orthogonal".equals(state.parentLineMode) ? "orthogonal" : "smart");
+            .put("parentLineMode", "orthogonal".equals(state.parentLineMode) ? "orthogonal" : "smart")
+            .put("familyLineMode", "individual".equals(state.familyLineMode) ? "individual" : "centered");
     }
 
     private static void parseHistory(JSONArray source, TreeState state) {
@@ -849,82 +890,11 @@ final class TreeStore {
         return array;
     }
 
-    private static TreeState parseGedcom(String text) {
-        TreeState state = new TreeState();
-        Map<String, String> pointers = new HashMap<>();
-        Map<String, FamilyDraft> families = new HashMap<>();
-        String currentKind = "";
-        String currentId = "";
-        String currentEvent = "";
-
-        String[] lines = text.split("\\r?\\n");
-        for (String raw : lines) {
-            GedcomLine line = GedcomLine.parse(raw);
-            if (line == null) continue;
-            if (line.level == 0) {
-                currentEvent = "";
-                if ("INDI".equals(line.tag)) {
-                    Person person = new Person(makeId("p"));
-                    person.name = "Без имени";
-                    person.manualColor = TreeState.colorString(TreeState.colorFor(person.name, state.people.size()));
-                    person.color = TreeState.displayColor(person, state.people.size());
-                    pointers.put(line.pointer, person.id);
-                    state.people.put(person.id, person);
-                    currentKind = "person";
-                    currentId = person.id;
-                } else if ("FAM".equals(line.tag)) {
-                    currentKind = "family";
-                    currentId = line.pointer.isEmpty() ? makeId("f") : line.pointer;
-                    families.put(currentId, new FamilyDraft());
-                } else {
-                    currentKind = "";
-                    currentId = "";
-                }
-                continue;
-            }
-            if ("person".equals(currentKind)) {
-                Person person = state.people.get(currentId);
-                if (person == null) continue;
-                if (line.level == 1 && "NAME".equals(line.tag)) person.name = cleanGedcomName(line.value);
-                if (line.level == 1 && "SEX".equals(line.tag)) {
-                    person.gender = "M".equalsIgnoreCase(line.value) ? PersonGender.MALE
-                        : "F".equalsIgnoreCase(line.value) ? PersonGender.FEMALE : PersonGender.UNKNOWN;
-                    person.genderManual = !PersonGender.UNKNOWN.equals(person.gender);
-                }
-                if (line.level == 1 && "NOTE".equals(line.tag)) person.notes = joinLines(person.notes, safeText(line.value, 1000));
-                if (line.level == 1 && ("BIRT".equals(line.tag) || "DEAT".equals(line.tag))) currentEvent = "BIRT".equals(line.tag) ? "born" : "died";
-                if (line.level == 2 && "DATE".equals(line.tag) && !currentEvent.isEmpty()) applyGedcomDate(person, currentEvent, line.value);
-                if (line.level == 2 && "PLAC".equals(line.tag) && "born".equals(currentEvent)) person.place = safeText(line.value, 240);
-            } else if ("family".equals(currentKind)) {
-                FamilyDraft family = families.get(currentId);
-                if (family == null) continue;
-                if ("HUSB".equals(line.tag) || "WIFE".equals(line.tag)) family.parents.add(line.value);
-                if ("CHIL".equals(line.tag)) family.children.add(line.value);
-            }
-        }
-
-        for (FamilyDraft family : families.values()) {
-            java.util.List<String> parents = new java.util.ArrayList<>();
-            for (String pointer : family.parents) {
-                String id = pointers.get(pointer);
-                if (id != null) parents.add(id);
-            }
-            java.util.List<String> children = new java.util.ArrayList<>();
-            for (String pointer : family.children) {
-                String id = pointers.get(pointer);
-                if (id != null) children.add(id);
-            }
-            if (parents.size() >= 2) state.addRelation("partner", parents.get(0), parents.get(1), "right");
-            for (String parent : parents) for (String child : children) state.addRelation("parent", parent, child);
-        }
-        state.rootId = state.people.isEmpty() ? "" : state.people.values().iterator().next().id;
-        state.selectedId = state.rootId;
-        TreeLayoutEngine.rebuildStepwise(state);
-        refreshColors(state);
-        return state;
+    static TreeState parseGedcom(String text) {
+        return GedcomReader.read(text).state;
     }
 
-    private static void refreshColors(TreeState state) {
+    static void refreshColors(TreeState state) {
         int index = 0;
         for (Person person : state.people.values()) {
             person.colorMode = normalizeColorMode(person.colorMode);
@@ -953,7 +923,16 @@ final class TreeStore {
         return output.toString("UTF-8");
     }
 
-    private static boolean looksLikeGedcom(String text) {
+    static String normalizeImportedText(String text) {
+        String value = text == null ? "" : text.trim();
+        // Files exported by other genealogy programs often start with a
+        // UTF-8 BOM. Java's trim() does not remove U+FEFF, so format detection
+        // would misclassify an otherwise valid GEDCOM as JSON.
+        if (value.startsWith("\uFEFF")) value = value.substring(1).trim();
+        return value;
+    }
+
+    static boolean looksLikeGedcom(String text) {
         return text.matches("(?is)^\\s*0\\s+HEAD.*");
     }
 
@@ -1071,8 +1050,20 @@ final class TreeStore {
         return "light";
     }
 
-    private static String cleanGedcomName(String value) {
-        String text = value == null ? "" : value.replace("/", "").trim();
+    static String cleanGedcomName(String value) {
+        String text = value == null ? "" : value.trim();
+        int surnameStart = text.indexOf('/');
+        int surnameEnd = surnameStart < 0 ? -1 : text.indexOf('/', surnameStart + 1);
+        if (surnameEnd >= 0) {
+            // GEDCOM marks the surname with slashes. The app stores names
+            // surname-first and uses the first word for surname-based colors.
+            String surname = text.substring(surnameStart + 1, surnameEnd).trim();
+            String before = text.substring(0, surnameStart).trim();
+            String after = text.substring(surnameEnd + 1).trim();
+            text = surname + " " + before + " " + after;
+        }
+        // Without a complete pair of markers, preserve the supplied order.
+        text = text.replace("/", "").replaceAll("\\s+", " ").trim();
         return text.isEmpty() ? "Без имени" : safeText(text, 160);
     }
 
@@ -1085,18 +1076,37 @@ final class TreeStore {
     private static DateParts parseLooseDate(String value) {
         DateParts parts = new DateParts();
         if (value == null) return parts;
-        String[] tokens = value.replaceAll("[^0-9.\\-/ ]", " ").trim().split("[.\\-/ ]+");
-        if (tokens.length >= 3) {
-            parts.day = safeDatePart(tokens[0], 31);
-            parts.month = safeDatePart(tokens[1], 12);
-            parts.year = safeYear(tokens[2]);
-        } else if (tokens.length == 1) {
+        String[] tokens = value.trim().split("[.\\-/ ]+");
+        if (tokens.length == 3 && value.trim().matches("[0-9.\\-/ ]+")) {
+            boolean iso = tokens[0].length() == 4;
+            try {
+                int year = Integer.parseInt(tokens[iso ? 0 : 2]);
+                int month = Integer.parseInt(tokens[1]);
+                int day = Integer.parseInt(tokens[iso ? 2 : 0]);
+                java.util.GregorianCalendar calendar = new java.util.GregorianCalendar();
+                calendar.setGregorianChange(new Date(Long.MIN_VALUE));
+                calendar.clear();
+                calendar.setLenient(false);
+                calendar.set(year, month - 1, day);
+                calendar.getTimeInMillis();
+                if (year < 1 || year > 9999) return parts;
+                parts.day = safeDatePart(String.valueOf(day), 31);
+                parts.month = safeDatePart(String.valueOf(month), 12);
+                parts.year = safeYear(String.valueOf(year));
+            } catch (RuntimeException invalid) { /* Keep the original free-form date. */ }
+        } else if (tokens.length == 1 && tokens[0].matches("\\d{3,4}")) {
             parts.year = safeYear(tokens[0]);
         }
         return parts;
     }
 
-    private static void applyGedcomDate(Person person, String prefix, String value) {
+    private static String looseYear(String value) {
+        java.util.regex.Matcher year = java.util.regex.Pattern.compile("(?<!\\d)(\\d{3,4})(?!\\d)")
+            .matcher(value == null ? "" : value);
+        return year.find() ? safeYear(year.group(1)) : "";
+    }
+
+    static void applyGedcomDate(Person person, String prefix, String value) {
         DateParts parts = parseGedcomDate(value);
         if ("born".equals(prefix)) {
             person.bornDay = parts.day;
@@ -1143,6 +1153,7 @@ final class TreeStore {
     private static final class FamilyDraft {
         final java.util.List<String> parents = new java.util.ArrayList<>();
         final java.util.List<String> children = new java.util.ArrayList<>();
+        final java.util.Map<String, String> parentGenders = new java.util.LinkedHashMap<>();
     }
 
     private static final class GedcomLine {

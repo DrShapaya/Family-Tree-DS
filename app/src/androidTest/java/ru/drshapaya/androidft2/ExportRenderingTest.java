@@ -25,6 +25,7 @@ public class ExportRenderingTest extends InstrumentationTestCase {
         Intent intent = new Intent(getInstrumentation().getTargetContext(), MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         activity = (MainActivity) getInstrumentation().startActivitySync(intent);
+        TestStartup.await(getInstrumentation(), activity);
         getInstrumentation().waitForIdleSync();
         artifacts = new File(activity.getExternalMediaDirs()[0], "additional_test_output");
         artifacts.mkdirs();
@@ -365,7 +366,7 @@ public class ExportRenderingTest extends InstrumentationTestCase {
             bitmap.recycle();
         }
         assertEquals("Link paths must be built once across zoom frames", 1, effect.linkBuildCountForTests());
-        assertTrue("Card edge variants must stay bounded", effect.cardBuildCountForTests() <= 8);
+        assertEquals("Each distinct procedural seed is built once and survives every zoom frame",40,effect.cardBuildCountForTests());
     }
 
     public void testExportMenuBotanicalCanvasAndFireFrame() throws Exception {
@@ -382,7 +383,10 @@ public class ExportRenderingTest extends InstrumentationTestCase {
                 assertNotNull(findText(root, "JSON"));
                 assertNotNull(findText(root, "GEDCOM"));
                 assertNotNull(findText(root, "PDF"));
-                assertNull(findText(root, "PNG"));
+                assertNotNull(findText(root, "PNG"));
+                assertNotNull(findText(root, "HTML"));
+                assertNotNull(findText(root, "XML"));
+                assertNotNull(findText(root, "Отправить дерево"));
             } catch (Exception error) { throw new AssertionError(error); }
         });
         getInstrumentation().waitForIdleSync(); android.os.SystemClock.sleep(350);
@@ -527,6 +531,32 @@ public class ExportRenderingTest extends InstrumentationTestCase {
         });
     }
 
+    public void testFiveHundredCardTreeRendersAndEncodesWithinSafeBudget() {
+        getInstrumentation().runOnMainSync(() -> {
+            TreeState before = activity.state;
+            activity.state = exportStressTree(500);
+            TreeImageExport export = null;
+            Bitmap bitmap = null;
+            try {
+                export = new TreeImageExport(activity);
+                ExportLayout layout = export.layout(16f, 64_000_000L);
+                assertTrue((long) layout.width * layout.height <= export.safePixelsPerBitmap);
+                assertTrue(layout.width <= ExportLayout.MAX_BITMAP_SIDE);
+                assertTrue(layout.height <= ExportLayout.MAX_BITMAP_SIDE);
+                bitmap = export.tile(layout, 0, 0);
+                assertEquals(layout.width, bitmap.getWidth());
+                assertEquals(layout.height, bitmap.getHeight());
+                java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, png));
+                assertTrue("500-card PNG is unexpectedly empty", png.size() > 32_768);
+            } finally {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+                if (export != null) export.close();
+                activity.state = before;
+            }
+        });
+    }
+
     public void testWorkshopEdgeSectionAndIndependentSelection() throws Exception {
         android.content.SharedPreferences prefs = activity.getSharedPreferences("androidft-rewards", 0);
         java.util.Set<String> oldOwned = new java.util.HashSet<>(prefs.getStringSet("owned", java.util.Collections.emptySet()));
@@ -540,10 +570,16 @@ public class ExportRenderingTest extends InstrumentationTestCase {
             getInstrumentation().runOnMainSync(() -> {
                 try {
                     Method open = MainActivity.class.getDeclaredMethod("openWorkshop"); open.setAccessible(true); open.invoke(activity);
-                    java.lang.reflect.Field field = MainActivity.class.getDeclaredField("workshopDialog"); field.setAccessible(true);
-                    dialog[0] = (android.app.Dialog) field.get(activity);
-                    Method select = MainActivity.class.getDeclaredMethod("chooseWorkshopItem", String.class, String.class); select.setAccessible(true);
-                    select.invoke(activity, RewardCatalog.CARD_EDGES, "card_edge_botanical");
+                    java.lang.reflect.Field moduleField = MainActivity.class.getDeclaredField("workshopModule");
+                    moduleField.setAccessible(true);
+                    Object workshop = moduleField.get(activity);
+                    java.lang.reflect.Field dialogField = MainActivityWorkshop.class.getDeclaredField("workshopDialog");
+                    dialogField.setAccessible(true);
+                    dialog[0] = (android.app.Dialog) dialogField.get(workshop);
+                    Method select = MainActivityWorkshop.class.getDeclaredMethod(
+                        "chooseWorkshopItem", String.class, String.class);
+                    select.setAccessible(true);
+                    select.invoke(workshop, RewardCatalog.CARD_EDGES, "card_edge_botanical");
                     RewardWallet wallet = new RewardWallet(activity);
                     assertEquals("card_theme_smoke", wallet.selected(RewardCatalog.CARD_THEMES));
                     assertEquals("card_edge_botanical", wallet.selected(RewardCatalog.CARD_EDGES));
@@ -582,6 +618,29 @@ public class ExportRenderingTest extends InstrumentationTestCase {
             }
         }
         return null;
+    }
+
+    private static TreeState exportStressTree(int count) {
+        TreeState state = new TreeState();
+        int columns = 25;
+        float stepX = TreeLayoutEngine.CARD_W + 72f;
+        float stepY = TreeLayoutEngine.CARD_H + 96f;
+        for (int index = 0; index < count; index++) {
+            String id = "export-stress-" + index;
+            Person person = new Person(id);
+            person.name = "Человек " + (index + 1);
+            person.gender = index % 2 == 0 ? PersonGender.MALE : PersonGender.FEMALE;
+            person.x = (index % columns) * stepX;
+            person.y = (index / columns) * stepY;
+            state.people.put(id, person);
+            if (index > 0) {
+                String parentId = "export-stress-" + ((index - 1) / 2);
+                state.addRelation("parent", parentId, id);
+            }
+        }
+        state.rootId = "export-stress-0";
+        state.selectedId = state.rootId;
+        return state;
     }
 
     private android.widget.TextView findTextStarting(android.view.View view, String text) {

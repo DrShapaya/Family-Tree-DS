@@ -15,6 +15,13 @@ final class LayoutConstraints {
             violations.add(new Violation("missing-input", "", "", "Нет графа или координат"));
             return new ValidationResult(violations);
         }
+        for (FamilyLayoutGraph.GenerationConflict conflict : graph.generationConflicts) {
+            violations.add(new Violation(
+                "generation-conflict",
+                conflict.sourceId,
+                conflict.targetId,
+                "Противоречивые родственные связи задают разные поколения"));
+        }
         for (String id : graph.people.keySet()) {
             LayoutSnapshot.Position position = snapshot.positionOf(id);
             if (position == null || !position.isFinite()) {
@@ -23,6 +30,20 @@ final class LayoutConstraints {
             }
             if (position.x < 0f || position.y < 0f) {
                 violations.add(new Violation("outside-workspace", id, "", "Отрицательная координата"));
+            }
+            // The workspace may grow after a layout operation. Only the absolute
+            // supported canvas limit is a hard constraint here; the current saved
+            // dimensions are not, otherwise a candidate that legitimately expands
+            // the canvas would be rejected before expandWorkspaceToFit() runs.
+            if (position.x + TreeLayoutEngine.CARD_W
+                    > TreeLayoutEngine.MAX_SURFACE_SIZE + EPSILON
+                || position.y + TreeLayoutEngine.CARD_H
+                    > TreeLayoutEngine.MAX_SURFACE_SIZE + EPSILON) {
+                violations.add(new Violation(
+                    "outside-workspace",
+                    id,
+                    "",
+                    "Карточка выходит за правую или нижнюю границу"));
             }
             if (!onGrid(position.x) || !onGrid(position.y)) {
                 violations.add(new Violation("off-grid", id, "", "Координата не привязана к сетке"));
@@ -46,13 +67,22 @@ final class LayoutConstraints {
                 String secondId = ids.get(secondIndex);
                 LayoutSnapshot.Position second = snapshot.positionOf(secondId);
                 if (second == null || !second.isFinite()) continue;
-                if (second.x >= first.x + TreeLayoutEngine.CARD_W) break;
+                if (second.x >= first.x + TreeLayoutEngine.CARD_W + TreeLayoutEngine.GRID) {
+                    break;
+                }
                 if (cardsOverlap(first, second)) {
                     violations.add(new Violation(
                         "card-overlap",
                         firstId,
                         secondId,
                         "Карточки пересекаются"));
+                } else if (verticallyOverlap(first, second)
+                    && horizontalGap(first, second) < TreeLayoutEngine.GRID - EPSILON) {
+                    violations.add(new Violation(
+                        "card-spacing",
+                        firstId,
+                        secondId,
+                        "Между карточками нет минимального интервала"));
                 }
             }
         }
@@ -63,7 +93,8 @@ final class LayoutConstraints {
             for (String partnerId : entry.getValue()) {
                 if (entry.getKey().compareTo(partnerId) >= 0) continue;
                 LayoutSnapshot.Position partner = snapshot.positionOf(partnerId);
-                if (partner != null && Math.abs(first.y - partner.y) > EPSILON) {
+                float expected = graph.generationStep(entry.getKey(), partnerId, 0) * TreeLayoutEngine.LEVEL_GAP;
+                if (partner != null && Math.abs(partner.y - first.y - expected) > EPSILON) {
                     violations.add(new Violation(
                         "partner-generation",
                         entry.getKey(),
@@ -78,13 +109,14 @@ final class LayoutConstraints {
             if (parent == null) continue;
             for (String childId : entry.getValue()) {
                 LayoutSnapshot.Position child = snapshot.positionOf(childId);
+                float expected = graph.generationStep(entry.getKey(), childId, 1) * TreeLayoutEngine.LEVEL_GAP;
                 if (child != null
-                    && child.y - parent.y < TreeLayoutEngine.LEVEL_GAP - EPSILON) {
+                    && Math.abs(child.y - parent.y - expected) > EPSILON) {
                     violations.add(new Violation(
                         "parent-generation",
                         entry.getKey(),
                         childId,
-                        "Родитель расположен недостаточно высоко"));
+                        "Положение ребёнка не соответствует родительским связям"));
                 }
             }
         }
@@ -95,7 +127,8 @@ final class LayoutConstraints {
             for (String siblingId : entry.getValue()) {
                 if (entry.getKey().compareTo(siblingId) >= 0) continue;
                 LayoutSnapshot.Position sibling = snapshot.positionOf(siblingId);
-                if (sibling != null && Math.abs(first.y - sibling.y) > EPSILON) {
+                float expected = graph.generationStep(entry.getKey(), siblingId, 0) * TreeLayoutEngine.LEVEL_GAP;
+                if (sibling != null && Math.abs(sibling.y - first.y - expected) > EPSILON) {
                     violations.add(new Violation(
                         "sibling-generation",
                         entry.getKey(),
@@ -120,6 +153,24 @@ final class LayoutConstraints {
             && second.x < first.x + TreeLayoutEngine.CARD_W
             && first.y < second.y + TreeLayoutEngine.CARD_H
             && second.y < first.y + TreeLayoutEngine.CARD_H;
+    }
+
+    private static boolean verticallyOverlap(
+        LayoutSnapshot.Position first,
+        LayoutSnapshot.Position second
+    ) {
+        return first.y < second.y + TreeLayoutEngine.CARD_H
+            && second.y < first.y + TreeLayoutEngine.CARD_H;
+    }
+
+    private static float horizontalGap(
+        LayoutSnapshot.Position first,
+        LayoutSnapshot.Position second
+    ) {
+        if (first.x <= second.x) {
+            return second.x - (first.x + TreeLayoutEngine.CARD_W);
+        }
+        return first.x - (second.x + TreeLayoutEngine.CARD_W);
     }
 
     static final class ValidationResult {

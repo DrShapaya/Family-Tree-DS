@@ -1,4 +1,11 @@
 {
+  "Исправлена чёткость карточек, текста и значков при приближении и отдалении дерева. Убрано растягивание уменьшенных копий карточек во время масштабирования, улучшено сглаживание фотографий.": "Fixed card, text and icon clarity when zooming in and out. Small card bitmaps are no longer stretched during zoom, and photo filtering has been improved.",
+  "Уменьшены кратковременные задержки при перемещении и масштабировании больших деревьев. Оптимизированы работа с памятью и обновление карточек во время движений. Содержимое карточек и фотографии сохраняются.": "Reduced brief pauses when panning and zooming large trees. Improved memory use and card updates during gestures. Card contents and photos are preserved.",
+  "Повышена плавность перетаскивания и масштабирования больших деревьев. Огненные края и огненная тема на Android 13 и новее используют GPU, а готовый рисунок карточек кэшируется с обновлением после правок. Содержимое карточек, пламя и искры сохраняются.": "Improved panning and zooming smoothness in large trees. Fire edges and the fire card theme use the GPU on Android 13 and newer. Complete card artwork is cached and refreshed after edits. Card contents, flames and sparks are preserved.",
+  "Ускорена работа дерева с оформлениями мастерской: огненными и дымными краями, растительными и ленточными связями, темами карточек и фонами. Исправлены кэширование растительного оформления и отображение длинных связей. Эффекты и детали при отдалении сохраняются.": "Improved tree performance with workshop designs: fire and smoke edges, botanical and ribbon links, card themes and backgrounds. Fixed botanical design caching and long links. Effects and details remain visible when zooming out.",
+  "Родство, возраст и дети": "Relationships, ages and children",
+  "Связи в цвет карточек": "Links in card colors",
+  "Линии повторяют цвета карточек. При окраске по фамилии ветви получают семейные цвета.": "Links follow card colors. Surname coloring gives branches their family colors.",
   "AЯ": "AЯ",
   "Добавление к выделению включено": "Add-to-selection mode enabled",
   "Добавлять к текущему выделению": "Add to current selection",
@@ -246,6 +253,7 @@
   "Добавить детей": "Add children",
   "Добавить заметку…": "Add a note...",
   "Добавить партнёра": "Add a partner",
+  "Добавить нового партнёра как их второго родителя?": "Add the new partner as their second parent?",
   "Добавить родителей": "Add parents",
   "ДОБАВИТЬ РОДСТВЕННИКА": "ADD RELATIVE",
   "Добавлен: ": "Added:",
@@ -289,6 +297,7 @@
   "Загружаем список из GitHub…": "Downloading the list from GitHub...",
   "Загружаем структуру. Медиа продолжат загружаться в фоне…": "Loading the structure. Media will continue to load in the background...",
   "Загружает .ftree, JSON или совместимый текстовый файл.": "Loads a .ftree, JSON, or compatible text file.",
+  "Загружает .ftree, JSON и GEDCOM (.ged).": "Loads .ftree, JSON, and GEDCOM (.ged) files.",
   "Загрузить": "Download",
   "Загрузить дерево из GitHub": "Download tree from GitHub",
   "Загрузить дерево из GitHub?": "Download tree from GitHub?",
@@ -497,6 +506,7 @@
   "Новое выделение заменяет старое": "The new selection replaces the old one",
   "НОВОЕ СЕМЕЙНОЕ ДЕРЕВО": "NEW FAMILY TREE",
   "Новый партнёр": "New partner",
+  "Не связывать": "Do not link",
   "Новый ребёнок": "New baby",
   "Новый ребёнок ": "New baby",
   "Новый родитель": "New parent",
@@ -509,7 +519,7 @@
   "Обучение": "Training",
   "ОБУЧЕНИЕ  ·  ШАГ ": "TRAINING STEP",
   "Общее семейное дерево": "General family tree",
-  "Обычное": "Normal",
+  "Обычное": "Common",
   "Обычный интерфейс восстановлен": "The normal interface has been restored",
   "Обязательное поле только одно — имя": "There is only one required field - name",
   "ова": "ova",
@@ -564,6 +574,18 @@
   "Открыть файл": "Open file",
   "Открыть GitHub": "Open GitHub",
   "Отмена": "Cancel",
+  "Без второго родителя": "Without a second parent",
+  "Выберите второго родителя": "Choose the second parent",
+  "Связать партнёра с детьми?": "Link partner to children?",
+  "Связать с детьми": "Link to children",
+  "Новый партнёр станет родителем существующих детей": "The new partner will become a parent of the existing children",
+  "Добавится только связь партнёров": "Only the partner relationship will be added",
+  "Второй родитель для новых детей": "Second parent of the new children",
+  "Связать детей только с выбранной персоной": "Link the children only to the selected person",
+  "ДОБАВЛЕНИЕ ПАРТНЁРА": "ADDING A PARTNER",
+  "ДОБАВЛЕНИЕ ДЕТЕЙ": "ADDING CHILDREN",
+  "У выбранной персоны уже есть дети: ": "The selected person already has children: ",
+  "У выбранной персоны несколько партнёров. С кем связать новых детей?": "The selected person has several partners. Who should be the new children's second parent?",
   "Отменить вход": "Cancel login",
   "Отображение ветки": "Showing a branch",
   "Отправить запрос": "Send request",
@@ -574,7 +596,7 @@
   "Отправляет один .ftree файл вместе с фото и вложениями.": "Sends one .ftree file along with a photo and attachments.",
   "отчим": "stepfather",
   "Офлайн": "Offline",
-  "ОФОРМЛЕНИЕ": "DESIGN",
+  "ОФОРМЛЕНИЕ": "APPEARANCE",
   "Очень высокое": "Very high",
   "Очистить все направляющие": "Clear all guides",
   "Очищена последняя карточка": "Last card cleared",
@@ -653,7 +675,7 @@
   "Получается ": "It turns out",
   "Получены изменения дерева": "Tree changes received",
   "Пользователь потеряет доступ к приватному дереву. Его локальная копия на устройстве не удаляется.": "The user will lose access to the private tree. Its local copy on the device is not deleted.",
-  "Понятно": "I see",
+  "Понятно": "Got it",
   "После подключения текущее дерево на экране будет заменено общей версией. Локальные сохранённые версии останутся доступными для восстановления.": "Once connected, the current tree on the screen will be replaced with the shared version. Local saved versions will remain available for restoration.",
   "После создания откроется обычное дерево: карточки можно дополнять, перемещать и связывать.": "After creation, a regular tree will open: cards can be supplemented, moved and linked.",
   "последнее действие": "last action",
@@ -872,9 +894,11 @@
   "Удаление направляющих": "Removing guides",
   "Удаление связи": "Delete a connection",
   "Удаление человека нельзя отменить после закрытия приложения": "Deleting a person cannot be undone after closing the application",
+  "Удаление выбранных": "Delete selected people",
   "Удалено всё дерево": "The entire tree has been removed",
   "Удалено фото": "Photo deleted",
   "Удалить": "Delete",
+  "Удалить всех": "Delete all",
   "Удалить всё дерево": "Delete the entire tree",
   "Удалить всё дерево?": "Remove the entire tree?",
   "Удалить дерево": "Delete tree",
@@ -929,14 +953,14 @@
   "Фокус на дереве": "Focus on the tree",
   "Фокус на дереве включён": "Tree focus enabled",
   "Формат: ": "Format:",
-  "Фото": "Photo",
+  "Фото": "Photos",
   "Фото загружено": "Photo uploaded",
   "Фото не загружено: ": "Photo not uploaded:",
   "Фото не открыто": "Photo is not open",
   "Фото не удалось открыть.": "The photo could not be opened.",
   "Фото профиля": "Profile photo",
   "Фото, документы, аудио и видео синхронизируются вместе с деревом через приватное хранилище GitHub.": "Photos, documents, audio and video are synced with the tree via a private GitHub repository.",
-  "Фотография": "Photography",
+  "Фотография": "Photo",
   "Хороший баланс размера и чёткости": "Good balance of size and clarity",
   "Цвет и положение на дереве": "Color and position on the tree",
   "Цвет карточек обновлён": "Card color updated",
@@ -984,7 +1008,8 @@
   "GitHub не разрешил операцию или временно ограничил запросы.": "GitHub did not allow the operation or temporarily restricted requests.",
   "GitHub не создал хранилище медиа": "GitHub didn't create a media repository",
   "GitHub недоступен через активную сеть": "GitHub is not accessible via the active network",
-  "GitHub отклонил запрос. Проверьте права приложения.": "GitHub rejected the request. Check application permissions.",
+  "GitHub отклонил запрос.": "GitHub rejected the request.",
+  "GitHub отклонил запрос: ": "GitHub rejected the request: ",
   "GitHub подключён: @": "GitHub connected: @",
   "GitHub просит подождать подтверждение…": "GitHub asks to wait for confirmation...",
   "GitHub-аккаунт изменился. Старое онлайн-дерево отключено для безопасности.": "GitHub account has changed. The old online tree has been disabled for security.",
@@ -1044,7 +1069,6 @@
   "Циклическая родительская связь": "Cyclic parent relationship",
   "Несовместимые типы связи": "Conflicting relationship types",
   "Указано больше двух родителей": "More than two parents are specified",
-  "ОФОРМЛЕНИЕ": "APPEARANCE",
   "Мягкие": "Soft",
   "Спокойный пунктир и лёгкое затемнение снаружи": "Subtle dashes and light shading outside",
   "Контрастные": "High contrast",
@@ -1055,13 +1079,11 @@
   "контрастные": "high contrast",
   "только контур": "outline only",
   "мягкие": "soft",
-  "Сохранить": "Save",
   "РАЗМЕР РАБОЧЕЙ ЗОНЫ": "WORKSPACE SIZE",
   "Ширина × высота в единицах полотна": "Width × height in canvas units",
   "Мужчины": "Men",
   "Женщины": "Women",
   "Не указан": "Not specified",
-  "ВЫБРАНА КАРТОЧКА": "SELECTED CARD",
   "Сколько добавить?": "How many should be added?",
   "Выберите количество родителей": "Choose the number of parents",
   "Выберите количество детей": "Choose the number of children",
@@ -1106,347 +1128,529 @@
   "Фотографий пока нет": "No photos yet",
   "Фото для": "Photos for",
   "Фото останутся в карточках людей.": "Photos will remain in the person cards.",
-  "Фото профиля": "Profile photo",
-  "Фото": "Photos",
   "ФОТО": "PHOTOS",
   "СТАТУС": "STATUS",
   "ПОЛ": "GENDER",
   "Удалить альбом": "Delete album",
   "Удалить альбом?": "Delete album?",
   "Ещё": "More",
-  "Файлы и экспорт": "Files and export",
   "Сохранение, импорт и отправка": "Save, import, and share",
   "Последние локальные копии": "Latest local copies",
   "Вид, защита и оформление": "View, protection, and appearance",
-  "Подсказки по возможностям": "Feature tips"
-  ,"Выберите, кого показывать в списке": "Choose who appears in the list"
-  ,"Фотография": "Photo"
-  ,"Применить": "Apply"
-  ,"Сбросить": "Reset"
-  ,"Сортировка А–Я": "Sort A–Z"
-  ,"Выберите порядок людей в списке": "Choose the order of people in the list"
-  ,"Порядок": "Order"
-  ,"Дайте подборке понятное название": "Give the collection a clear name"
-  ,"После этого выберите фотографии людей для альбома": "Then choose people’s photos for the album"
-  ,"Далее": "Next"
-  ,"Дерево заблокировано": "Tree is locked"
-  ,"Дерево доступно только для просмотра": "Tree is read-only"
-  ,"Разблокируйте дерево, чтобы изменить данные": "Unlock the tree to edit details"
-  ,"Доступ только для просмотра": "Read-only access"
-  ,"Разблокировать": "Unlock"
-  ,"Разблокировать дерево": "Unlock tree"
-  ,"Заблокировать дерево": "Lock tree"
-  ,"Добавить человеку фото": "Add photos to a person"
-  ,"Добавить фото": "Add photos"
-  ,"Папка": "Folder"
-  ,"Альбом пока пуст": "This album is empty"
-  ,"Добавьте людей, любые фото или создайте папку": "Add people, any photos, or create a folder"
-  ,"Папка пока пуста": "This folder is empty"
-  ,"Выберите аватары или добавьте фотографии": "Choose avatars or add photos"
-  ,"Основной аватар": "Main avatar"
-  ,"После создания внутри можно добавить людей, любые фото и папки.": "After creating it, you can add people, any photos, and folders."
-  ,"Название можно изменить позже": "You can rename it later"
-  ,"Создать": "Create"
-  ,"Выбор людей": "Choose people"
-  ,"Поиск по имени": "Search by name"
-  ,"Ничего не найдено": "Nothing found"
-  ,"Попробуйте изменить запрос": "Try changing your search"
-  ,"Действия с альбомом": "Album actions"
-  ,"Открыть альбом": "Open album"
-  ,"Фото, люди и папки": "Photos, people, and folders"
-  ,"Выбрать людей": "Choose people"
-  ,"Поиск по аватарам дерева": "Search tree avatars"
-  ,"Добавить фотографии": "Add photos"
-  ,"Любые изображения с устройства": "Any images from this device"
-  ,"Создать папку": "Create folder"
-  ,"Соберите отдельную подборку": "Create a separate collection"
-  ,"Переименовать": "Rename"
-  ,"Изменить название альбома": "Change the album name"
-  ,"Удалить": "Delete"
-  ,"Фото людей останутся в дереве": "People's photos will remain in the tree"
-  ,"Действия с папкой": "Folder actions"
-  ,"Выбрать изображения с устройства": "Choose images from this device"
-  ,"Изменить название папки": "Change the folder name"
-  ,"Удалить папку из альбома": "Delete the folder from the album"
-  ,"Действия с человеком": "Person actions"
-  ,"Человек станет папкой с фотографиями": "The person will become a photo folder"
-  ,"Изменить ФИО в карточке дерева": "Change the name in the tree card"
-  ,"Удалить папку с фото": "Delete photo folder"
-  ,"Основной аватар останется": "The main avatar will remain"
-  ,"Убрать из альбома": "Remove from album"
-  ,"Убрать из папки": "Remove from folder"
-  ,"Человек останется в дереве": "The person will remain in the tree"
-  ,"Новая папка": "New folder"
-  ,"Название папки": "Folder name"
-  ,"Переименовать альбом": "Rename album"
-  ,"Новое название сохранит всё содержимое": "The new name will keep all content"
-  ,"Переименовать папку": "Rename folder"
-  ,"Содержимое останется на месте": "The contents will stay in place"
-  ,"Изменить ФИО": "Change name"
-  ,"Имя обновится во всём дереве": "The name will update throughout the tree"
-  ,"Фамилия Имя Отчество": "Full name"
-  ,"Кому добавить фото": "Who should receive photos"
-  ,"Удалить папку?": "Delete folder?"
-  ,"Удалить дополнительные фото?": "Delete additional photos?"
-  ,"Основной аватар и карточка человека останутся в дереве.": "The main avatar and person card will remain in the tree."
-  ,"Убрать фотографию?": "Remove this photo?"
-  ,"Она перестанет отображаться в этой подборке.": "It will no longer appear in this collection."
-  ,"Убрать": "Remove"
-  ,"Альбом с таким названием уже существует": "An album with this name already exists"
-  ,"Действия с семейной папкой": "Family folder actions"
-  ,"Открыть папку": "Open folder"
-  ,"Аватары и семейные фотографии": "Avatars and family photos"
-  ,"Добавить фото семьи": "Add family photos"
-  ,"Найти человека в дереве": "Find a person in the tree"
-  ,"Очистить добавленные фото": "Clear added photos"
-  ,"Аватары людей останутся": "People's avatars will remain"
-  ,"Убрать добавленные фото?": "Remove added photos?"
-  ,"Аватары членов семьи останутся в папке.": "Family members' avatars will remain in the folder."
-  ,"Редактор аватара": "Avatar editor"
-  ,"↔ Отразить": "↔ Mirror"
-  ,"□ Квадрат": "□ Square"
-  ,"Квадратная обрезка берёт центральную часть изображения.": "Square crop uses the center of the image."
-  ,"Сохранение аватара…": "Saving avatar…"
-  ,"Аватар сохранён": "Avatar saved"
-  ,"Аватар не сохранён": "Avatar was not saved"
-  ,"О нас": "About"
-  ,"Команда, версия и что нового": "Team, version, and what's new"
-  ,"Приложение создано TeamDS": "Created by TeamDS"
-  ,"Версия ": "Version "
-  ,"Что нового в ": "What's new in "
-  ,"Команда": "Team"
-  ,"Топ донатеры": "Top supporters"
-  ,"Пока здесь никого нет": "No supporters yet"
-  ,"Стать первым": "Be the first"
-  ,"Оригинальный создатель, разработчик и дизайнер приложения": "Original creator, developer, and designer of the app"
-  ,"Не удалось открыть ссылку": "Couldn't open the link"
-  ,"Улучшения стабильности и интерфейса.": "Stability and interface improvements."
-  ,"Добавлена защита дерева от любых изменений с быстрым предложением разблокировать.": "Tree protection now blocks every edit and offers a quick unlock action."
-  ,"Появились альбомы, папки, семейные фотографии и подборки фотографий людей.": "Added albums, folders, family photos, and personal photo collections."
-  ,"Добавлен редактор аватара: поворот, отражение, свободная обрезка и позиционирование на карточке.": "The avatar editor now supports rotation, mirroring, free crop, and card positioning."
-  ,"Улучшены меню, нижние отступы, фильтры и плавность раздела «Люди».": "Improved menus, bottom spacing, filters, and People performance."
-  ,"Размер плиток в альбомах теперь меняется жестом щипка.": "Album tile size can now be changed with a pinch gesture."
-  ,"✂ Обрезать": "✂ Crop"
-  ,"▣ Позиция": "▣ Position"
-  ,"«Обрезать» удаляет края. «Позиция» меняет вид на карточке, не обрезая фото.": "Crop removes the edges. Position changes the card view without cropping the photo."
-  ,"Свободная обрезка": "Free crop"
-  ,"Перемещайте и тяните углы": "Move and drag the corners"
-  ,"Применить обрезку": "Apply crop"
-  ,"Не удалось обрезать фото": "Couldn't crop the photo"
-  ,"Вид на карточке": "Card view"
-  ,"Фото останется целым": "The photo stays intact"
-  ,"Перемещайте фото одним пальцем, масштабируйте щипком. Затемнённая область не удаляется.": "Move the photo with one finger and pinch to zoom. The dimmed area is not removed."
-  ,"Подтверждение действия": "Confirm action"
-  ,"Выберите фамилию из дерева": "Choose a surname from the tree"
-  ,"Создать семейную папку": "Create a family folder"
-  ,"Свернуть": "Collapse"
-  ,"Появились свои альбомы, папки, семейные фотографии и подборки фотографий людей.": "Added custom albums, folders, family photos, and personal photo collections."
-  ,"В альбомы и папки можно добавлять людей через поиск и любые фото с устройства.": "People can be added to albums and folders through search, along with any photos from the device."
-  ,"Добавлены красивые меню по долгому нажатию для альбомов, папок, семей и людей.": "Added polished long-press menus for albums, folders, families, and people."
-  ,"Редактор аватара теперь умеет поворачивать в обе стороны, отражать и свободно обрезать фото.": "The avatar editor can now rotate both ways, mirror, and freely crop a photo."
-  ,"Отдельное позиционирование аватара меняет вид на карточке, не удаляя края исходного фото.": "Separate avatar positioning changes the card view without removing the edges of the original photo."
-  ,"Размер плиток в альбомах и папках меняется жестом щипка.": "Tile size in albums and folders can be changed with a pinch gesture."
-  ,"Выровнены отступы меню, исправлены кнопки фильтров и сортировки.": "Menu spacing is now consistent, and the filter and sorting buttons have been fixed."
-  ,"Раздел «Люди» стал работать плавнее, а в меню «Ещё» появился экран с командой, ссылками и примечаниями к обновлению.": "The People section is smoother, and More now includes the team, useful links, and update notes."
-  ,"Поддержать разработчика": "Support the developer"
-  ,"Скоро здесь появятся способы поддержки": "Support options are coming soon"
-  ,"На экране «О нас» добавлена заглушка будущей кнопки поддержки разработчика.": "About now includes a placeholder for the upcoming developer support button."
-  ,"Добавлен центральный раздел «Люди» — полный каталог дерева с алфавитными группами, поиском, фильтрами и сортировкой.": "Added the central People section — a complete tree directory with alphabetical groups, search, filters, and sorting."
-  ,"Из каталога можно открыть карточку человека или мгновенно найти его на дереве.": "Open a person's card from the directory or instantly locate them on the tree."
-  ,"Добавлен раздел фотографий со всеми аватарами, семейными коллекциями и собственными альбомами, которые сохраняются вместе с деревом.": "Added a photo section with all avatars, family collections, and custom albums saved together with the tree."
-  ,"Альбомы поддерживают папки, любые фотографии с устройства и добавление людей через отдельный поиск.": "Albums support folders, any photos from the device, and adding people through a dedicated search."
-  ,"В семейные альбомы можно добавлять фотографии, а у каждого человека может быть собственная папка дополнительных снимков.": "Family albums accept additional photos, and each person can have a folder of extra pictures."
-  ,"Для альбомов, папок, семей и людей добавлены меню по долгому нажатию, предпросмотр содержимого и изменение размера плиток щипком.": "Albums, folders, families, and people now have long-press menus, content previews, and pinch-controlled tile sizes."
-  ,"Добавлены настраиваемые виджеты ближайшего дня рождения разных размеров с фотографиями и выбором родственников.": "Added customizable next-birthday widgets in several sizes with photos and relative selection."
-  ,"Полностью обновлена нижняя навигация, а файлы, сохранённые версии, параметры, обучение и экран «О нас» собраны в меню «Ещё».": "The bottom navigation has been redesigned, while files, saved versions, settings, training, and About are now collected under More."
-  ,"Добавлен отдельный замок, полностью защищающий структуру дерева, карточки и фотографии от изменений.": "Added a dedicated lock that fully protects the tree structure, person cards, and photos from changes."
-  ,"Добавлен редактор фотографий с поворотом в обе стороны, отражением, свободной обрезкой и отдельным позиционированием аватара без удаления краёв.": "Added a photo editor with rotation in both directions, mirroring, free crop, and separate non-destructive avatar positioning."
-  ,"На экране «О нас» появились команда, раскрываемые примечания, ссылки сообщества и добровольная поддержка через DonationAlerts.": "About now includes the team, expandable update notes, community links, and voluntary support through DonationAlerts."
-  ,"Нижнее меню автоматически поднимается над системной панелью навигации — как при управлении тремя кнопками, так и при использовании жестов.": "The bottom menu now automatically stays above the system navigation bar in both three-button and gesture navigation modes."
-  ,"Предложение пройти обучение показывается только один раз и больше не появляется у пользователей с уже созданным деревом.": "The training offer is now shown only once and no longer appears for users who already have a tree."
-  ,"Обучение полностью переработано: оно безопасно знакомит с интерфейсом, точно подсвечивает нужные кнопки и не изменяет пользовательское дерево.": "Training has been completely redesigned: it safely introduces the interface, precisely highlights the required buttons, and never changes the user's tree."
-  ,"Как управлять деревом": "How to navigate the tree"
-  ,"Перемещайте полотно одним пальцем, меняйте масштаб щипком, а карточку выбирайте обычным нажатием.": "Move the canvas with one finger, pinch to zoom, and tap a card to select it."
-  ,"Добавление человека": "Adding a person"
-  ,"Кнопка + создаёт первую карточку или открывает выбор родственника. В обучении мы ничего добавлять не будем.": "The + button creates the first card or opens relative options. The tour will not add anything."
-  ,"Нажмите «Карточка»: здесь редактируются ФИО, даты, фото, заметки и другие сведения выбранного человека.": "Tap Card to edit the selected person's name, dates, photos, notes, and other details."
-  ,"Люди и фотографии": "People and photos"
-  ,"Нажмите «Люди»: здесь находятся общий каталог, поиск, фильтры, аватары, семейные и собственные альбомы.": "Tap People to open the directory, search, filters, avatars, family collections, and custom albums."
-  ,"Нажмите «Связи»: отсюда создаются родительские, родственные и братские линии, а также определяется родство.": "Tap Connections to create parent, family, and sibling links or determine relationships."
-  ,"Нажмите «Дерево»: здесь находятся упорядочивание, выделение, ветки и линии поколений.": "Tap Tree to access arranging, selection, branches, and generation lines."
-  ,"Остальные возможности": "More features"
-  ,"Нажмите «Ещё», чтобы открыть файлы, сохранённые версии, параметры, обучение и информацию о приложении.": "Tap More to open files, saved versions, settings, training, and app information."
-  ,"Всё важное под рукой": "Everything important in one place"
-  ,"Файлы и экспорт, резервные версии, параметры и повторный запуск обучения находятся в этом меню.": "Files and export, backup versions, settings, and restarting the tour are all available in this menu."
-  ,"Закрыть обучение": "Close training"
-  ,"Нажмите подсвеченную кнопку": "Tap the highlighted button"
-  ,"Пропустить": "Skip"
-  ,"Обучение завершено — его всегда можно открыть снова через «Ещё»": "Training is complete — you can always open it again from More"
-  ,"Начнём с основных жестов": "Let's start with the basic gestures"
-  ,"Посмотрите на подсвеченный элемент": "Look at the highlighted element"
-  ,"Элемент сейчас недоступен — перейдите к следующему шагу": "This element is currently unavailable — continue to the next step"
-  ,"Нажмите здесь": "Tap here"
-  ,"Это меню": "This menu"
-  ,"Обратите внимание": "Take a look"
-  ,"Раздел открыт": "Section opened"
-  ,"Раздел открыт. Осмотритесь и нажмите «Далее»": "The section is open. Take a look, then tap Next."
-  ,"Поиск по имени, году или месту": "Search by name, year, or place"
-  ,"Родители папы": "Father's parents"
-  ,"Родители мамы": "Mother's parents"
-  ,"Будут связаны с карточкой папы": "They will be linked to the father's card"
-  ,"Будут связаны с карточкой мамы": "They will be linked to the mother's card"
-  ,"Имя дедушки по папе, необязательно": "Paternal grandfather's name, optional"
-  ,"Имя бабушки по папе, необязательно": "Paternal grandmother's name, optional"
-  ,"Имя дедушки по маме, необязательно": "Maternal grandfather's name, optional"
-  ,"Имя бабушки по маме, необязательно": "Maternal grandmother's name, optional"
-  ,"Дедушка": "Grandfather"
-  ,"Бабушка": "Grandmother"
-  ,"Обучение полностью переработано: открытый раздел остаётся на экране до явного перехода дальше, а подсказки безопасно знакомят с интерфейсом без изменения дерева.": "Training has been completely redesigned: an opened section remains visible until you explicitly continue, while safe tips introduce the interface without changing the tree."
-  ,"В альбоме «Все аватары» появился поиск по имени, году и месту.": "The All Avatars album now has search by name, year, and place."
-  ,"«Быстрый старт» теперь создаёт до трёх поколений: после добавления родителей можно сразу указать их родителей.": "Quick Start can now create up to three generations: after entering parents, you can immediately add their parents."
-  ,"Основное": "General"
-  ,"Визуал": "Visuals"
-  ,"Дерево и данные": "Tree and data"
-  ,"Размер шрифта": "Font size"
-  ,"Масштаб интерфейса": "Interface scale"
-  ,"Меньше": "Smaller"
-  ,"Обычно": "Normal"
-  ,"Больше": "Larger"
-  ,"Мелкий": "Small"
-  ,"Обычный": "Default"
-  ,"Крупный": "Large"
-  ,"Компактно": "Compact"
-  ,"Крупно": "Large"
-  ,"Масштаб интерфейса обновлён": "Interface scale updated"
-  ,"Размер шрифта обновлён": "Font size updated"
-  ,"1 карточка далеко от основного дерева": "1 card is far from the main tree"
-  ," карточки далеко от основного дерева": " cards are far from the main tree"
-  ,"Показать": "Show"
-  ,"Вернуть": "Bring back"
-  ,"Далёкие карточки возвращены ближе": "Distant cards were brought closer"
-  ,"Карточки возвращены ближе": "Cards were brought closer"
-  ,"Цвет карточки": "Card color"
-  ,"Оформление": "Appearance"
-  ,"Человек удалён": "Person deleted"
-  ,"Действия поиска": "Search actions"
-  ,"История и сохранение запросов": "Search history and saved searches"
-  ,"Недавние и сохранённые запросы": "Recent and saved searches"
-  ,"Сохранить текущий запрос и фильтры": "Save current query and filters"
-  ,"В меню «Ещё» появилась Мастерская с жетонами, бонусами и новыми оформлениями дерева. За просмотр рекламы можно получить 10 жетонов.": "The Workshop with tokens, bonuses, and new tree styles is now available from More. Watching an ad gives 10 tokens."
-  ,"Оформления разделены по редкости и стоят 10, 15 или 20 жетонов. Темы и края карточек теперь выбираются независимо друг от друга.": "Styles are grouped by rarity and cost 10, 15, or 20 tokens. Card themes and edges can now be selected independently."
-  ,"Добавлены дымные, стеклянные, огненные и растительные варианты карточек, полотна и связей, а также новые рамки экспорта и виджетов.": "Added smoke, glass, fire, and botanical options for cards, canvas, and links, plus new export and widget frames."
-  ,"Огненные эффекты стали ярче и аккуратнее, а большие деревья с растительным оформлением работают заметно плавнее.": "Fire effects are brighter and cleaner, while large trees with botanical styles now run noticeably more smoothly."
-  ,"В разделе «Файлы и экспорт» появились быстрые кнопки для отправки дерева и сохранения PNG.": "The Files and export section now has quick buttons for sharing the tree and saving a PNG."
-  ,"Экспорт PNG получил чёткий предпросмотр выбранного качества: изображение можно приближать, перемещать и обрезать до краёв полотна.": "PNG export now has a clear preview for the selected quality: the image can be zoomed, moved, and cropped to the canvas edges."
-  ,"Для PNG можно выбрать качество, размер текста, фон, рамку, вид линий и карточек, а большое изображение разделить на части.": "For PNG export you can choose quality, text size, background, frame, line and card styles, and split a large image into parts."
-  ,"Настройки PDF стали понятнее, а рамки выбираются в отдельном наглядном меню.": "PDF settings are clearer, and frames are selected in a separate visual menu."
-  ,"Фильтры списка людей показывают количество найденных записей заранее и позволяют быстро отключать выбранные условия.": "People-list filters now show the number of matches in advance and let you quickly disable selected conditions."
-  ,"Выровнены навигация и боковые кнопки, улучшено оформление Мастерской и исправлены мелкие проблемы интерфейса на разных экранах.": "Navigation and side buttons are aligned, the Workshop styling is improved, and minor interface issues on different screens are fixed."
-  ,"Мастерская": "Workshop"
-  ,"Жетоны, оформление и бонусы": "Tokens, styles, and bonuses"
-  ,"Баланс жетонов": "Token balance"
-  ,"Топ": "Leaderboard"
-  ,"Быстрый выбор": "Quick choice"
-  ,"Смотреть рекламу +10 жетонов": "Watch ad +10 tokens"
-  ,"Загрузить рекламу +10 жетонов": "Load ad +10 tokens"
-  ,"Загрузка рекламы...": "Loading ad..."
-  ,"Топ по жетонам": "Token leaderboard"
-  ,"10 лучших участников": "Top 10 participants"
-  ,"Попасть в топ": "Join the leaderboard"
-  ,"Жетонов пока мало": "Not enough tokens yet"
-  ,"Для участия в топе нужно": "You need"
-  ,"жетонов. Сейчас доступно: ": "tokens. Available now: "
-  ,"Понятно": "Got it"
-  ,"Ваш ник в топе": "Your leaderboard nickname"
-  ,"Введите ник. С размещения будет списано ": "Enter a nickname. The placement fee is "
-  ,"Отмена": "Cancel"
-  ,"Разместить": "Place"
-  ,"Введите ник": "Enter a nickname"
-  ,"Жетонов стало недостаточно": "Not enough tokens"
-  ,"Покупка добавлена в Мастерскую": "Purchase added to Workshop"
-  ,"Оформление выбрано": "Style selected"
-  ,"Выбрано": "Selected"
-  ,"Выбрать": "Select"
-  ,"Эпическое": "Epic"
-  ,"Редкое": "Rare"
-  ,"Обычное": "Common"
-  ,"Темы карточек": "Card themes"
-  ,"Стандартные карточки": "Standard cards"
-  ,"Привычные цветные карточки Family Tree DS.": "Familiar colored Family Tree DS cards."
-  ,"Края карточек": "Card edges"
-  ,"Стандартные края": "Standard edges"
-  ,"Без декоративной обводки. Сочетаются с любой темой карточек.": "No decorative border. Works with any card theme."
-  ,"Фоны полотна": "Canvas backgrounds"
-  ,"Стандартное полотно": "Standard canvas"
-  ,"Спокойный светлый фон с аккуратной сеткой.": "A calm light background with a neat grid."
-  ,"Стили линий": "Line styles"
-  ,"Стандартные линии": "Standard lines"
-  ,"Обычные семейные связи и пунктир для братьев и сестёр.": "Regular family links with dotted sibling lines."
-  ,"Оформления виджетов": "Widget styles"
-  ,"Стандартные виджеты": "Standard widgets"
-  ,"Текущее оформление виджетов дней рождения.": "The current birthday-widget style."
-  ,"Рамки экспорта": "Export frames"
-  ,"Стандартный экспорт": "Standard export"
-  ,"Экспорт без дополнительной декоративной рамки.": "Export without an additional decorative frame."
-  ,"Архивная карточка": "Archive card"
-  ,"Тёплая бумага, тонкая рамка и мягкие подписи.": "Warm paper, a thin frame, and soft labels."
-  ,"Полуночная карточка": "Midnight card"
-  ,"Тёмная карточка с цветовым акцентом человека.": "A dark card with the person's color accent."
-  ,"Стеклянная карточка": "Glass card"
-  ,"Полупрозрачное жидкое стекло с бликами.": "Translucent liquid glass with highlights."
-  ,"Огненная карточка": "Fire card"
-  ,"Угольный градиент и золотистые подписи. Пламя выбирается в разделе «Края карточек».": "A charcoal gradient with golden labels. Choose the fire in Card edges."
-  ,"Дымная карточка": "Smoke card"
-  ,"Графитовая заливка с мягкими дымными переливами и светлыми подписями.": "A graphite fill with soft smoky gradients and light labels."
-  ,"Растительная карточка": "Botanical card"
-  ,"Светлая зелёная карточка с мягкими листьями и природными оттенками.": "A light green card with soft leaves and natural tones."
-  ,"Огненные края": "Fire edges"
-  ,"Живое золотистое пламя и поднимающиеся искры вокруг карточки.": "Lively golden fire and rising sparks around the card."
-  ,"Дымные края": "Smoke edges"
-  ,"Плавные клубы дыма и серебристая тонкая рамка.": "Smooth smoke curls and a thin silver frame."
-  ,"Растительные края": "Botanical edges"
-  ,"Зелёные побеги, листья с прожилками и маленькие белые цветы.": "Green shoots, veined leaves, and small white flowers."
-  ,"Растительные связи": "Botanical links"
-  ,"Тонкие вьющиеся стебли с листьями. Родственные пунктиры сохраняются.": "Thin curling stems with leaves. Sibling dotted lines remain."
-  ,"Бумажное полотно": "Paper canvas"
-  ,"Светлый бумажный рельеф с обычной сеткой.": "A light paper texture with a regular grid."
-  ,"Чертёжное полотно": "Blueprint canvas"
-  ,"Светлый чертёж без мелкой ряби при отдалении.": "A light blueprint without fine noise when zoomed out."
-  ,"Синий чертёж": "Blue blueprint"
-  ,"Игровой синий blueprint с крупной сеткой и техническими линиями.": "A game-like blue blueprint with a large grid and technical lines."
-  ,"Салатовое полотно": "Lime canvas"
-  ,"Светлый салатовый градиент с мягким мятным оттенком.": "A light lime gradient with a soft mint tone."
-  ,"Растительное полотно": "Botanical canvas"
-  ,"Состаренная бумага, бледные ветви и насыщенная зелень по краям.": "Aged paper, pale branches, and rich greenery around the edges."
-  ,"Чернильные связи": "Ink links"
-  ,"Более выразительные линии родства и партнёрства.": "More expressive kinship and partnership lines."
-  ,"Ленточные связи": "Ribbon links"
-  ,"Две тонкие переплетённые ленты вдоль связи.": "Two thin intertwined ribbons along the link."
-  ,"Синие связи": "Blue links"
-  ,"Чёткие синие линии с мягким светлым контуром и узлами.": "Crisp blue lines with a soft light outline and nodes."
-  ,"Огненные связи": "Fire links"
-  ,"Тонкое пламя с тёплым свечением и небольшими искрами.": "Thin fire with a warm glow and small sparks."
-  ,"Семейная рамка": "Family frame"
-  ,"Новая рамка для виджетов ближайших дней рождения.": "A new frame for upcoming-birthday widgets."
-  ,"Растительная рамка": "Botanical frame"
-  ,"Листья, прожилки и маленькие цветы по краям виджета.": "Leaves, veins, and small flowers around the widget."
-  ,"Огненная рамка": "Fire frame"
-  ,"Золотой жар и языки огня по краям виджета.": "Golden heat and flames around the widget."
-  ,"Классическая рамка": "Classic frame"
-  ,"Тонкая рамка для PNG/PDF-экспорта дерева.": "A thin frame for PNG/PDF tree exports."
-  ,"Эпическая рамка с золотым жаром и языками пламени для PNG и PDF.": "An epic frame with golden heat and flames for PNG and PDF."
-  ,"Зелёные побеги, листья и цветы по краям PNG и PDF.": "Green shoots, leaves, and flowers around PNG and PDF."
-  ," жетонов": " tokens"
-  ," жет.": " tokens"
-  ," вариантов оформления": " style options"
-  ,"Следующая реклама через ": "Next ad in "
-  ," с": " s"
-  ,"Скоро": "Coming soon"
-  ,"В мастерскую": "To Workshop"
-  ,"Позже": "Later"
-  ,"Скачать фото": "Download photo"
-  ,"‹ Все разделы": "‹ All sections"
-  ,"1 страница · дерево целиком, без обрезки. Для большого дерева текст можно увеличить в PDF.": "1 page · the whole tree, without cropping. You can enlarge the text in the PDF for a large tree."
-  ,"Отменяем после текущего шага…": "Cancelling after the current step…"
-  ,"+10 жетонов": "+10 tokens"
+  "Подсказки по возможностям": "Feature tips",
+  "Выберите, кого показывать в списке": "Choose who appears in the list",
+  "Применить": "Apply",
+  "Сбросить": "Reset",
+  "Сортировка А–Я": "Sort A–Z",
+  "Выберите порядок людей в списке": "Choose the order of people in the list",
+  "Порядок": "Order",
+  "Дайте подборке понятное название": "Give the collection a clear name",
+  "После этого выберите фотографии людей для альбома": "Then choose people’s photos for the album",
+  "Далее": "Next",
+  "Дерево заблокировано": "Tree is locked",
+  "Дерево доступно только для просмотра": "Tree is read-only",
+  "Разблокируйте дерево, чтобы изменить данные": "Unlock the tree to edit details",
+  "Доступ только для просмотра": "Read-only access",
+  "Разблокировать": "Unlock",
+  "Разблокировать дерево": "Unlock tree",
+  "Заблокировать дерево": "Lock tree",
+  "Добавить человеку фото": "Add photos to a person",
+  "Добавить фото": "Add photos",
+  "Папка": "Folder",
+  "Альбом пока пуст": "This album is empty",
+  "Добавьте людей, любые фото или создайте папку": "Add people, any photos, or create a folder",
+  "Папка пока пуста": "This folder is empty",
+  "Выберите аватары или добавьте фотографии": "Choose avatars or add photos",
+  "Основной аватар": "Main avatar",
+  "После создания внутри можно добавить людей, любые фото и папки.": "After creating it, you can add people, any photos, and folders.",
+  "Название можно изменить позже": "You can rename it later",
+  "Выбор людей": "Choose people",
+  "Поиск по имени": "Search by name",
+  "Ничего не найдено": "Nothing found",
+  "Попробуйте изменить запрос": "Try changing your search",
+  "Действия с альбомом": "Album actions",
+  "Открыть альбом": "Open album",
+  "Фото, люди и папки": "Photos, people, and folders",
+  "Выбрать людей": "Choose people",
+  "Поиск по аватарам дерева": "Search tree avatars",
+  "Добавить фотографии": "Add photos",
+  "Любые изображения с устройства": "Any images from this device",
+  "Создать папку": "Create folder",
+  "Соберите отдельную подборку": "Create a separate collection",
+  "Переименовать": "Rename",
+  "Изменить название альбома": "Change the album name",
+  "Фото людей останутся в дереве": "People's photos will remain in the tree",
+  "Действия с папкой": "Folder actions",
+  "Выбрать изображения с устройства": "Choose images from this device",
+  "Изменить название папки": "Change the folder name",
+  "Удалить папку из альбома": "Delete the folder from the album",
+  "Действия с человеком": "Person actions",
+  "Человек станет папкой с фотографиями": "The person will become a photo folder",
+  "Изменить ФИО в карточке дерева": "Change the name in the tree card",
+  "Удалить папку с фото": "Delete photo folder",
+  "Основной аватар останется": "The main avatar will remain",
+  "Убрать из альбома": "Remove from album",
+  "Убрать из папки": "Remove from folder",
+  "Человек останется в дереве": "The person will remain in the tree",
+  "Новая папка": "New folder",
+  "Название папки": "Folder name",
+  "Переименовать альбом": "Rename album",
+  "Новое название сохранит всё содержимое": "The new name will keep all content",
+  "Переименовать папку": "Rename folder",
+  "Содержимое останется на месте": "The contents will stay in place",
+  "Изменить ФИО": "Change name",
+  "Имя обновится во всём дереве": "The name will update throughout the tree",
+  "Фамилия Имя Отчество": "Full name",
+  "Кому добавить фото": "Who should receive photos",
+  "Удалить папку?": "Delete folder?",
+  "Удалить дополнительные фото?": "Delete additional photos?",
+  "Основной аватар и карточка человека останутся в дереве.": "The main avatar and person card will remain in the tree.",
+  "Убрать фотографию?": "Remove this photo?",
+  "Она перестанет отображаться в этой подборке.": "It will no longer appear in this collection.",
+  "Альбом с таким названием уже существует": "An album with this name already exists",
+  "Действия с семейной папкой": "Family folder actions",
+  "Открыть папку": "Open folder",
+  "Аватары и семейные фотографии": "Avatars and family photos",
+  "Добавить фото семьи": "Add family photos",
+  "Найти человека в дереве": "Find a person in the tree",
+  "Очистить добавленные фото": "Clear added photos",
+  "Аватары людей останутся": "People's avatars will remain",
+  "Убрать добавленные фото?": "Remove added photos?",
+  "Аватары членов семьи останутся в папке.": "Family members' avatars will remain in the folder.",
+  "Редактор аватара": "Avatar editor",
+  "↔ Отразить": "↔ Mirror",
+  "□ Квадрат": "□ Square",
+  "Квадратная обрезка берёт центральную часть изображения.": "Square crop uses the center of the image.",
+  "Сохранение аватара…": "Saving avatar…",
+  "Аватар сохранён": "Avatar saved",
+  "Аватар не сохранён": "Avatar was not saved",
+  "О нас": "About",
+  "Команда, версия и что нового": "Team, version, and what's new",
+  "Приложение создано TeamDS": "Created by TeamDS",
+  "Версия ": "Version ",
+  "Что нового в ": "What's new in ",
+  "Команда": "Team",
+  "Топ донатеры": "Top supporters",
+  "Пока здесь никого нет": "No supporters yet",
+  "Стать первым": "Be the first",
+  "Оригинальный создатель, разработчик и дизайнер приложения": "Original creator, developer, and designer of the app",
+  "Специалист по видеомонтажу": "Video editing specialist",
+  "Не удалось открыть ссылку": "Couldn't open the link",
+  "Улучшения стабильности и интерфейса.": "Stability and interface improvements.",
+  "Добавлена защита дерева от любых изменений с быстрым предложением разблокировать.": "Tree protection now blocks every edit and offers a quick unlock action.",
+  "Появились альбомы, папки, семейные фотографии и подборки фотографий людей.": "Added albums, folders, family photos, and personal photo collections.",
+  "Добавлен редактор аватара: поворот, отражение, свободная обрезка и позиционирование на карточке.": "The avatar editor now supports rotation, mirroring, free crop, and card positioning.",
+  "Улучшены меню, нижние отступы, фильтры и плавность раздела «Люди».": "Improved menus, bottom spacing, filters, and People performance.",
+  "Размер плиток в альбомах теперь меняется жестом щипка.": "Album tile size can now be changed with a pinch gesture.",
+  "✂ Обрезать": "✂ Crop",
+  "▣ Позиция": "▣ Position",
+  "«Обрезать» удаляет края. «Позиция» меняет вид на карточке, не обрезая фото.": "Crop removes the edges. Position changes the card view without cropping the photo.",
+  "Свободная обрезка": "Free crop",
+  "Перемещайте и тяните углы": "Move and drag the corners",
+  "Применить обрезку": "Apply crop",
+  "Не удалось обрезать фото": "Couldn't crop the photo",
+  "Вид на карточке": "Card view",
+  "Фото останется целым": "The photo stays intact",
+  "Перемещайте фото одним пальцем, масштабируйте щипком. Затемнённая область не удаляется.": "Move the photo with one finger and pinch to zoom. The dimmed area is not removed.",
+  "Подтверждение действия": "Confirm action",
+  "Выберите фамилию из дерева": "Choose a surname from the tree",
+  "Создать семейную папку": "Create a family folder",
+  "Свернуть": "Collapse",
+  "Появились свои альбомы, папки, семейные фотографии и подборки фотографий людей.": "Added custom albums, folders, family photos, and personal photo collections.",
+  "В альбомы и папки можно добавлять людей через поиск и любые фото с устройства.": "People can be added to albums and folders through search, along with any photos from the device.",
+  "Добавлены красивые меню по долгому нажатию для альбомов, папок, семей и людей.": "Added polished long-press menus for albums, folders, families, and people.",
+  "Редактор аватара теперь умеет поворачивать в обе стороны, отражать и свободно обрезать фото.": "The avatar editor can now rotate both ways, mirror, and freely crop a photo.",
+  "Отдельное позиционирование аватара меняет вид на карточке, не удаляя края исходного фото.": "Separate avatar positioning changes the card view without removing the edges of the original photo.",
+  "Размер плиток в альбомах и папках меняется жестом щипка.": "Tile size in albums and folders can be changed with a pinch gesture.",
+  "Выровнены отступы меню, исправлены кнопки фильтров и сортировки.": "Menu spacing is now consistent, and the filter and sorting buttons have been fixed.",
+  "Раздел «Люди» стал работать плавнее, а в меню «Ещё» появился экран с командой, ссылками и примечаниями к обновлению.": "The People section is smoother, and More now includes the team, useful links, and update notes.",
+  "Поддержать разработчика": "Support the developer",
+  "Скоро здесь появятся способы поддержки": "Support options are coming soon",
+  "На экране «О нас» добавлена заглушка будущей кнопки поддержки разработчика.": "About now includes a placeholder for the upcoming developer support button.",
+  "Добавлен центральный раздел «Люди» — полный каталог дерева с алфавитными группами, поиском, фильтрами и сортировкой.": "Added the central People section — a complete tree directory with alphabetical groups, search, filters, and sorting.",
+  "Из каталога можно открыть карточку человека или мгновенно найти его на дереве.": "Open a person's card from the directory or instantly locate them on the tree.",
+  "Добавлен раздел фотографий со всеми аватарами, семейными коллекциями и собственными альбомами, которые сохраняются вместе с деревом.": "Added a photo section with all avatars, family collections, and custom albums saved together with the tree.",
+  "Альбомы поддерживают папки, любые фотографии с устройства и добавление людей через отдельный поиск.": "Albums support folders, any photos from the device, and adding people through a dedicated search.",
+  "В семейные альбомы можно добавлять фотографии, а у каждого человека может быть собственная папка дополнительных снимков.": "Family albums accept additional photos, and each person can have a folder of extra pictures.",
+  "Для альбомов, папок, семей и людей добавлены меню по долгому нажатию, предпросмотр содержимого и изменение размера плиток щипком.": "Albums, folders, families, and people now have long-press menus, content previews, and pinch-controlled tile sizes.",
+  "Добавлены настраиваемые виджеты ближайшего дня рождения разных размеров с фотографиями и выбором родственников.": "Added customizable next-birthday widgets in several sizes with photos and relative selection.",
+  "Полностью обновлена нижняя навигация, а файлы, сохранённые версии, параметры, обучение и экран «О нас» собраны в меню «Ещё».": "The bottom navigation has been redesigned, while files, saved versions, settings, training, and About are now collected under More.",
+  "Добавлен отдельный замок, полностью защищающий структуру дерева, карточки и фотографии от изменений.": "Added a dedicated lock that fully protects the tree structure, person cards, and photos from changes.",
+  "Добавлен редактор фотографий с поворотом в обе стороны, отражением, свободной обрезкой и отдельным позиционированием аватара без удаления краёв.": "Added a photo editor with rotation in both directions, mirroring, free crop, and separate non-destructive avatar positioning.",
+  "На экране «О нас» появились команда, раскрываемые примечания, ссылки сообщества и добровольная поддержка через DonationAlerts.": "About now includes the team, expandable update notes, community links, and voluntary support through DonationAlerts.",
+  "Нижнее меню автоматически поднимается над системной панелью навигации — как при управлении тремя кнопками, так и при использовании жестов.": "The bottom menu now automatically stays above the system navigation bar in both three-button and gesture navigation modes.",
+  "Предложение пройти обучение показывается только один раз и больше не появляется у пользователей с уже созданным деревом.": "The training offer is now shown only once and no longer appears for users who already have a tree.",
+  "Обучение полностью переработано: оно безопасно знакомит с интерфейсом, точно подсвечивает нужные кнопки и не изменяет пользовательское дерево.": "Training has been completely redesigned: it safely introduces the interface, precisely highlights the required buttons, and never changes the user's tree.",
+  "Как управлять деревом": "How to navigate the tree",
+  "Перемещайте полотно одним пальцем, меняйте масштаб щипком, а карточку выбирайте обычным нажатием.": "Move the canvas with one finger, pinch to zoom, and tap a card to select it.",
+  "Добавление человека": "Adding a person",
+  "Кнопка + создаёт первую карточку или открывает выбор родственника. В обучении мы ничего добавлять не будем.": "The + button creates the first card or opens relative options. The tour will not add anything.",
+  "Нажмите «Карточка»: здесь редактируются ФИО, даты, фото, заметки и другие сведения выбранного человека.": "Tap Card to edit the selected person's name, dates, photos, notes, and other details.",
+  "Люди и фотографии": "People and photos",
+  "Нажмите «Люди»: здесь находятся общий каталог, поиск, фильтры, аватары, семейные и собственные альбомы.": "Tap People to open the directory, search, filters, avatars, family collections, and custom albums.",
+  "Нажмите «Связи»: отсюда создаются родительские, родственные и братские линии, а также определяется родство.": "Tap Connections to create parent, family, and sibling links or determine relationships.",
+  "Нажмите «Дерево»: здесь находятся упорядочивание, выделение, ветки и линии поколений.": "Tap Tree to access arranging, selection, branches, and generation lines.",
+  "Остальные возможности": "More features",
+  "Нажмите «Ещё», чтобы открыть файлы, сохранённые версии, параметры, обучение и информацию о приложении.": "Tap More to open files, saved versions, settings, training, and app information.",
+  "Всё важное под рукой": "Everything important in one place",
+  "Файлы и экспорт, резервные версии, параметры и повторный запуск обучения находятся в этом меню.": "Files and export, backup versions, settings, and restarting the tour are all available in this menu.",
+  "Закрыть обучение": "Close training",
+  "Нажмите подсвеченную кнопку": "Tap the highlighted button",
+  "Пропустить": "Skip",
+  "Обучение завершено — его всегда можно открыть снова через «Ещё»": "Training is complete — you can always open it again from More",
+  "Начнём с основных жестов": "Let's start with the basic gestures",
+  "Посмотрите на подсвеченный элемент": "Look at the highlighted element",
+  "Элемент сейчас недоступен — перейдите к следующему шагу": "This element is currently unavailable — continue to the next step",
+  "Нажмите здесь": "Tap here",
+  "Это меню": "This menu",
+  "Обратите внимание": "Take a look",
+  "Раздел открыт": "Section opened",
+  "Раздел открыт. Осмотритесь и нажмите «Далее»": "The section is open. Take a look, then tap Next.",
+  "Поиск по имени, году или месту": "Search by name, year, or place",
+  "Родители папы": "Father's parents",
+  "Родители мамы": "Mother's parents",
+  "Будут связаны с карточкой папы": "They will be linked to the father's card",
+  "Будут связаны с карточкой мамы": "They will be linked to the mother's card",
+  "Имя дедушки по папе, необязательно": "Paternal grandfather's name, optional",
+  "Имя бабушки по папе, необязательно": "Paternal grandmother's name, optional",
+  "Имя дедушки по маме, необязательно": "Maternal grandfather's name, optional",
+  "Имя бабушки по маме, необязательно": "Maternal grandmother's name, optional",
+  "Дедушка": "Grandfather",
+  "Бабушка": "Grandmother",
+  "Обучение полностью переработано: открытый раздел остаётся на экране до явного перехода дальше, а подсказки безопасно знакомят с интерфейсом без изменения дерева.": "Training has been completely redesigned: an opened section remains visible until you explicitly continue, while safe tips introduce the interface without changing the tree.",
+  "В альбоме «Все аватары» появился поиск по имени, году и месту.": "The All Avatars album now has search by name, year, and place.",
+  "«Быстрый старт» теперь создаёт до трёх поколений: после добавления родителей можно сразу указать их родителей.": "Quick Start can now create up to three generations: after entering parents, you can immediately add their parents.",
+  "Основное": "General",
+  "Визуал": "Visuals",
+  "Дерево и данные": "Tree and data",
+  "Размер шрифта": "Font size",
+  "Масштаб интерфейса": "Interface scale",
+  "Меньше": "Smaller",
+  "Обычно": "Normal",
+  "Больше": "Larger",
+  "Мелкий": "Small",
+  "Обычный": "Default",
+  "Крупный": "Large",
+  "Компактно": "Compact",
+  "Крупно": "Large",
+  "Масштаб интерфейса обновлён": "Interface scale updated",
+  "Размер шрифта обновлён": "Font size updated",
+  "1 карточка далеко от основного дерева": "1 card is far from the main tree",
+  " карточки далеко от основного дерева": " cards are far from the main tree",
+  "Вернуть": "Bring back",
+  "Далёкие карточки возвращены ближе": "Distant cards were brought closer",
+  "Карточки возвращены ближе": "Cards were brought closer",
+  "Цвет карточки": "Card color",
+  "Оформление": "Appearance",
+  "Человек удалён": "Person deleted",
+  "Действия поиска": "Search actions",
+  "История и сохранение запросов": "Search history and saved searches",
+  "Недавние и сохранённые запросы": "Recent and saved searches",
+  "Сохранить текущий запрос и фильтры": "Save current query and filters",
+  "В меню «Ещё» появилась Мастерская с жетонами, бонусами и новыми оформлениями дерева. За просмотр рекламы можно получить 10 жетонов.": "The Workshop with tokens, bonuses, and new tree styles is now available from More. Watching an ad gives 10 tokens.",
+  "Оформления разделены по редкости и стоят 10, 15 или 20 жетонов. Темы и края карточек теперь выбираются независимо друг от друга.": "Styles are grouped by rarity and cost 10, 15, or 20 tokens. Card themes and edges can now be selected independently.",
+  "Добавлены дымные, стеклянные, огненные и растительные варианты карточек, полотна и связей, а также новые рамки экспорта и виджетов.": "Added smoke, glass, fire, and botanical options for cards, canvas, and links, plus new export and widget frames.",
+  "Огненные эффекты стали ярче и аккуратнее, а большие деревья с растительным оформлением работают заметно плавнее.": "Fire effects are brighter and cleaner, while large trees with botanical styles now run noticeably more smoothly.",
+  "В разделе «Файлы и экспорт» появились быстрые кнопки для отправки дерева и сохранения PNG.": "The Files and export section now has quick buttons for sharing the tree and saving a PNG.",
+  "Экспорт PNG получил чёткий предпросмотр выбранного качества: изображение можно приближать, перемещать и обрезать до краёв полотна.": "PNG export now has a clear preview for the selected quality: the image can be zoomed, moved, and cropped to the canvas edges.",
+  "Для PNG можно выбрать качество, размер текста, фон, рамку, вид линий и карточек, а большое изображение разделить на части.": "For PNG export you can choose quality, text size, background, frame, line and card styles, and split a large image into parts.",
+  "Настройки PDF стали понятнее, а рамки выбираются в отдельном наглядном меню.": "PDF settings are clearer, and frames are selected in a separate visual menu.",
+  "Фильтры списка людей показывают количество найденных записей заранее и позволяют быстро отключать выбранные условия.": "People-list filters now show the number of matches in advance and let you quickly disable selected conditions.",
+  "Выровнены навигация и боковые кнопки, улучшено оформление Мастерской и исправлены мелкие проблемы интерфейса на разных экранах.": "Navigation and side buttons are aligned, the Workshop styling is improved, and minor interface issues on different screens are fixed.",
+  "Мастерская": "Workshop",
+  "Жетоны, оформление и бонусы": "Tokens, styles, and bonuses",
+  "Баланс жетонов": "Token balance",
+  "Топ": "Leaderboard",
+  "Быстрый выбор": "Quick choice",
+  "Смотреть рекламу +10 жетонов": "Watch ad +10 tokens",
+  "Загрузить рекламу +10 жетонов": "Load ad +10 tokens",
+  "Загрузка рекламы...": "Loading ad...",
+  "Топ по жетонам": "Token leaderboard",
+  "10 лучших участников": "Top 10 participants",
+  "Попасть в топ": "Join the leaderboard",
+  "Жетонов пока мало": "Not enough tokens yet",
+  "Для участия в топе нужно": "You need",
+  "жетонов. Сейчас доступно: ": "tokens. Available now: ",
+  "Ваш ник в топе": "Your leaderboard nickname",
+  "Введите ник. С размещения будет списано ": "Enter a nickname. The placement fee is ",
+  "Разместить": "Place",
+  "Введите ник": "Enter a nickname",
+  "Жетонов стало недостаточно": "Not enough tokens",
+  "Покупка добавлена в Мастерскую": "Purchase added to Workshop",
+  "Оформление выбрано": "Style selected",
+  "Выбрано": "Selected",
+  "Выбрать": "Select",
+  "Эпическое": "Epic",
+  "Редкое": "Rare",
+  "Темы карточек": "Card themes",
+  "Стандартные карточки": "Standard cards",
+  "Привычные цветные карточки Family Tree DS.": "Familiar colored Family Tree DS cards.",
+  "Края карточек": "Card edges",
+  "Стандартные края": "Standard edges",
+  "Без декоративной обводки. Сочетаются с любой темой карточек.": "No decorative border. Works with any card theme.",
+  "Фоны полотна": "Canvas backgrounds",
+  "Стандартное полотно": "Standard canvas",
+  "Спокойный светлый фон с аккуратной сеткой.": "A calm light background with a neat grid.",
+  "Стили линий": "Line styles",
+  "Стандартные линии": "Standard lines",
+  "Обычные семейные связи и пунктир для братьев и сестёр.": "Regular family links with dotted sibling lines.",
+  "Оформления виджетов": "Widget styles",
+  "Стандартные виджеты": "Standard widgets",
+  "Текущее оформление виджетов дней рождения.": "The current birthday-widget style.",
+  "Рамки экспорта": "Export frames",
+  "Стандартный экспорт": "Standard export",
+  "Экспорт без дополнительной декоративной рамки.": "Export without an additional decorative frame.",
+  "Архивная карточка": "Archive card",
+  "Тёплая бумага, тонкая рамка и мягкие подписи.": "Warm paper, a thin frame, and soft labels.",
+  "Полуночная карточка": "Midnight card",
+  "Тёмная карточка с цветовым акцентом человека.": "A dark card with the person's color accent.",
+  "Стеклянная карточка": "Glass card",
+  "Полупрозрачное жидкое стекло с бликами.": "Translucent liquid glass with highlights.",
+  "Огненная карточка": "Fire card",
+  "Угольный градиент и золотистые подписи. Пламя выбирается в разделе «Края карточек».": "A charcoal gradient with golden labels. Choose the fire in Card edges.",
+  "Дымная карточка": "Smoke card",
+  "Графитовая заливка с мягкими дымными переливами и светлыми подписями.": "A graphite fill with soft smoky gradients and light labels.",
+  "Растительная карточка": "Botanical card",
+  "Светлая зелёная карточка с мягкими листьями и природными оттенками.": "A light green card with soft leaves and natural tones.",
+  "Огненные края": "Fire edges",
+  "Живое золотистое пламя и поднимающиеся искры вокруг карточки.": "Lively golden fire and rising sparks around the card.",
+  "Дымные края": "Smoke edges",
+  "Плавные клубы дыма и серебристая тонкая рамка.": "Smooth smoke curls and a thin silver frame.",
+  "Растительные края": "Botanical edges",
+  "Зелёные побеги, листья с прожилками и маленькие белые цветы.": "Green shoots, veined leaves, and small white flowers.",
+  "Растительные связи": "Botanical links",
+  "Тонкие вьющиеся стебли с листьями. Родственные пунктиры сохраняются.": "Thin curling stems with leaves. Sibling dotted lines remain.",
+  "Бумажное полотно": "Paper canvas",
+  "Светлый бумажный рельеф с обычной сеткой.": "A light paper texture with a regular grid.",
+  "Чертёжное полотно": "Blueprint canvas",
+  "Светлый чертёж без мелкой ряби при отдалении.": "A light blueprint without fine noise when zoomed out.",
+  "Синий чертёж": "Blue blueprint",
+  "Игровой синий blueprint с крупной сеткой и техническими линиями.": "A game-like blue blueprint with a large grid and technical lines.",
+  "Салатовое полотно": "Lime canvas",
+  "Светлый салатовый градиент с мягким мятным оттенком.": "A light lime gradient with a soft mint tone.",
+  "Растительное полотно": "Botanical canvas",
+  "Состаренная бумага, бледные ветви и насыщенная зелень по краям.": "Aged paper, pale branches, and rich greenery around the edges.",
+  "Чернильные связи": "Ink links",
+  "Более выразительные линии родства и партнёрства.": "More expressive kinship and partnership lines.",
+  "Ленточные связи": "Ribbon links",
+  "Две тонкие переплетённые ленты вдоль связи.": "Two thin intertwined ribbons along the link.",
+  "Синие связи": "Blue links",
+  "Чёткие синие линии с мягким светлым контуром и узлами.": "Crisp blue lines with a soft light outline and nodes.",
+  "Огненные связи": "Fire links",
+  "Тонкое пламя с тёплым свечением и небольшими искрами.": "Thin fire with a warm glow and small sparks.",
+  "Семейная рамка": "Family frame",
+  "Новая рамка для виджетов ближайших дней рождения.": "A new frame for upcoming-birthday widgets.",
+  "Растительная рамка": "Botanical frame",
+  "Листья, прожилки и маленькие цветы по краям виджета.": "Leaves, veins, and small flowers around the widget.",
+  "Огненная рамка": "Fire frame",
+  "Золотой жар и языки огня по краям виджета.": "Golden heat and flames around the widget.",
+  "Классическая рамка": "Classic frame",
+  "Тонкая рамка для PNG/PDF-экспорта дерева.": "A thin frame for PNG/PDF tree exports.",
+  "Эпическая рамка с золотым жаром и языками пламени для PNG и PDF.": "An epic frame with golden heat and flames for PNG and PDF.",
+  "Зелёные побеги, листья и цветы по краям PNG и PDF.": "Green shoots, leaves, and flowers around PNG and PDF.",
+  " жетонов": " tokens",
+  " жет.": " tokens",
+  " вариантов оформления": " style options",
+  "Следующая реклама через ": "Next ad in ",
+  " с": " s",
+  "Скоро": "Coming soon",
+  "В мастерскую": "To Workshop",
+  "Позже": "Later",
+  "Скачать фото": "Download photo",
+  "‹ Все разделы": "‹ All sections",
+  "1 страница · дерево целиком, без обрезки. Для большого дерева текст можно увеличить в PDF.": "1 page · the whole tree, without cropping. You can enlarge the text in the PDF for a large tree.",
+  "Отменяем после текущего шага…": "Cancelling after the current step…",
+  "+10 жетонов": "+10 tokens",
+  "От середины пары": "From the couple midpoint",
+  "Включено — родители используют общий семейный маршрут от середины пары. Выключено — линия идёт отдельно от каждого человека, как раньше.": "On — parents use one shared family route from the couple midpoint. Off — each person has an individual line, as before.",
+  "Линии идут от середины пары": "Lines start from the couple midpoint",
+  "Линии идут от каждого человека": "Lines start from each person",
+  "Защита памяти: до ": "Memory protection: up to ",
+  " Мп на часть": " MP per part",
+  "Дерево с поиском и фото для просмотра в браузере": "Tree with search and portraits for viewing in a browser",
+  "Персоны, связи и фото карточек в формате Family Tree DS": "People, relationships and portraits in Family Tree DS XML format",
+  "Загружает .ftree, JSON, GEDCOM и ZIP с фотографиями.": "Imports .ftree, JSON, GEDCOM and ZIP archives with portraits.",
+  "Отправляет файл дерева в мессенджер, облако или другое приложение.": "Sends a tree file to a messenger, cloud service or another app.",
+  "Сохраняет файл дерева в выбранную папку на телефоне.": "Saves the tree file to a folder on the phone.",
+  "Статистика дерева": "Tree statistics",
+  "Родственники, продолжительность жизни и число детей по данным дерева.": "Relatives, lifespan and children recorded in this tree.",
+  "Всего человек": "People in total",
+  "Родство": "Relationships",
+  "Относительно: ": "Relative to: ",
+  "Близкие родственники": "Close relatives",
+  "Дальние родственники": "Distant relatives",
+  "Другие семейные связи": "Other family connections",
+  "Родство не установлено": "No established relationship",
+  "Близкие: родители, дети, братья и сёстры, дедушки и бабушки, внуки. Остальные родственники — дальние. Другие семейные связи — например, супруги и их родня. Расчёт основан на записанных связях; выбранный человек не входит в эти группы.": "Close relatives: parents, children, siblings, grandparents and grandchildren. Other relatives are distant. Other family connections include spouses and their families. Counts use recorded relationships and exclude the reference person.",
+  "Выберите карточку или задайте корень дерева для расчёта родства.": "Select a person or set the tree root to calculate relationships.",
+  "Относительно выбранной карточки": "Relative to the selected person",
+  "Относительно корня дерева": "Relative to the tree root",
+  "Продолжительность жизни": "Lifespan",
+  "Средняя, лет": "Average, years",
+  "Максимальная, лет": "Maximum, years",
+  "Человек с датами жизни": "People with lifespan dates",
+  "Из них с неполными датами": "Including incomplete dates",
+  "Только люди с датами рождения и смерти. Неполные даты дают приблизительный возраст по годам; ошибочные даты исключены.": "Only people with birth and death dates. Incomplete dates give an approximate age based on years; invalid dates are excluded.",
+  "Среднее число детей": "Average number of children",
+  "Максимальное число детей": "Maximum number of children",
+  "Родителей с детьми в дереве": "Parents with children in this tree",
+  "Среднее рассчитано среди людей, у которых записан хотя бы один ребёнок. Учитываются только связи в этом дереве, повторные связи не увеличивают число детей.": "The average includes people with at least one recorded child. Only relationships in this tree count; duplicate links do not increase the number of children.",
+  "Степень родства: ": "Kinship display: ",
+  "терминологически": "relationship terms",
+  "параметрически": "cousin degree and generations",
+  "Степень родства: терминологически": "Kinship: relationship terms",
+  "Степень родства: параметрически": "Kinship: degree and generations",
+  "Показывает четвероюродную племянницу или тётю с учётом направления поколения.": "Uses niece or aunt terms to distinguish younger and older generations.",
+  "Показывает четвероюродную сестру с разницей в одно поколение.": "Shows the cousin degree and the difference in generations.",
+  "Отображение степени родства": "Kinship display",
+  "Терминологический: двоюродная племянница / тётя": "Relationship terms: niece / aunt, including cousin branches",
+  "Параметрический: двоюродная сестра, разница в поколение": "Parameters: cousin degree and generation difference",
+  "Терминологическое отображение включено": "Relationship terms enabled",
+  "Параметрическое отображение включено": "Cousin degree and generation difference enabled",
+  "Добавлен выбор названий родства: племянники и тёти с учётом поколения либо степень родства с разницей поколений. Режим применяется также к поиску.": "Choose relationship terms or cousin degree with generation differences. The selected mode also applies to search.",
+  "В настройках появилась статистика дерева: число людей, группы родственников, средняя и максимальная продолжительность жизни и число детей.": "Tree statistics are available in Settings: people, relationship groups, average and maximum lifespan and number of children.",
+  "Улучшен HTML-экспорт для просмотра без интернета: поиск, карточки людей, переходы по родственникам и управление масштабом. Добавлен XML для обмена данными Family Tree DS.": "Improved offline HTML export with search, person cards, relative navigation and zoom. Added XML for exchanging Family Tree DS data.",
+  "Импорт показывает предварительный итог и предупреждения, поддерживает перетаскивание файлов. Улучшено сохранение связей при переносе GEDCOM; список файлов фильтруется по поддерживаемым форматам.": "Import shows a preview and warnings and supports drag and drop. GEDCOM relationship preservation has been improved; file lists filter supported formats.",
+  "«Сохранить» записывает файл на устройство, а «Экспорт» позволяет отправить его через другие приложения.": "Save writes a file to the device; Export sends it through other apps.",
+  "Исправлена видимость ленточных, растительных и огненных связей при включённых ровных линиях.": "Fixed ribbon, botanical and fire connections when straight lines are enabled.",
+  "Терминологический\nПлемянница или тётя": "Relationship terms\nNiece or aunt",
+  "Параметрический\nРазница поколений": "Parameters\nGeneration difference",
+  "Значок статуса жизни": "Life status badge",
+  "Лист — жив, свеча — умер, вопрос — неизвестно. Значок располагается над качеством карточки или на его месте, если качество скрыто. Статус можно указать в профиле человека.": "Leaf: living. Candle: deceased. Question mark: unknown. The badge appears above the quality badge, or in its place when quality is hidden. Set the status in the person's profile.",
+  "Статус жизни": "Life status",
+  "Статус жизни: Жив": "Life status: Living",
+  "Статус жизни: Умер": "Life status: Deceased",
+  "Статус жизни: Неизвестно": "Life status: Unknown",
+  "Жив": "Living",
+  "Умер": "Deceased",
+  "Неизвестно": "Unknown",
+  "Если указана дата смерти, статус определяется как «Умер». Без даты статус можно выбрать вручную.": "A death date sets the status to Deceased. Without a date, you can choose the status manually.",
+  "Чтобы изменить статус, сначала очистите дату смерти": "Clear the death date before changing the status",
+  "Изменён статус жизни": "Life status changed",
+  "Фамилия": "Surname",
+  "Отчество": "Patronymic",
+  "Девичья фамилия": "Maiden surname",
+  "Указать девичью фамилию": "Add maiden surname",
+  "Как в общих настройках": "Use general setting",
+  "Показывать девичью фамилию": "Show maiden surname",
+  "Меняется только подпись в дереве. Обе фамилии сохраняются.": "Only the name displayed in the tree changes. Both surnames are kept.",
+  "Степень родства": "Kinship display",
+  "Как отображается родство": "How relationships are displayed",
+  "Выберите удобный способ отображения": "Choose your preferred display style",
+  "Терминологический": "Relationship terms",
+  "Параметрический": "Degree and generations",
+  "Девичьи фамилии в дереве": "Maiden surnames in the tree",
+  "Включено — на карточках показывается девичья фамилия, если она указана. Выключено — текущая. В карточке человека можно выбрать свой вариант. Данные фамилий не меняются.": "When enabled, cards show the maiden surname if recorded. Otherwise they show the current surname. Each person can override this choice. Both surnames are retained.",
+  "Значок качества карточки": "Card quality badge",
+  "Показывает на карточках небольшой значок ошибок, предупреждений или полноты данных. Проверка качества дерева продолжает работать и при скрытых значках.": "Shows a small badge for errors, warnings or data completeness on cards. Tree quality checks continue when badges are hidden.",
+  "Показатели": "Numbers",
+  "Диаграммы": "Charts",
+  "С фотографией": "With photo",
+  "С биографией": "With biography",
+  "Без семейных связей": "Without family links",
+  "Нажмите на сектор или подпись, чтобы увидеть число и долю.": "Tap a segment or label to see its count and share.",
+  "Выбранный человек": "Reference person",
+  "Пол": "Gender",
+  "Годы рождения": "Birth years",
+  "До 1900": "Before 1900",
+  "С 2000": "Since 2000",
+  "Нет корректной даты": "No valid date",
+  "Дети в дереве": "Children in the tree",
+  "Не записаны": "None recorded",
+  "Один ребёнок": "One child",
+  "Двое детей": "Two children",
+  "Трое детей": "Three children",
+  "Четверо и более": "Four or more",
+  "Фотографии": "Photos",
+  "Без фотографии": "Without photo",
+  "Диаграммы описывают заполненные данные дерева. Отсутствие записи о детях не означает, что детей не было. Пол может быть определён приложением по имени.": "Charts describe the data recorded in the tree. No recorded children does not mean that a person had no children. Gender may have been inferred from the name.",
+  "Все группы": "All groups",
+  "Круговая диаграмма. Выберите сектор или строку легенды.": "Pie chart. Select a segment or a legend row.",
+  "Эта настройка меняет только название родства. Люди, связи и расположение карточек остаются прежними.\n\nТерминологический — привычные русские названия с учётом того, кто относится к старшему или младшему поколению: например, двоюродная племянница или тётя.\n\nПараметрический — степень двоюродного родства и число поколений между людьми, с указанием старшего или младшего поколения. Так удобнее сравнивать дальних родственников.\n\nРазница поколений считается в обе стороны по семейным связям, а не по возрасту и не по высоте карточки на экране. Выбранный режим действует в поиске и при просмотре родства.": "This setting changes how a relationship is named. People, links and card positions stay the same.\n\nRelationship terms use familiar names and distinguish younger and older generations, such as a niece or aunt from a cousin branch.\n\nDegree and generations shows the cousin degree and the number of generations between people, including the direction. This makes distant relationships easier to compare.\n\nGeneration differences are calculated in both directions using family links, regardless of age or card position. The selected style applies to search and relationship views.",
+  "Карточки получили отдельные поля фамилии, имени и отчества, а также включаемое поле девичьей фамилии. Фамилию для дерева можно выбрать в общих настройках или отдельно для человека.": "Person cards have separate surname, given name and patronymic fields, plus an optional maiden surname. Choose the displayed surname globally or for each person.",
+  "В статистике появились круговые диаграммы родства, пола, годов рождения, числа детей и фотографий. Секторы и подписи можно выбирать, чтобы увидеть количество и долю.": "Statistics now include interactive pie charts for relationships, gender, birth years, children and photos. Select segments or labels to see counts and shares.",
+  "Меню степени родства обновлено: короткие названия режимов и объяснение по кнопке «?». Подсказки полностью прокручиваются, а значок качества карточек можно скрыть в настройках.": "Redesigned kinship selection with concise mode names and a question-mark help button. Help is fully scrollable, and card quality badges can be hidden in Settings.",
+  "Скрыть девичью фамилию в карточке": "Hide maiden name on the card",
+  "Показать девичью фамилию в карточке": "Show maiden name on the card",
+  "Эта карточка — центр дерева": "This person is the center of the tree",
+  "Сделать центром дерева": "Make the center of the tree",
+  "Выбрать другую карточку": "Choose another person",
+  "Поколения": "Generations",
+  "Уменьшить число поколений": "Show fewer generations",
+  "Увеличить число поколений": "Show more generations",
+  "Количество поколений близких": "Number of close generations",
+  "Сердце — жив, свеча — умер, вопрос — неизвестно. Значок располагается над качеством карточки или на его месте, если качество скрыто. Статус можно указать в профиле человека.": "Heart: living. Candle: deceased. Question mark: unknown. The badge appears above the quality badge, or in its place when quality is hidden. Set the status in the person's profile.",
+  "Иконки и цвета статуса жизни": "Life status icons and colors",
+  "Иконки статуса жизни": "Life status icons",
+  "Значок располагается над качеством карточки или на его месте, если качество скрыто. Статус можно указать в профиле человека, а иконки и цвета — выбрать ниже.": "The badge appears above the quality badge, or in its place when quality is hidden. Set the status in the profile and choose icons and colors below.",
+  "Выберите символы для живых, умерших и неизвестного статуса, их цвет и фон. Изменения сразу видны на карточках.": "Choose symbols for living, deceased and unknown status, their colors and background. Changes appear on cards immediately.",
+  "Выберите статус, затем иконку и цвет. Изменения сразу видны на карточках.": "Select a status, then an icon and color. Changes appear on cards immediately.",
+  "Иконки": "Icons",
+  "Фон значка": "Badge background",
+  "Заливка": "Filled",
+  "Светлый круг": "Light circle",
+  "Без фона": "No background",
+  "Цвет выбранного статуса": "Color for the selected status",
+  "Точный цвет значка": "Exact badge color",
+  "Введите цвет в формате #RRGGBB": "Enter a color as #RRGGBB",
+  "Сердце": "Heart",
+  "Листья": "Leaves",
+  "Лист": "Leaf",
+  "Контур листа": "Leaf outline",
+  "Росток": "Sprout",
+  "Солнце": "Sun",
+  "Восход": "Sunrise",
+  "Пульс": "Pulse",
+  "Лотос": "Lotus",
+  "Бесконечность": "Infinity",
+  "Свеча": "Candle",
+  "Лента памяти": "Memorial ribbon",
+  "Луна": "Moon",
+  "Цветок памяти": "Memorial flower",
+  "Песочные часы": "Hourglass",
+  "Дерево без листьев": "Bare tree",
+  "Крест": "Cross",
+  "Памятник": "Headstone",
+  "Памятник с крестом": "Headstone with cross",
+  "Урна": "Urn",
+  "Вопрос": "Question mark",
+  "Тире": "Dash",
+  "Многоточие": "Ellipsis",
+  "Импорт дерева": "Import tree",
+  "Папка для импорта": "Import folder",
+  "Проверка дерева": "Checking tree",
+  "Выберите файл дерева или папку. В списке папки показываются только поддерживаемые форматы.": "Choose a tree file or a folder. The folder list only shows supported formats.",
+  "Выбрать файл": "Choose file",
+  "Выбрать папку": "Choose folder",
+  "Открыть один файл дерева": "Open a single tree file",
+  "Просмотреть папку с деревьями": "Browse a folder of trees",
+  "Выберите папку с деревом. В ней будут показаны только .ftree, .tree, .json, .ged, .gedcom, .zip и XML Family Tree DS.": "Choose a folder containing a tree. Only .ftree, .tree, .json, .ged, .gedcom, .zip and Family Tree DS XML files will be shown.",
+  "Чтение папки…": "Reading folder…",
+  "Читаем персоны, связи и фотографии…": "Reading people, relationships and photos…",
+  "Импорт · поддерживаемые файлы": "Import · supported files",
+  "Другая папка": "Another folder",
+  "Выбранная папка": "Selected folder",
+  "Не удалось прочитать папку. Выберите её заново.": "Could not read the folder. Select it again.",
+  "В этой папке нет поддерживаемых файлов дерева. Выберите другую папку.": "This folder contains no supported tree files. Select another folder.",
+  "Оттенок": "Hue",
+  "Насыщенность": "Saturation",
+  "Яркость": "Brightness",
+  "Красный": "Red",
+  "Зелёный": "Green",
+  "Синий": "Blue",
+  "Жёлтый": "Yellow",
+  "Фиолетовый": "Purple",
+  "Оранжевый": "Orange",
+  "Чёрный": "Black",
+  "Белый": "White",
+  "По датам": "From dates",
+  "Дети отсутствуют": "No children",
+  "Доли родства рассчитаны без человека, относительно которого строится статистика.": "Relationship percentages exclude the person used as the reference.",
+  "По датам: рождение без смерти — жив; старше 100 лет — неизвестно; старше 120 — умер. Без даты рождения — неизвестно. Статус также можно выбрать вручную.": "From dates: birth without death means living; over 100 means unknown; over 120 means deceased. Without a birth date the status is unknown. You can also choose it manually.",
+  "Выберите папку с деревом. В ней будут показаны только .ftree, .tree, .json, .ged, .gedcom, .gdz, .zip и XML Family Tree DS.": "Choose a folder containing a tree. Only .ftree, .tree, .json, .ged, .gedcom, .gdz, .zip and Family Tree DS XML files will be shown.",
+  "Поддерживаются .ftree, .tree, .json, .ged, .gedcom, .gdz, .zip и XML Family Tree DS.": "Supported: .ftree, .tree, .json, .ged, .gedcom, .gdz, .zip and Family Tree DS XML.",
+  "Исправлены сохранение больших альбомов и воспоминаний, отмена изменений альбомов и обработка дат. Синхронизация защищает свежие локальные правки от замены устаревшим результатом. Загруженные фотографии обновляются на дереве и в галереях даже после частичного сбоя передачи.": "Fixed saving large albums and memories, undoing album changes, and date handling. Sync protects recent local edits from being replaced by an outdated result. Downloaded photos refresh in the tree and galleries even after a partial transfer failure.",
+  "Уменьшен размер приложения. При синхронизации больших наборов фотографий устранены лишние операции, а сетевые соединения используются повторно.": "Reduced the app size. Removed unnecessary work when syncing large photo collections and enabled network connection reuse.",
+  "Загрузка дерева…": "Loading family tree…",
+  "Оптимизирована работа с большими деревьями: ускорены поиск, подсказки, проверка данных и отрисовка. Каталог, галереи, импорт и экспорт стали отзывчивее. Миниатюры используют общий кэш, а большие альбомы прокручиваются без создания всех плиток сразу. При отдалении содержимое карточек сохраняется.": "Optimized large family trees: faster search, suggestions, data checks and rendering. The people list, galleries, import and export are more responsive. Thumbnails share a cache, and large albums scroll without creating every tile at once. Card content remains visible when zoomed out."
 }

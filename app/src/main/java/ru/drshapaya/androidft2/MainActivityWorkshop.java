@@ -248,38 +248,37 @@ final class MainActivityWorkshop {
         ui.showEditorDialog(dialog, shell);
     }
 
-    private void showJoinLeaderboardDialog() {
+    private Dialog showJoinLeaderboardDialog() {
         int balance = rewardWallet.balance();
         boolean english = AppLanguage.isEnglish(activity);
         if (balance < LEADERBOARD_ENTRY_COST) {
-            new android.app.AlertDialog.Builder(activity)
-                .setTitle(english ? "Not enough tokens yet" : "Жетонов пока мало")
-                .setMessage(english
+            AppDialog info=new AppDialog(activity,ui,R.drawable.ic_workshop_tokens,english ? "Not enough tokens yet" : "Жетонов пока мало")
+                .message(english
                     ? "You need " + LEADERBOARD_ENTRY_COST + " tokens to join the leaderboard. Available now: " + balance + "."
                     : "Для участия в топе нужно " + LEADERBOARD_ENTRY_COST
                         + " жетонов. Сейчас доступно: " + balance + ".")
-                .setPositiveButton(english ? "Got it" : "Понятно", null)
-                .show();
-            return;
+                .action(english ? "Got it" : "Понятно",true,null);
+            info.show(); return info;
         }
         EditText nickname = new LocalizedEditText(activity);
         nickname.setSingleLine(true);
         nickname.setHint(AppLanguage.text(activity, "Ваш ник в топе"));
         nickname.setTextSize(15);
+        nickname.setTextColor(AppThemePalette.text(Color.rgb(28,34,38)));
+        nickname.setHintTextColor(AppThemePalette.text(Color.rgb(101,113,122)));
         nickname.setPadding(ui.dp(12), 0, ui.dp(12), 0);
         nickname.setBackground(ui.panelBg(Color.WHITE, ui.dp(10), Color.rgb(217, 224, 229)));
         LinearLayout box = new LinearLayout(activity);
         box.setPadding(ui.dp(8), ui.dp(4), ui.dp(8), 0);
         box.addView(nickname, new LinearLayout.LayoutParams(-1, ui.dp(48)));
-        new android.app.AlertDialog.Builder(activity)
-            .setTitle(english ? "Join the leaderboard" : "Попасть в топ")
-            .setMessage(english
+        AppDialog join=new AppDialog(activity,ui,R.drawable.ic_workshop_tokens,english ? "Join the leaderboard" : "Попасть в топ")
+            .message(english
                 ? "Enter a nickname. The placement fee is " + LEADERBOARD_ENTRY_COST + " tokens."
                 : "Введите ник. С размещения будет списано "
                     + LEADERBOARD_ENTRY_COST + " жетонов.")
-            .setView(box)
-            .setNegativeButton(english ? "Cancel" : "Отмена", null)
-            .setPositiveButton(english ? "Place" : "Разместить", (dialog, which) -> {
+            .content(box)
+            .action(english ? "Cancel" : "Отмена",false,null)
+            .action(english ? "Place" : "Разместить",true,() -> {
                 String value = nickname.getText() == null ? "" : nickname.getText().toString().trim();
                 if (value.isEmpty()) {
                     messages.accept(english ? "Enter a nickname" : "Введите ник");
@@ -297,8 +296,8 @@ final class MainActivityWorkshop {
                 } else {
                     messages.accept(english ? "Not enough tokens" : "Жетонов стало недостаточно");
                 }
-            })
-            .show();
+            });
+        join.show(); return join;
     }
 
     private void watchRewardedAd() {
@@ -388,7 +387,7 @@ final class MainActivityWorkshop {
         head.setGravity(Gravity.CENTER_VERTICAL);
         ImageView icon = new ImageView(activity);
         icon.setImageResource(workshopCategoryIcon(category.id));
-        icon.setColorFilter(ACCENT_PURPLE);
+        icon.setColorFilter(AppThemePalette.text(ACCENT_PURPLE));
         icon.setPadding(ui.dp(7), ui.dp(7), ui.dp(7), ui.dp(7));
         icon.setBackground(ui.panelBg(
             Color.rgb(244, 236, 255), ui.dp(12),
@@ -432,7 +431,7 @@ final class MainActivityWorkshop {
         int accent = workshopCategoryAccent(RewardCatalog.CANVAS_BACKGROUNDS);
         GradientDrawable background = new GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
-            new int[]{Color.WHITE, AppThemePalette.surface(accent)});
+            new int[]{AppThemePalette.surface(Color.WHITE), AppThemePalette.surface(accent)});
         background.setCornerRadius(ui.dp(15));
         background.setStroke(ui.dp(1), AppThemePalette.alpha(accent, 115));
         return background;
@@ -514,8 +513,8 @@ final class MainActivityWorkshop {
 
         ImageView itemIcon = new ImageView(activity);
         itemIcon.setImageResource(workshopItemIcon(itemId));
-        itemIcon.setColorFilter(workshopRarityTextColor(
-            standard ? RewardCatalog.RARITY_COMMON : rarity));
+        itemIcon.setColorFilter(AppThemePalette.text(workshopRarityTextColor(
+            standard ? RewardCatalog.RARITY_COMMON : rarity)));
         itemIcon.setPadding(ui.dp(8), ui.dp(8), ui.dp(8), ui.dp(8));
         String iconRarity = standard ? RewardCatalog.RARITY_COMMON : rarity;
         itemIcon.setBackground(ui.panelBg(
@@ -608,7 +607,8 @@ final class MainActivityWorkshop {
         if ("canvas_background_blueprint".equals(itemId)
             || "link_style_ink".equals(itemId)) return R.drawable.ic_menu_pen;
         if ("canvas_background_deep_blueprint".equals(itemId)) return R.drawable.ic_menu_gears;
-        if ("link_style_blueprint".equals(itemId)) return R.drawable.ic_menu_paint_can;
+        if ("link_style_blueprint".equals(itemId)
+            || RewardCatalog.LINK_STYLE_CARD_COLORS.equals(itemId)) return R.drawable.ic_menu_paint_can;
         if ("canvas_background_paper".equals(itemId)) return R.drawable.ic_menu_paper;
         if ("export_frame_classic".equals(itemId)) return R.drawable.ic_menu_pen;
         if ("canvas_background_garden".equals(itemId)) return R.drawable.ic_menu_leaf;

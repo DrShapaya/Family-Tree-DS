@@ -166,6 +166,31 @@ public final class SmartLayoutSolverIntegrationTest {
     }
 
     @Test
+    public void addingToRepeatedMarriagePlacesFatherBetweenMothers() {
+        TreeState state = twoUnionsWithCloseChildren();
+        state.people.get("center").gender = PersonGender.MALE;
+        state.people.get("partnerA").gender = PersonGender.FEMALE;
+        state.people.get("partnerB").gender = PersonGender.FEMALE;
+
+        SmartLayoutSolver.ApplyResult result = SmartLayoutSolver.improveAfterAddition(
+            state,
+            Collections.singleton("childB"),
+            "center");
+
+        assertTrue(result.reason, result.applied);
+        float fatherX = state.people.get("center").x;
+        assertTrue(state.people.get("partnerA").x < fatherX);
+        assertTrue(fatherX < state.people.get("partnerB").x);
+        FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
+        assertEquals(0d, LayoutScorer.parentRoleSideError(
+            graph,
+            LayoutSnapshot.capture(state)), EPSILON);
+        assertTrue(new LayoutConstraints().validate(
+            graph,
+            LayoutSnapshot.capture(state)).isValid());
+    }
+
+    @Test
     public void autoArrangeProductionPathKeepsTwoUnionsSeparate() {
         TreeState state = twoUnionsWithCloseChildren();
         state.autoArrangeOnAdd = true;

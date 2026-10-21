@@ -32,7 +32,9 @@ final class MainActivityRelations {
             activity.selectedLinkId = "";
             activity.state.selectedId = person.id;
             activity.treeView.setLinkState(activity.pendingLinkFrom, "");
-            activity.toast("Первая карточка выбрана. Теперь выберите вторую");
+            activity.toast("parent".equals(activity.pendingLinkType)
+                ? "Первый родитель выбран. Теперь выберите ребёнка"
+                : "Первая карточка выбрана. Теперь выберите вторую");
             activity.bindState();
             return true;
         }
@@ -43,8 +45,7 @@ final class MainActivityRelations {
         }
         if (kinshipMode) {
             Person first = activity.state.people.get(activity.pendingLinkFrom);
-            KinshipCalculator.Result result = KinshipCalculator.calculate(
-                activity.state,
+            KinshipCalculator.Result result = activity.calculateKinship(
                 activity.pendingLinkFrom,
                 person.id);
             activity.pendingLinkType = "";

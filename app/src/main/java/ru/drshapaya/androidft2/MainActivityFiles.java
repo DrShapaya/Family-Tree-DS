@@ -90,6 +90,12 @@ final class MainActivityFiles {
     private Dialog exportMenuDialog;
     private Dialog pdfDialog;
     private boolean pendingPdfFit = true;
+    private boolean shareExport;
+    private final TreeImportPicker importPicker;
+    private boolean importing;
+    private boolean closed;
+    private final java.util.concurrent.ExecutorService mediaImporter = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private Dialog importProgress;
 
     private static final class ExportStyleChoice {
         final String id;
@@ -107,9 +113,14 @@ final class MainActivityFiles {
 
     MainActivityFiles(MainActivity activity) {
         this.activity = activity;
+        importPicker = new TreeImportPicker(activity, this);
     }
 
     void close() {
+        closed = true;
+        mediaImporter.shutdownNow();
+        importPicker.close();
+        if (importProgress != null) importProgress.dismiss();
         if (exportMenuDialog != null) exportMenuDialog.dismiss();
         if (pdfDialog != null) pdfDialog.dismiss();
         if (pngDialog != null) pngDialog.dismiss();
@@ -119,14 +130,34 @@ final class MainActivityFiles {
         }
     }
 
-    void openImport() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        activity.startActivityForResult(intent, MainActivity.REQ_IMPORT);
+    void openImport() { importPicker.open(); }
+
+    void installFileDrop(View root) {
+        root.setOnDragListener((view, event) -> {
+            switch (event.getAction()) {
+                case android.view.DragEvent.ACTION_DRAG_STARTED:
+                    return event.getClipDescription() != null
+                        && (event.getClipDescription().hasMimeType("application/*")
+                            || event.getClipDescription().hasMimeType("text/*"));
+                case android.view.DragEvent.ACTION_DROP:
+                    ClipData clip = event.getClipData();
+                    if (clip == null || clip.getItemCount() != 1 || clip.getItemAt(0).getUri() == null) {
+                        activity.toast("Перетащите один файл дерева"); return true;
+                    }
+                    android.view.DragAndDropPermissions permission = activity.requestDragAndDropPermissions(event);
+                    importFromUri(clip.getItemAt(0).getUri(), permission);
+                    return true;
+                default: return true;
+            }
+        });
     }
 
     void openExport(int requestCode, String type, String filename) {
+        if (shareExport) {
+            String unique = filename.replace("family-tree-", "family-tree-" + Long.toHexString(System.nanoTime()) + "-");
+            dispatchExport(requestCode, TreeShareProvider.uriFor(unique));
+            return;
+        }
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType(type);
@@ -134,7 +165,14 @@ final class MainActivityFiles {
         activity.startActivityForResult(intent, requestCode);
     }
 
-    void showExportMenu() {
+    void showSaveMenu() { showFormatMenu(false); }
+
+    void showExportMenu() { showFormatMenu(true); }
+
+    void showPngSaveSettings() { shareExport = false; showPngSettings(); }
+
+    private void showFormatMenu(boolean share) {
+        shareExport = share;
         Dialog dialog = new Dialog(activity);
         exportMenuDialog = dialog;
         dialog.setOnDismissListener(ignored -> {
@@ -151,14 +189,14 @@ final class MainActivityFiles {
 
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = versionText("Экспорт дерева", 21, Color.rgb(28, 34, 38), true);
+        TextView title = versionText(share ? "Отправить дерево" : "Сохранить файл", 21, Color.rgb(28, 34, 38), true);
         header.addView(title, new LinearLayout.LayoutParams(0, activity.dp(48), 1));
         Button close = activity.actionButton("Закрыть", v -> dialog.dismiss());
         header.addView(close, new LinearLayout.LayoutParams(activity.dp(90), activity.dp(42)));
         shell.addView(header);
 
         TextView intro = versionText(
-            "Выберите формат файла или откройте точные настройки печати.",
+            share ? "Выберите формат, затем приложение или сервис для отправки." : "Выберите формат и папку в памяти телефона. Изменения дерева сохраняются автоматически.",
             11, Color.rgb(83, 94, 103), false);
         intro.setPadding(activity.dp(4), 0, activity.dp(4), activity.dp(6));
         shell.addView(intro);
@@ -188,6 +226,17 @@ final class MainActivityFiles {
         advanced.addView(exportOption("GEDCOM", "Для других генеалогических программ", () -> {
             dialog.dismiss();
             openExport(MainActivity.REQ_EXPORT_GEDCOM, "text/plain", "family-tree-" + dateStamp() + ".ged");
+        }));
+        advanced.addView(exportOption("HTML", "Дерево с поиском и фото для просмотра в браузере", () -> {
+            dialog.dismiss();
+            openExport(MainActivity.REQ_EXPORT_HTML, "text/html", "family-tree-" + dateStamp() + ".html");
+        }));
+        advanced.addView(exportOption("XML", "Персоны, связи и фото карточек в формате Family Tree DS", () -> {
+            dialog.dismiss();
+            openExport(MainActivity.REQ_EXPORT_XML, "application/xml", "family-tree-" + dateStamp() + ".xml");
+        }));
+        advanced.addView(exportOption("PNG", "Изображение дерева с настройкой качества", () -> {
+            dialog.dismiss(); showPngSettings();
         }));
         advanced.addView(exportOption("PDF", "Дерево целиком на странице или печать по листам", () -> {
             dialog.dismiss();
@@ -329,7 +378,7 @@ final class MainActivityFiles {
         shell.addView(exportFrameButton(wallet, () -> pendingPdfFrame, value -> pendingPdfFrame = value, null));
         shell.addView(summary);
         updatePdf.run();
-        Button save = activity.actionButton("Сохранить PDF", v -> {
+        Button save = activity.actionButton(shareExport ? "Отправить PDF" : "Сохранить PDF", v -> {
             dialog.dismiss();
             openExport(
                 MainActivity.REQ_EXPORT_PDF,
@@ -374,7 +423,7 @@ final class MainActivityFiles {
         TextView resolution = versionText("", 11, Color.rgb(8, 122, 115), true);
         resolution.setPadding(
             activity.dp(12), activity.dp(8), activity.dp(12), activity.dp(8));
-        resolution.setMaxLines(3);
+        resolution.setMaxLines(4);
         resolution.setGravity(Gravity.CENTER_VERTICAL);
         resolution.setBackground(activity.panelBg(
             Color.rgb(239, 249, 248), activity.dp(9), Color.rgb(194, 226, 222)));
@@ -392,20 +441,30 @@ final class MainActivityFiles {
         overview.addView(reset, resetParams);
         controls.addView(overview, new LinearLayout.LayoutParams(-1, activity.dp(88)));
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        Button save = activity.actionButton("Сохранить PNG", null);
+        Button save = activity.actionButton(shareExport ? "Отправить PNG" : "Сохранить PNG", null);
         save.setTextColor(Color.WHITE);
         save.setBackground(activity.tealGradientBg(activity.dp(11)));
         shell.addView(save, new LinearLayout.LayoutParams(-1, activity.dp(48)));
         TextView cuts = versionText("", 12, Color.rgb(55, 77, 82), false);
+        preview.setOnError(error -> {
+            save.setEnabled(false);
+            activity.toast("Не удалось обновить предпросмотр");
+            DiagnosticsLogger.handled(activity,"export.preview",error);
+        });
         Runnable update = () -> {
             int q = pendingPngQuality;
             ExportLayout layout = export.layout(PNG_QUALITY_SCALES[q], PNG_QUALITY_MAX_PIXELS[q]);
             boolean split = layout.columns * layout.rows > 1;
             int partCount = layout.columns * layout.rows;
+            boolean memoryLimited = PNG_QUALITY_MAX_PIXELS[q] > export.safePixelsPerBitmap;
             resolution.setText("Разрешение: " + formatPixels(layout.width) + " × "
                 + formatPixels(layout.height) + " px\n"
                 + "Частей: " + partCount + "\n"
-                + "≈ " + formatBytes(estimatePngBytes(layout, export, split)));
+                + "≈ " + formatBytes(estimatePngBytes(layout, export, split))
+                + (memoryLimited
+                    ? "\nЗащита памяти: до " + formatMegapixels(export.safePixelsPerBitmap)
+                        + " Мп на часть"
+                    : ""));
             reset.setText("Область изображения\n" + (sameRect(export.crop, export.extent)
                 ? "Всё дерево"
                 : "Выбранная область"));
@@ -657,7 +716,7 @@ final class MainActivityFiles {
         titleRow.setGravity(Gravity.CENTER);
         ImageView lock = new ImageView(activity);
         lock.setImageResource(R.drawable.ic_menu_lock);
-        lock.setColorFilter(Color.rgb(122, 66, 158));
+        lock.setColorFilter(AppThemePalette.text(Color.rgb(122, 66, 158)));
         lock.setPadding(activity.dp(6), activity.dp(6), activity.dp(6), activity.dp(6));
         titleRow.addView(lock, new LinearLayout.LayoutParams(activity.dp(34), activity.dp(34)));
         TextView name = versionText("«" + title + "»", 16, Color.rgb(48, 35, 70), true);
@@ -700,7 +759,7 @@ final class MainActivityFiles {
         slider.setPadding(activity.dp(18), activity.dp(7), activity.dp(18), activity.dp(7));
         slider.setSplitTrack(false);
         GradientDrawable track = new GradientDrawable();
-        track.setColor(Color.rgb(221, 235, 234));
+        track.setColor(AppThemePalette.surface(Color.rgb(221, 235, 234)));
         track.setCornerRadius(activity.dp(99));
         track.setSize(-1, activity.dp(18));
         GradientDrawable progress = new GradientDrawable(
@@ -796,6 +855,10 @@ final class MainActivityFiles {
     private static String formatBytes(long bytes) {
         if (bytes < 1024L * 1024L) return Math.max(1L, bytes / 1024L) + " КБ";
         return String.format(Locale.US, "%.1f МБ", bytes / (1024d * 1024d));
+    }
+
+    private static String formatMegapixels(long pixels) {
+        return String.format(Locale.US, "%.1f", pixels / 1_000_000d);
     }
 
     private View exportToggle(String title, boolean checked,
@@ -902,7 +965,7 @@ final class MainActivityFiles {
 
             ImageView icon = new ImageView(activity);
             icon.setImageResource(exportFrameIcon(choice.id));
-            icon.setColorFilter(current ? Color.rgb(102, 55, 142) : Color.rgb(91, 70, 194));
+            icon.setColorFilter(AppThemePalette.text(current ? Color.rgb(102, 55, 142) : Color.rgb(91, 70, 194)));
             icon.setPadding(activity.dp(9), activity.dp(9), activity.dp(9), activity.dp(9));
             icon.setBackground(activity.panelBg(
                 current ? Color.rgb(226, 211, 241) : Color.rgb(244, 239, 250),
@@ -1195,12 +1258,13 @@ final class MainActivityFiles {
             releasePendingImageExport(requestCode);
             return;
         }
+        if (requestCode == TreeImportPicker.REQUEST_FOLDER) { importPicker.selected(data); return; }
         if (requestCode == MainActivity.REQ_MEMORY_FILE
             || requestCode == MainActivity.REQ_MEMORY_PHOTO) {
             List<Uri> uris = new ArrayList<>();
             ClipData clipData = data.getClipData();
             if (clipData != null) {
-                for (int index = 0; index < clipData.getItemCount() && uris.size() < 24; index++) {
+                for (int index = 0; index < clipData.getItemCount(); index++) {
                     Uri itemUri = clipData.getItemAt(index).getUri();
                     if (itemUri != null && !uris.contains(itemUri)) uris.add(itemUri);
                 }
@@ -1215,19 +1279,58 @@ final class MainActivityFiles {
         }
         Uri uri = data.getData();
         if (requestCode == MainActivity.REQ_IMPORT) importFromUri(uri);
-        if (requestCode == MainActivity.REQ_EXPORT_FTREE) exportTreePackageToUri(uri);
-        if (requestCode == MainActivity.REQ_EXPORT_JSON) exportTextToUri(uri, "json");
-        if (requestCode == MainActivity.REQ_EXPORT_GEDCOM) exportTextToUri(uri, "gedcom");
-        if (requestCode == MainActivity.REQ_EXPORT_PNG) exportPngToUri(uri);
-        if (requestCode == MainActivity.REQ_EXPORT_PDF) exportPdfToUri(uri);
-        if (requestCode == MainActivity.REQ_EXPORT_TILES) exportTilesToUri(uri);
+        dispatchExport(requestCode, uri);
         if (requestCode == MainActivity.REQ_PHOTO) importPhotoFromUri(uri);
     }
 
+    private void dispatchExport(int requestCode, Uri uri) {
+        if (requestCode == MainActivity.REQ_EXPORT_FTREE) exportTreePackageToUri(uri);
+        if (requestCode == MainActivity.REQ_EXPORT_JSON) exportTextToUri(uri, "json");
+        if (requestCode == MainActivity.REQ_EXPORT_GEDCOM) exportTextToUri(uri, "gedcom");
+        if (requestCode == MainActivity.REQ_EXPORT_HTML) exportReadableToUri(uri, true);
+        if (requestCode == MainActivity.REQ_EXPORT_XML) exportReadableToUri(uri, false);
+        if (requestCode == MainActivity.REQ_EXPORT_PNG) exportPngToUri(uri);
+        if (requestCode == MainActivity.REQ_EXPORT_PDF) exportPdfToUri(uri);
+        if (requestCode == MainActivity.REQ_EXPORT_TILES) exportTilesToUri(uri);
+    }
+
+    private OutputStream exportOutput(Uri uri) throws IOException {
+        if (!TreeShareProvider.AUTHORITY.equals(uri.getAuthority())) return activity.getContentResolver().openOutputStream(uri);
+        File dir = new File(activity.getCacheDir(), "shared");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("Не создана папка обмена");
+        String name = uri.getLastPathSegment();
+        if (name == null || name.contains("/") || name.contains("\\") || name.equals("..")) throw new IOException("Недопустимое имя файла");
+        return new FileOutputStream(new File(dir, name));
+    }
+
+    private void completeExport(Uri uri, OutputStream output) throws IOException {
+        output.close(); // The receiving app must never see a partially written ZIP/PDF.
+        activity.runOnUiThread(() -> {
+            if (activity.isFinishing() || activity.isDestroyed()) return;
+            if (!TreeShareProvider.AUTHORITY.equals(uri.getAuthority())) { activity.toast("Файл сохранён"); return; }
+            try {
+                Intent send = new Intent(Intent.ACTION_SEND);
+                String mime = activity.getContentResolver().getType(uri);
+                if (uri.toString().endsWith(".ged")) mime = "text/x-gedcom";
+                send.setType(mime == null ? "application/octet-stream" : mime);
+                send.putExtra(Intent.EXTRA_STREAM, uri);
+                send.setClipData(ClipData.newRawUri("Family Tree DS", uri));
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                activity.startActivity(Intent.createChooser(send, AppLanguage.isEnglish(activity) ? "Send tree" : "Отправить дерево"));
+            } catch (Exception error) { activity.toast("Не удалось отправить: " + safeError(error)); }
+        });
+    }
+
     void handleIncomingIntent(Intent intent) {
-        if (intent == null || intent.getData() == null) return;
-        if (Intent.ACTION_VIEW.equals(intent.getAction())) {
-            Uri uri = intent.getData();
+        if (intent == null) return;
+        Uri incoming = intent.getData();
+        if (incoming == null && Intent.ACTION_SEND.equals(intent.getAction())) {
+            Object extra = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (extra instanceof Uri) incoming = (Uri) extra;
+        }
+        if (incoming == null) return;
+        if (Intent.ACTION_VIEW.equals(intent.getAction()) || Intent.ACTION_SEND.equals(intent.getAction())) {
+            Uri uri = incoming;
             intent.setData(null);
             importFromUri(uri);
         }
@@ -1240,107 +1343,92 @@ final class MainActivityFiles {
         pendingImageExport = null;
     }
 
-    void importFromUri(Uri uri) {
-        if (uri == null) return;
-        DiagnosticsLogger.breadcrumb(activity, "import.start");
-        activity.toast("Проверка файла…");
+    void importFromUri(Uri uri) { importFromUri(uri, null); }
+
+    private void importFromUri(Uri uri, android.view.DragAndDropPermissions permission) {
+        if (uri == null || importing) {
+            if (permission != null) permission.release();
+            if (importing) activity.toast("Дождитесь окончания проверки файла");
+            return;
+        }
+        String name = displayName(uri);
+        if (!TreeImportPicker.supports(name)) {
+            if (permission != null) permission.release();
+            showImportFailure(uri, new IOException("Поддерживаются .ftree, .tree, .json, .ged, .gedcom, .gdz, .zip и XML Family Tree DS."));
+            return;
+        }
+        importing = true;
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        importProgress = AppDialog.create(activity,R.drawable.ic_menu_import,"Проверка дерева")
+            .message(name).progress("Читаем персоны, связи и фотографии…")
+            .action("Отмена",false,() -> cancelled.set(true));
+        importProgress.setCanceledOnTouchOutside(false);
+        importProgress.setOnCancelListener(d -> cancelled.set(true));
+        importProgress.show();
+        Dialog progress = importProgress;
         new Thread(() -> {
             try (InputStream raw = activity.getContentResolver().openInputStream(uri);
                  BufferedInputStream input = raw == null ? null : new BufferedInputStream(raw, 64 * 1024)) {
-                if (input == null) throw new IllegalStateException("Файл не открыт");
-                input.mark(8);
-                byte[] header = new byte[4];
-                int count = input.read(header);
-                input.reset();
-                TreeState imported = TreePackageIO.hasZipSignature(header, count)
-                    ? TreePackageIO.read(input, activity.store)
-                    : activity.store.parse(readUtf8Limited(input, 25L * 1024L * 1024L));
-                String sourceName = displayName(uri);
-                activity.runOnUiThread(() -> confirmImportedTree(imported, sourceName));
+                if (input == null) throw new IOException("Файл не открыт");
+                input.mark(8); byte[] header = new byte[4]; int count = input.read(header); input.reset();
+                TreeImportIO.Result result = TreePackageIO.hasZipSignature(header, count)
+                    ? TreeImportIO.readZip(input, activity.store) : TreeImportIO.readText(input, activity.store);
+                if (result.state == null || result.state.people.isEmpty()) throw new IOException("В файле не найдено ни одной персоны");
+                activity.runOnUiThread(() -> {
+                    progress.dismiss();
+                    if (!cancelled.get() && !activity.isFinishing() && !activity.isDestroyed())
+                        confirmImportedTree(result.state, name, result.notice(AppLanguage.isEnglish(activity)));
+                });
             } catch (Exception error) {
-                activity.runOnUiThread(() ->
-                    activity.toast("Импорт не выполнен: " + safeError(error)));
+                activity.runOnUiThread(() -> { progress.dismiss(); if (!cancelled.get()) showImportFailure(uri, error); });
                 DiagnosticsLogger.handled(activity, "import", error);
+            } finally {
+                if (permission != null) permission.release();
+                activity.runOnUiThread(() -> { importing = false; if (importProgress == progress) importProgress = null; });
             }
         }, "tree-import").start();
     }
 
-    private void confirmImportedTree(TreeState imported, String sourceName) {
-        if (activity.isFinishing() || activity.isDestroyed() || imported == null) return;
-        if (!shouldWarnBeforeReplacing(activity.state, imported)) {
-            applyImportedTree(imported);
-            return;
+    private Dialog showImportFailure(Uri uri, Exception error) {
+        if (activity.isFinishing() || activity.isDestroyed()) return null;
+        String name = displayName(uri);
+        String reason = safeError(error);
+        boolean english = AppLanguage.isEnglish(activity);
+        String message = (name.isEmpty() ? "" : name + "\n\n") + reason;
+        AppDialog failure=AppDialog.create(activity,R.drawable.ic_menu_warning,english ? "Import failed" : "Импорт не выполнен")
+            .message(message)
+            .action(english ? "OK" : "Понятно",true,null);
+        failure.show(); return failure;
+    }
+
+    private Dialog confirmImportedTree(TreeState imported, String sourceName, String notice) {
+        boolean english = AppLanguage.isEnglish(activity);
+        LinearLayout content = new LinearLayout(activity);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(0, activity.dp(4), 0, activity.dp(4));
+        TextView filename = versionText(sourceName, 14, Color.rgb(71,82,89), false);
+        filename.setTextIsSelectable(true); content.addView(filename);
+        TextView stats = versionText(imported.people.size() + (english ? " people  ·  " : " персон  ·  ")
+            + imported.links.size() + (english ? " relationships" : " связей"), 20, Color.rgb(30,105,82), true);
+        stats.setPadding(activity.dp(14),activity.dp(16),activity.dp(14),activity.dp(16));
+        stats.setBackground(new MainUiKit(activity,() -> activity.uiScale).softAccentGradientBg(activity.dp(14)));
+        LinearLayout.LayoutParams statsParams=new LinearLayout.LayoutParams(-1,-2);
+        statsParams.setMargins(0,activity.dp(14),0,activity.dp(14)); content.addView(stats,statsParams);
+        if (!notice.isEmpty()) {
+            TextView warning = versionText((english ? "Check before opening\n\n" : "Обратите внимание\n\n") + notice, 14, Color.rgb(113,76,30), false);
+            warning.setPadding(activity.dp(14),activity.dp(14),activity.dp(14),activity.dp(14));
+            warning.setBackground(activity.panelBg(Color.rgb(255,246,226),activity.dp(12),Color.rgb(234,211,164)));
+            warning.setTextIsSelectable(true);content.addView(warning);
         }
-
-        Dialog dialog = new Dialog(activity);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout shell = new LinearLayout(activity);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(activity.dp(18), activity.dp(16), activity.dp(18), activity.dp(16));
-        shell.setBackground(activity.panelBg(
-            Color.rgb(250, 252, 253),
-            activity.dp(18),
-            Color.argb(56, 63, 82, 94)));
-
-        TextView title = versionText(
-            AppLanguage.isEnglish(activity) ? "Open another tree?" : "Открыть другое дерево?",
-            20,
-            Color.rgb(28, 34, 38),
-            true);
-        shell.addView(title, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            activity.dp(44)));
-
-        String safeName = sourceName == null ? "" : sourceName.trim();
-        String message = AppLanguage.isEnglish(activity)
-            ? "The current tree will be replaced. To keep a separate copy, cancel and export it first."
-            : "Текущее дерево будет заменено. Чтобы оставить отдельную копию, нажмите «Отмена» и сначала экспортируйте его.";
-        if (!safeName.isEmpty()) {
-            message += AppLanguage.isEnglish(activity)
-                ? "\n\nFile: " + safeName
-                : "\n\nФайл: " + safeName;
+        if (shouldWarnBeforeReplacing(activity.state, imported)) {
+            TextView replace = versionText(english ? "Opening replaces the current tree. To keep a separate file, cancel and use Save first."
+                : "Открытие заменит текущее дерево. Если нужна отдельная копия, отмените импорт и сначала нажмите «Сохранить».",14,Color.rgb(71,82,89),false);
+            replace.setPadding(0,activity.dp(16),0,0);content.addView(replace);
         }
-        TextView body = versionText(message, 14, Color.rgb(71, 82, 89), false);
-        body.setLineSpacing(0f, 1.12f);
-        shell.addView(body, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout actions = new LinearLayout(activity);
-        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, activity.dp(16), 0, 0);
-        Button cancel = activity.actionButton(
-            AppLanguage.isEnglish(activity) ? "Cancel" : "Отмена",
-            view -> dialog.dismiss());
-        Button open = activity.actionButton(
-            AppLanguage.isEnglish(activity) ? "Open tree" : "Открыть дерево",
-            view -> {
-                dialog.dismiss();
-                applyImportedTree(imported);
-            });
-        actions.addView(cancel, new LinearLayout.LayoutParams(activity.dp(112), activity.dp(44)));
-        LinearLayout.LayoutParams openParams = new LinearLayout.LayoutParams(
-            activity.dp(148),
-            activity.dp(44));
-        openParams.leftMargin = activity.dp(8);
-        actions.addView(open, openParams);
-        shell.addView(actions);
-
-        dialog.setContentView(shell);
-        dialog.setCanceledOnTouchOutside(true);
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = Math.min(
-                activity.getResources().getDisplayMetrics().widthPixels - activity.dp(24),
-                activity.dp(520));
-            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attrs.dimAmount = 0.32f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
+        AppDialog confirmation=AppDialog.create(activity,R.drawable.ic_menu_check,english ? "Tree is ready to open" : "Дерево готово к открытию")
+            .content(content).action(english ? "Cancel" : "Отмена",false,null)
+            .action(english ? "Open tree" : "Открыть дерево",true,() -> applyImportedTree(imported));
+        confirmation.show(); return confirmation;
     }
 
     static boolean shouldWarnBeforeReplacing(TreeState current, TreeState imported) {
@@ -1361,6 +1449,7 @@ final class MainActivityFiles {
         TreeLayoutEngine.ensurePositions(activity.state);
         if (!activity.saveOnly()) {
             activity.toast("Дерево открыто, но не сохранено");
+            activity.bindState();
             return;
         }
         activity.bindState();
@@ -1495,30 +1584,29 @@ final class MainActivityFiles {
     }
 
     void importPhotoFromUri(Uri uri) {
-        Person person = activity.state.people.get(activity.pendingPhotoPersonId);
+        TreeState target = activity.state;
+        Person person = target.people.get(activity.pendingPhotoPersonId);
         activity.pendingPhotoPersonId = "";
-        if (person == null || !activity.requireEditingEnabled()) return;
-        try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
-            if (input == null) throw new IllegalStateException("Фото не открыто");
-            String mime = activity.getContentResolver().getType(uri);
-            if (mime == null || mime.trim().isEmpty()) mime = "image/jpeg";
-            TreeMediaStore.StoredMedia stored = activity.store.mediaStore().importPhoto(
-                input,
-                displayName(uri),
-                mime);
-            activity.recordUndo("Добавлено фото", person.name.isEmpty() ? "Без имени" : person.name);
-            person.photoMediaId = stored.id;
-            person.photo = "";
-            person.avatarScale = 1f;
-            person.avatarOffsetX = 0f;
-            person.avatarOffsetY = 0f;
-            activity.saveToast("Фото загружено");
-            activity.bindState();
-            activity.treeView.invalidate();
-            activity.refreshOpenPersonEditor();
-        } catch (Exception error) {
-            activity.toast("Фото не загружено: " + error.getMessage());
-        }
+        if (person == null || !activity.requireEditingEnabled() || closed) return;
+        activity.toast("Загрузка фото…");
+        mediaImporter.execute(() -> {
+            try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
+                if (input == null) throw new IOException("Фото не открыто");
+                String mime = activity.getContentResolver().getType(uri);
+                TreeMediaStore.StoredMedia stored = activity.store.mediaStore().importPhoto(input, displayName(uri),
+                    mime == null || mime.trim().isEmpty() ? "image/jpeg" : mime);
+                activity.runOnUiThread(() -> {
+                    if (closed || activity.isDestroyed() || activity.state != target
+                            || target.people.get(person.id) != person || !activity.requireEditingEnabled()) return;
+                    activity.recordUndo("Добавлено фото", person.name.isEmpty() ? "Без имени" : person.name);
+                    person.photoMediaId = stored.id; person.photo = "";
+                    person.avatarScale = 1f; person.avatarOffsetX = person.avatarOffsetY = 0f;
+                    activity.saveToast("Фото загружено"); activity.bindState(); activity.refreshOpenPersonEditor();
+                });
+            } catch (Exception error) {
+                activity.runOnUiThread(() -> { if (!closed) activity.toast("Фото не загружено: " + safeError(error)); });
+            }
+        });
     }
 
     void importMemoryFileFromUri(Uri uri) {
@@ -1535,10 +1623,15 @@ final class MainActivityFiles {
             || uris == null
             || uris.isEmpty()) return;
         if (!activity.requireEditingEnabled()) return;
+        TreeState target = activity.state;
+        if (closed) return;
+        List<Uri> selected = new ArrayList<>(uris);
+        activity.toast("Загрузка файлов…");
+        mediaImporter.execute(() -> {
         List<MemoryAttachment> attachments = new ArrayList<>();
         int failed = 0;
-        for (Uri uri : uris) {
-            if (uri == null || attachments.size() >= 24) continue;
+        for (Uri uri : selected) {
+            if (uri == null || Thread.currentThread().isInterrupted()) continue;
             try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
                 if (input == null) throw new IllegalStateException("Файл не открыт");
                 String mime = activity.getContentResolver().getType(uri);
@@ -1561,11 +1654,13 @@ final class MainActivityFiles {
                 failed++;
             }
         }
-        if (attachments.isEmpty()) {
-            activity.toast("Файлы не добавлены");
-            return;
-        }
-        activity.addMemoryDraftAttachments(person.id, attachments, failed);
+        int failures = failed;
+        activity.runOnUiThread(() -> {
+            if (closed || activity.isDestroyed() || activity.state != target || target.people.get(person.id) != person) return;
+            if (attachments.isEmpty()) activity.toast("Файлы не добавлены");
+            else if (activity.requireEditingEnabled()) activity.addMemoryDraftAttachments(person.id, attachments, failures);
+        });
+        });
     }
 
     private String displayName(Uri uri) {
@@ -1592,14 +1687,14 @@ final class MainActivityFiles {
         TreeState exportState = TreeStateCopier.copy(activity.state);
         activity.toast("Подготовка файла…");
         new Thread(() -> {
-            try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
+            try (OutputStream output = exportOutput(uri)) {
                 if (output == null) throw new IllegalStateException("Файл не создан");
                 String text = "gedcom".equals(kind)
                     ? exportGedcomText(exportState)
                     : activity.store.exportText(exportState);
                 output.write(text.getBytes(StandardCharsets.UTF_8));
                 AnalyticsReporter.treeExported("gedcom".equals(kind) ? "gedcom" : "json", exportState);
-                activity.runOnUiThread(() -> activity.toast("Файл экспортирован"));
+                completeExport(uri, output);
             } catch (Exception error) {
                 DiagnosticsLogger.handled(activity, "export.text", error);
                 activity.runOnUiThread(() ->
@@ -1608,13 +1703,48 @@ final class MainActivityFiles {
         }, "tree-text-export").start();
     }
 
+    private void exportReadableToUri(Uri uri, boolean html) {
+        if (uri == null) return;
+        TreeState snapshot = TreeStateCopier.copy(activity.state);
+        boolean english = AppLanguage.isEnglish(activity);
+        activity.toast("Подготовка файла…");
+        new Thread(() -> {
+            try (OutputStream output = exportOutput(uri)) {
+                if (output == null) throw new IOException("Файл не создан");
+                java.io.Writer writer = new java.io.OutputStreamWriter(output, StandardCharsets.UTF_8);
+                TreeReadableExport.Photos photos = person -> {
+                    if (person.photoMediaId == null || person.photoMediaId.isEmpty()) return person.photo;
+                    if (!activity.store.mediaStore().exists(person.photoMediaId)) throw new IOException("Не найдено фото: " + person.name);
+                    Bitmap bitmap = activity.store.mediaStore().decodeBitmap(person.photoMediaId, 320);
+                    if (bitmap == null) throw new IOException("Не удалось прочитать фото: " + person.name);
+                    try {
+                        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 82, bytes)) throw new IOException("Не удалось подготовить фото");
+                        return "data:image/jpeg;base64," + android.util.Base64.encodeToString(bytes.toByteArray(), android.util.Base64.NO_WRAP);
+                    } finally { bitmap.recycle(); }
+                };
+                if (html) {
+                    String template;
+                    try (InputStream input = activity.getAssets().open("tree-export.html")) { template = readUtf8Limited(input, 1024 * 1024); }
+                    TreeReadableExport.html(snapshot, writer, template, english, photos);
+                } else TreeReadableExport.xml(snapshot, writer, photos);
+                writer.flush();
+                AnalyticsReporter.treeExported(html ? "html" : "xml", snapshot);
+                completeExport(uri, output);
+            } catch (Exception error) {
+                DiagnosticsLogger.handled(activity, "export.readable", error);
+                activity.runOnUiThread(() -> activity.toast("Экспорт не выполнен: " + safeError(error)));
+            }
+        }, "tree-readable-export").start();
+    }
+
     void exportTreePackageToUri(Uri uri) {
         if (uri == null) return;
         DiagnosticsLogger.breadcrumb(activity, "export.ftree.start");
         activity.toast("Создание .ftree…");
         TreeState exportState = TreeStateCopier.copy(activity.state);
         new Thread(() -> {
-            try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
+            try (OutputStream output = exportOutput(uri)) {
                 if (output == null) throw new IllegalStateException("Файл не создан");
                 TreePackageIO.write(
                     exportState,
@@ -1622,7 +1752,7 @@ final class MainActivityFiles {
                     output,
                     exportState.readerMode ? "view" : "copy");
                 AnalyticsReporter.treeExported("ftree", exportState);
-                activity.runOnUiThread(() -> activity.toast(".ftree экспортирован"));
+                completeExport(uri, output);
                 DiagnosticsLogger.breadcrumb(activity, "export.ftree.finish");
             } catch (Exception error) {
                 DiagnosticsLogger.handled(activity, "export.ftree", error);
@@ -1648,16 +1778,16 @@ final class MainActivityFiles {
             PNG_QUALITY_MAX_PIXELS[pendingPngQuality]);
         activity.toast(split ? "Создание частей PNG…" : "Создание PNG…");
         new Thread(() -> {
-            try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
+            try (OutputStream output = exportOutput(uri)) {
                 if (output == null) throw new IOException("Файл не создан");
                 if (split) writeImageArchive(export, layout, output);
                 else {
-                    Bitmap bitmap = imageOnUi(() -> export.tile(layout, 0, 0));
+                    Bitmap bitmap = export.tile(layout, 0, 0);
                     try { compressPng(bitmap, output); }
                     finally { bitmap.recycle(); }
                 }
                 AnalyticsReporter.treeExported(split ? "png_tiles_zip" : "png", export.state);
-                activity.runOnUiThread(() -> activity.toast(split ? "Архив PNG экспортирован" : "PNG экспортирован"));
+                completeExport(uri, output);
             } catch (Exception | OutOfMemoryError error) {
                 DiagnosticsLogger.handled(activity, "export.image", error);
                 activity.runOnUiThread(() -> activity.toast("PNG не создан: " + safeError(error)));
@@ -1665,12 +1795,6 @@ final class MainActivityFiles {
                 activity.runOnUiThread(export::close);
             }
         }, "tree-image-export").start();
-    }
-
-    private Bitmap imageOnUi(java.util.concurrent.Callable<Bitmap> render) throws Exception {
-        java.util.concurrent.FutureTask<Bitmap> task = new java.util.concurrent.FutureTask<>(render);
-        activity.runOnUiThread(task);
-        return task.get();
     }
 
     private static void compressPng(Bitmap bitmap, OutputStream output) throws IOException {
@@ -1685,7 +1809,7 @@ final class MainActivityFiles {
             for (int row = 0; row < layout.rows; row++) {
                 for (int column = 0; column < layout.columns; column++) {
                     final int r = row, c = column;
-                    Bitmap bitmap = imageOnUi(() -> export.tile(layout, c, r));
+                    Bitmap bitmap = export.tile(layout, c, r);
                     String name = String.format(Locale.US, "tiles/tile-r%02d-c%02d.png", row + 1, column + 1);
                     try {
                         zip.putNextEntry(new ZipEntry(name));
@@ -1698,7 +1822,7 @@ final class MainActivityFiles {
             }
             ExportLayout overviewLayout = new ExportLayout(export.crop.width(), export.crop.height(),
                 Math.min(1400f / export.crop.width(), 1400f / export.crop.height()), 2_000_000L, 0, 0);
-            Bitmap overview = imageOnUi(() -> export.tile(overviewLayout, 0, 0));
+            Bitmap overview = export.tile(overviewLayout, 0, 0);
             try {
                 android.graphics.Canvas canvas = new android.graphics.Canvas(overview);
                 Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1740,7 +1864,7 @@ final class MainActivityFiles {
         activity.toast("Создание PDF…");
         DiagnosticsLogger.breadcrumb(activity, "export.pdf.start");
         new Thread(() -> {
-            try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
+            try (OutputStream output = exportOutput(uri)) {
                 if (output == null) throw new IOException("Файл не создан");
                 writePdf(
                     exportState,
@@ -1751,7 +1875,7 @@ final class MainActivityFiles {
                     monochrome, fitPage, frame);
                 AnalyticsReporter.treeExported("pdf", exportState);
                 DiagnosticsLogger.breadcrumb(activity, "export.pdf.finish");
-                activity.runOnUiThread(() -> activity.toast("PDF экспортирован"));
+                completeExport(uri, output);
             } catch (Exception error) {
                 DiagnosticsLogger.handled(activity, "export.pdf", error);
                 activity.runOnUiThread(() ->
@@ -1858,52 +1982,7 @@ final class MainActivityFiles {
     }
 
     private String exportGedcomText(TreeState sourceState) {
-        StringBuilder out = new StringBuilder();
-        out.append("0 HEAD\n1 SOUR Family Tree DS\n1 CHAR UTF-8\n");
-        for (Person person : sourceState.people.values()) {
-            out.append("0 @").append(person.id).append("@ INDI\n");
-            out.append("1 NAME ").append(cleanGed(person.name)).append("\n");
-            String gender = PersonGender.resolve(person);
-            if (PersonGender.MALE.equals(gender)) out.append("1 SEX M\n");
-            if (PersonGender.FEMALE.equals(gender)) out.append("1 SEX F\n");
-            String born = gedDate(person.bornDay, person.bornMonth, person.bornYear);
-            String died = gedDate(person.diedDay, person.diedMonth, person.diedYear);
-            if (!born.isEmpty()) {
-                out.append("1 BIRT\n2 DATE ").append(born).append("\n");
-                if (!person.place.isEmpty()) out.append("2 PLAC ").append(cleanGed(person.place)).append("\n");
-            }
-            if (!died.isEmpty()) out.append("1 DEAT\n2 DATE ").append(died).append("\n");
-            if (!person.notes.isEmpty()) out.append("1 NOTE ").append(cleanGed(person.notes)).append("\n");
-        }
-        java.util.Map<String, java.util.List<String>> childrenByParentPair = new java.util.LinkedHashMap<>();
-        for (Relation link : sourceState.links) {
-            if (!"parent".equals(link.type)) continue;
-            String partner = "";
-            for (Relation candidate : sourceState.links) {
-                if (!"parent".equals(candidate.type) || !link.to.equals(candidate.to) || link.from.equals(candidate.from)) continue;
-                partner = candidate.from;
-                break;
-            }
-            String a = link.from;
-            String b = partner.isEmpty() ? "" : partner;
-            String key = b.isEmpty() || a.compareTo(b) <= 0 ? a + "|" + b : b + "|" + a;
-            java.util.List<String> children = childrenByParentPair.get(key);
-            if (children == null) {
-                children = new java.util.ArrayList<>();
-                childrenByParentPair.put(key, children);
-            }
-            if (!children.contains(link.to)) children.add(link.to);
-        }
-        int fam = 1;
-        for (java.util.Map.Entry<String, java.util.List<String>> entry : childrenByParentPair.entrySet()) {
-            String[] parents = entry.getKey().split("\\|", -1);
-            out.append("0 @F").append(fam++).append("@ FAM\n");
-            if (!parents[0].isEmpty()) out.append("1 HUSB @").append(parents[0]).append("@\n");
-            if (parents.length > 1 && !parents[1].isEmpty()) out.append("1 WIFE @").append(parents[1]).append("@\n");
-            for (String child : entry.getValue()) out.append("1 CHIL @").append(child).append("@\n");
-        }
-        out.append("0 TRLR\n");
-        return out.toString();
+        return GedcomWriter.write(sourceState);
     }
 
     void shareJsonText() {

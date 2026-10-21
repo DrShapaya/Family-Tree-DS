@@ -20,6 +20,7 @@ appmetrica.properties
 # Generated packages
 *.apk
 *.aab
+release-artifacts/
 
 # Operating system files
 .DS_Store

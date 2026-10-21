@@ -166,16 +166,11 @@ final class LayoutScorer {
         FamilyLayoutGraph graph,
         LayoutSnapshot snapshot
     ) {
-        double error = 0d;
+        double error = parentRoleSideError(graph, snapshot);
         for (FamilyLayoutGraph.PartnerUnit unit : graph.partnerUnits) {
             if (unit.people.size() != 2) continue;
             List<String> members = new ArrayList<>(unit.people);
-            members.sort(java.util.Comparator
-                .comparingDouble((String id) -> {
-                    LayoutSnapshot.Position position = snapshot.positionOf(id);
-                    return position == null ? Double.POSITIVE_INFINITY : position.x;
-                })
-                .thenComparing(id -> id));
+            orderPartnersByRoleOrPosition(members, graph, snapshot);
             String leftPersonId = members.get(0);
             String rightPersonId = members.get(1);
             FamilyLayoutGraph.ParentFamily leftFamily = graph.parentFamilyOf(leftPersonId);
@@ -195,6 +190,76 @@ final class LayoutScorer {
             error += right.requiredRightShiftFrom(left, TreeLayoutEngine.GRID * 5f);
         }
         return error;
+    }
+
+    private static void orderPartnersByRoleOrPosition(
+        List<String> members,
+        FamilyLayoutGraph graph,
+        LayoutSnapshot snapshot
+    ) {
+        String male = "";
+        String female = "";
+        for (String id : members) {
+            FamilyLayoutGraph.PersonNode node = graph.people.get(id);
+            if (node == null) continue;
+            if (PersonGender.MALE.equals(node.gender)) male = id;
+            else if (PersonGender.FEMALE.equals(node.gender)) female = id;
+        }
+        boolean repeatedUnion = members.stream().anyMatch(
+            id -> graph.partnerUnitsOf(id).size() > 1);
+        if (!repeatedUnion && !male.isEmpty() && !female.isEmpty()) {
+            members.clear();
+            members.add(male);
+            members.add(female);
+            return;
+        }
+        members.sort(java.util.Comparator
+            .comparingDouble((String id) -> {
+                LayoutSnapshot.Position position = snapshot.positionOf(id);
+                return position == null ? Double.POSITIVE_INFINITY : position.x;
+            })
+            .thenComparing(id -> id));
+    }
+
+    static double parentRoleSideError(
+        FamilyLayoutGraph graph,
+        LayoutSnapshot snapshot
+    ) {
+        double error = 0d;
+        for (FamilyLayoutGraph.ParentFamily family : graph.parentFamilies) {
+            String fatherId = uniqueParentWithGender(graph, family, PersonGender.MALE);
+            String motherId = uniqueParentWithGender(graph, family, PersonGender.FEMALE);
+            if (fatherId.isEmpty() || motherId.isEmpty()) continue;
+            // One member of a repeated union necessarily appears on the
+            // opposite side of one partner when the shared card is central.
+            if (graph.partnerUnitsOf(fatherId).size() > 1
+                || graph.partnerUnitsOf(motherId).size() > 1) continue;
+            LayoutSnapshot.Position father = snapshot.positionOf(fatherId);
+            LayoutSnapshot.Position mother = snapshot.positionOf(motherId);
+            if (father == null || mother == null) continue;
+            float fatherCenter = father.x + TreeLayoutEngine.CARD_W / 2f;
+            float motherCenter = mother.x + TreeLayoutEngine.CARD_W / 2f;
+            if (fatherCenter >= motherCenter) {
+                error += fatherCenter - motherCenter
+                    + TreeLayoutEngine.CARD_W + TreeLayoutEngine.GRID;
+            }
+        }
+        return error;
+    }
+
+    private static String uniqueParentWithGender(
+        FamilyLayoutGraph graph,
+        FamilyLayoutGraph.ParentFamily family,
+        String gender
+    ) {
+        String result = "";
+        for (String id : family.parents) {
+            FamilyLayoutGraph.PersonNode node = graph.people.get(id);
+            if (node == null || !gender.equals(node.gender)) continue;
+            if (!result.isEmpty()) return "";
+            result = id;
+        }
+        return result;
     }
 
     private static double connectionLength(

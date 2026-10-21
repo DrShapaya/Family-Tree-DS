@@ -186,6 +186,8 @@ final class OnlineTreeManager {
     private final AtomicBoolean foregroundWorkRunning = new AtomicBoolean(false);
     private final AtomicLong authAttempt = new AtomicLong();
     private final AtomicLong localRevision = new AtomicLong();
+    private final AtomicLong localEditEpoch = new AtomicLong();
+    private final Object localEditLock = new Object();
     private final AtomicLong sessionGeneration = new AtomicLong();
     private volatile Future<?> authFuture;
     private volatile boolean foregroundChecks;
@@ -239,10 +241,14 @@ final class OnlineTreeManager {
     };
 
     OnlineTreeManager(Context context, TreeStore store, Listener listener) {
+        this(context, store, listener, null);
+    }
+
+    OnlineTreeManager(Context context, TreeStore store, Listener listener, GitHubApi transport) {
         this.context = context.getApplicationContext();
         this.store = store;
         this.listener = listener;
-        api = new GitHubApi(this.context);
+        api = transport == null ? new GitHubApi(this.context) : transport;
         connectivityManager = (ConnectivityManager) this.context.getSystemService(
             Context.CONNECTIVITY_SERVICE);
         config = new OnlineTreeConfig(context);
@@ -1240,30 +1246,38 @@ final class OnlineTreeManager {
 
     void onLocalTreeSaved(TreeState snapshot) {
         if (snapshot == null || !config.connected() || !canEdit() || closed) return;
+        if (snapshot.localEditEpoch != localEditEpoch.get()) return;
         long revision = localRevision.incrementAndGet();
         TreeState copy = TreeStateCopier.copy(snapshot);
         worker.execute(() -> {
             try {
+                if (copy.localEditEpoch != localEditEpoch.get()) return;
                 String json = serializeState(copy);
                 Set<String> mediaIds = referencedMedia(copy);
                 String base = config.readBase();
-                if (!base.isEmpty() && sameJson(base, json)) {
-                    config.clearPending();
+                boolean unchanged = !base.isEmpty() && sameJson(base, json);
+                if (copy.localEditEpoch != localEditEpoch.get()) return;
+                // Large JSON writes stay outside the lock used by UI edit notifications.
+                if (!unchanged) config.writePending(json);
+                synchronized (localEditLock) {
+                    if (copy.localEditEpoch != localEditEpoch.get()) return;
+                    if (unchanged) {
+                        config.clearPending();
+                        config.setLocalEditPending(false);
+                        localChangePending = false;
+                        dirty = false;
+                        pendingStateJson = "";
+                        pendingMediaIds = new HashSet<>();
+                        refreshStatus();
+                        return;
+                    }
                     config.setLocalEditPending(false);
                     localChangePending = false;
-                    dirty = false;
-                    pendingStateJson = "";
-                    pendingMediaIds = new HashSet<>();
-                    refreshStatus();
-                    return;
+                    pendingStateJson = json;
+                    pendingMediaIds = mediaIds;
+                    dirty = true;
+                    setStatus("Ожидает синхронизации");
                 }
-                config.writePending(json);
-                config.setLocalEditPending(false);
-                localChangePending = false;
-                pendingStateJson = json;
-                pendingMediaIds = mediaIds;
-                dirty = true;
-                setStatus("Ожидает синхронизации");
                 worker.schedule(() -> {
                     if (!closed && revision == localRevision.get() && dirty) {
                         try {
@@ -1279,14 +1293,16 @@ final class OnlineTreeManager {
         });
     }
 
-    void markLocalTreeChanged() {
-        if (!config.connected() || closed) return;
-        try {
-            config.setLocalEditPending(true);
-            localChangePending = true;
-            setStatus("Ожидает сохранения");
-        } catch (Exception error) {
-            setError(error);
+    long markLocalTreeChanged() {
+        synchronized (localEditLock) {
+            long epoch = localEditEpoch.incrementAndGet();
+            if (!config.connected() || closed) return epoch;
+            try {
+                config.setLocalEditPending(true);
+                localChangePending = true;
+                setStatus("Ожидает сохранения");
+            } catch (Exception error) { setError(error); }
+            return epoch;
         }
     }
 
@@ -1299,27 +1315,35 @@ final class OnlineTreeManager {
                 String base = config.readBase();
                 String pending = config.readPending();
                 boolean hasLocalJournal = config.localEditPending() || !pending.isEmpty();
-                if (!base.isEmpty() && sameJson(local, base)) {
-                    config.clearPending();
-                    config.setLocalEditPending(false);
-                    pendingStateJson = "";
-                    pendingMediaIds = new HashSet<>();
-                    dirty = false;
-                    localChangePending = false;
-                } else if (base.isEmpty() || hasLocalJournal) {
-                    config.writePending(local);
-                    config.setLocalEditPending(false);
-                    pendingStateJson = local;
-                    pendingMediaIds = referencedMedia(copy);
-                    dirty = true;
-                    localChangePending = false;
-                } else {
-                    TreeState accepted = store.parse(base);
-                    pendingStateJson = "";
-                    pendingMediaIds = new HashSet<>();
-                    dirty = false;
-                    localChangePending = false;
-                    deliverRemote(accepted, "Восстановлено принятое онлайн-дерево");
+                boolean unchanged = !base.isEmpty() && sameJson(local, base);
+                boolean keepLocal = base.isEmpty() || hasLocalJournal;
+                Set<String> mediaIds = keepLocal ? referencedMedia(copy) : new HashSet<>();
+                TreeState accepted = !unchanged && !keepLocal ? store.parse(base) : null;
+                if (copy.localEditEpoch != localEditEpoch.get()) return;
+                if (!unchanged && keepLocal) config.writePending(local);
+                synchronized (localEditLock) {
+                    if (copy.localEditEpoch != localEditEpoch.get()) return;
+                    if (unchanged) {
+                        config.clearPending();
+                        config.setLocalEditPending(false);
+                        pendingStateJson = "";
+                        pendingMediaIds = new HashSet<>();
+                        dirty = false;
+                        localChangePending = false;
+                    } else if (keepLocal) {
+                        config.setLocalEditPending(false);
+                        pendingStateJson = local;
+                        pendingMediaIds = mediaIds;
+                        dirty = true;
+                        localChangePending = false;
+                    } else {
+                        pendingStateJson = "";
+                        pendingMediaIds = new HashSet<>();
+                        dirty = false;
+                        localChangePending = false;
+                        acceptRemote(accepted, "Восстановлено принятое онлайн-дерево",
+                            sessionGeneration.get(), copy.localEditEpoch, () -> {});
+                    }
                 }
                 refreshStatus();
             } catch (Exception error) {
@@ -1468,7 +1492,8 @@ final class OnlineTreeManager {
     }
 
     private void pushPending() throws Exception {
-        if (!config.connected() || !dirty) return;
+        if (!config.connected() || !dirty || localChangePending) return;
+        long expectedEdit = localEditEpoch.get();
         ensureIdentityVerified();
         if (!config.connected()) return;
         long generation = sessionGeneration.get();
@@ -1516,19 +1541,19 @@ final class OnlineTreeManager {
                     "Синхронизация Family Tree DS");
                 if (generation != sessionGeneration.get() || !config.connected()) return;
                 maybeStoreOnlineBackup(base, merged, revision, uploaded.sha);
-                config.writeBase(merged);
-                config.setLastRemote(uploaded.sha, uploaded.etag);
-                config.clearPending();
-                config.setLocalEditPending(false);
-                pendingStateJson = "";
-                pendingMediaIds = new HashSet<>();
-                dirty = false;
-                lastError = "";
-                refreshStatus();
-                if (!sameJson(local, merged)) {
-                    TreeState mergedState = store.parse(merged);
-                    deliverRemote(mergedState, "Изменения объединены");
-                }
+                String acceptedJson = merged;
+                TreeState mergedState = sameJson(local, merged) ? null : store.parse(merged);
+                acceptRemote(mergedState, "Изменения объединены", generation, expectedEdit, () -> {
+                    config.writeBase(acceptedJson);
+                    config.setLastRemote(uploaded.sha, uploaded.etag);
+                    synchronized (localEditLock) {
+                        if (expectedEdit == localEditEpoch.get()) {
+                            config.clearPending(); config.setLocalEditPending(false);
+                            pendingStateJson = ""; pendingMediaIds = new HashSet<>(); dirty = false;
+                        }
+                    }
+                    lastError = ""; refreshStatus();
+                });
                 return;
             } catch (GitHubApi.ApiException conflict) {
                 if (conflict.status != 409 || attempt >= 3) throw conflict;
@@ -1719,6 +1744,7 @@ final class OnlineTreeManager {
     }
 
     private void pullRemote(boolean announce) throws Exception {
+        long expectedEdit = localEditEpoch.get();
         if (!config.connected()) return;
         ensureIdentityVerified();
         if (!config.connected()) return;
@@ -1771,13 +1797,17 @@ final class OnlineTreeManager {
             return;
         }
         if (!sessionActive(generation)) return;
-        config.writeBase(remoteJson);
-        config.setLastRemote(remoteFile.sha, remoteFile.etag);
-        config.clearPending();
-        config.setLocalEditPending(false);
-        lastError = "";
-        refreshStatus();
-        deliverRemote(parsed, announce ? "Дерево синхронизировано" : "Получены изменения дерева");
+        acceptRemote(parsed, announce ? "Дерево синхронизировано" : "Получены изменения дерева",
+            generation, expectedEdit, () -> {
+                config.writeBase(remoteJson);
+                config.setLastRemote(remoteFile.sha, remoteFile.etag);
+                synchronized (localEditLock) {
+                    if (expectedEdit == localEditEpoch.get()) {
+                        config.clearPending(); config.setLocalEditPending(false);
+                    }
+                }
+                lastError = ""; refreshStatus();
+            });
     }
 
     private void syncMediaUp(
@@ -1806,7 +1836,6 @@ final class OnlineTreeManager {
             if (file == null || !file.isFile()) continue;
             GitHubApi.ReleaseAsset existing = remoteAssets.get(mediaId);
             if (assetMatches(existing, file)) {
-                config.markRemoteMedia(mediaId);
                 continue;
             }
             if (existing != null) {
@@ -1824,7 +1853,6 @@ final class OnlineTreeManager {
                 uploadTotal);
             remoteAssets.put(mediaId, uploaded);
             cachedAssets.put(mediaId, uploaded);
-            config.markRemoteMedia(mediaId);
         }
     }
 
@@ -1911,6 +1939,7 @@ final class OnlineTreeManager {
         String repo,
         String treeId
     ) throws Exception {
+        long generation = sessionGeneration.get();
         Set<String> mediaIds = referencedMedia(state);
         if (mediaIds.isEmpty()) return 0;
         long releaseId = findMediaRelease(owner, repo, treeId);
@@ -1927,56 +1956,60 @@ final class OnlineTreeManager {
         }
         int downloadIndex = 0;
         int downloadedCount = 0;
-        for (String mediaId : mediaIds) {
-            if (store.mediaStore().exists(mediaId)) {
-                config.markRemoteMedia(mediaId);
-                continue;
-            }
-            GitHubApi.ReleaseAsset asset = remoteAssets.get(mediaId);
-            if (asset != null) {
-                downloadIndex++;
-                downloadMediaWithRetry(
-                    owner,
-                    repo,
-                    releaseId,
-                    mediaId,
-                    asset,
-                    downloadIndex,
-                    downloadTotal);
-                config.markRemoteMedia(mediaId);
-                downloadedCount++;
-                continue;
-            }
-
-            // Совместимость с онлайн-деревьями, созданными до перехода на
-            // Release Assets: небольшие файлы могли храниться прямо в репозитории.
-            try {
-                GitHubApi.BinaryContent legacy = api.getBinaryFile(
-                    config.token(),
-                    owner,
-                    repo,
-                    "androidft/media/" + mediaId);
-                try (ByteArrayInputStream input = new ByteArrayInputStream(legacy.bytes)) {
-                    TreeMediaStore.StoredMedia stored = mediaId.startsWith("photo_")
-                        ? store.mediaStore().importPhoto(input, mediaId, mimeFromName(mediaId))
-                        : store.mediaStore().importAttachment(input, mediaId, mimeFromName(mediaId));
-                    if (!mediaId.equals(stored.id)) {
-                        throw new IllegalStateException(
-                            "Контрольная сумма медиафайла не совпала");
-                    }
+        try {
+            for (String mediaId : mediaIds) {
+                if (store.mediaStore().exists(mediaId)) {
+                    continue;
                 }
-                config.markRemoteMedia(mediaId);
-                downloadedCount++;
-            } catch (GitHubApi.ApiException missing) {
-                if (missing.status != 404) throw missing;
-                missingCount++;
+                GitHubApi.ReleaseAsset asset = remoteAssets.get(mediaId);
+                if (asset != null) {
+                    downloadIndex++;
+                    downloadMediaWithRetry(
+                        owner,
+                        repo,
+                        releaseId,
+                        mediaId,
+                        asset,
+                        downloadIndex,
+                        downloadTotal);
+                    downloadedCount++;
+                    continue;
+                }
+
+                // Совместимость с онлайн-деревьями, созданными до перехода на
+                // Release Assets: небольшие файлы могли храниться прямо в репозитории.
+                try {
+                    GitHubApi.BinaryContent legacy = api.getBinaryFile(
+                        config.token(),
+                        owner,
+                        repo,
+                        "androidft/media/" + mediaId);
+                    try (ByteArrayInputStream input = new ByteArrayInputStream(legacy.bytes)) {
+                        TreeMediaStore.StoredMedia stored = mediaId.startsWith("photo_")
+                            ? store.mediaStore().importPhoto(input, mediaId, mimeFromName(mediaId))
+                            : store.mediaStore().importAttachment(input, mediaId, mimeFromName(mediaId));
+                        if (!mediaId.equals(stored.id)) {
+                            throw new IllegalStateException(
+                                "Контрольная сумма медиафайла не совпала");
+                        }
+                    }
+                    downloadedCount++;
+                } catch (GitHubApi.ApiException missing) {
+                    if (missing.status != 404) throw missing;
+                    missingCount++;
+                }
             }
+            if (missingCount > 0) {
+                int count = missingCount;
+                post(() -> listener.onMessage("В онлайн-дереве отсутствуют вложения: " + count));
+            }
+            return downloadedCount;
+        } finally {
+            // Even a partially successful batch must refresh missing-photo placeholders.
+            if (downloadedCount > 0) post(() -> {
+                if (sessionActive(generation)) listener.onMediaChanged();
+            });
         }
-        if (missingCount > 0) {
-            int count = missingCount;
-            post(() -> listener.onMessage("В онлайн-дереве отсутствуют вложения: " + count));
-        }
-        return downloadedCount;
     }
 
     private void continueMediaRestore(
@@ -1993,7 +2026,7 @@ final class OnlineTreeManager {
             mediaAuditNeeded = false;
             lastError = "";
             refreshStatus();
-            post(listener::onMediaChanged);
+
             if (downloaded > 0) {
                 post(() -> listener.onMessage(
                     "Медиа загружены в фоне: " + downloaded));
@@ -2233,7 +2266,7 @@ final class OnlineTreeManager {
     }
 
     private String serializeState(TreeState state) throws Exception {
-        return OnlineSyncPayload.fromTreeJson(store.toJson(state)).toString();
+        return OnlineSyncPayload.fromOwnedTreeJson(store.toJson(state)).toString();
     }
 
     private static String onlineDocument(
@@ -2268,6 +2301,7 @@ final class OnlineTreeManager {
     }
 
     private static boolean sameJson(String first, String second) {
+        if (java.util.Objects.equals(first, second)) return true;
         try {
             return new JSONObject(first).toString().equals(new JSONObject(second).toString());
         } catch (Exception ignored) {
@@ -2276,7 +2310,27 @@ final class OnlineTreeManager {
     }
 
     private void deliverRemote(TreeState state, String message) {
-        post(() -> listener.onRemoteTree(state, message));
+        post(() -> {
+            state.localEditEpoch = localEditEpoch.get();
+            listener.onRemoteTree(state, message);
+        });
+    }
+
+    private interface RemoteCommit { void run() throws Exception; }
+
+    /** Accept on the UI event loop before advancing the merge base. A newer edit keeps the old base. */
+    private void acceptRemote(TreeState state, String message, long generation, long expectedEdit, RemoteCommit commit) {
+        post(() -> {
+            if (!sessionActive(generation) || expectedEdit != localEditEpoch.get()) return;
+            worker.execute(() -> {
+                if (!sessionActive(generation)) return;
+                try { commit.run(); } catch (Exception error) { setError(error); }
+            });
+            if (state != null) {
+                state.localEditEpoch = expectedEdit;
+                listener.onRemoteTree(state, message);
+            }
+        });
     }
 
     private void refreshStatus() {
@@ -2301,14 +2355,18 @@ final class OnlineTreeManager {
         post(listener::onStatusChanged);
     }
 
-    private String friendlyError(Exception error) {
+    static String friendlyError(Exception error) {
         if (error instanceof GitHubApi.ApiException) {
             GitHubApi.ApiException apiError = (GitHubApi.ApiException) error;
             if (apiError.status == 401) return "Сеанс GitHub истёк. Войдите снова.";
             if (apiError.status == 403) return "GitHub не разрешил операцию или временно ограничил запросы.";
             if (apiError.status == 404) return "Онлайн-дерево или приглашение не найдено.";
             if (apiError.status == 409) return "Дерево изменилось одновременно. Повторите синхронизацию.";
-            if (apiError.status == 422) return "GitHub отклонил запрос. Проверьте права приложения.";
+            if (apiError.status == 422) {
+                return apiError.apiMessage.trim().isEmpty()
+                    ? "GitHub отклонил запрос."
+                    : "GitHub отклонил запрос: " + apiError.apiMessage;
+            }
             return "Ошибка GitHub: " + apiError.apiMessage;
         }
         if (hasCause(error, UnknownHostException.class)) {

@@ -11,9 +11,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.PointF;
-import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -34,14 +32,13 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -52,17 +49,11 @@ import android.window.OnBackInvokedDispatcher;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -77,6 +68,8 @@ public final class MainActivity extends Activity {
     static final int REQ_EXPORT_FTREE = 27;
     static final int REQ_EXPORT_PDF = 28;
     static final int REQ_EXPORT_TILES = 29;
+    static final int REQ_EXPORT_HTML = 40;
+    static final int REQ_EXPORT_XML = 41;
     static final int REQ_WRITE_PHOTO_PERMISSION = 30;
     static final int REQ_MEMORY_PHOTO = 31;
     static final int REQ_ALBUM_PHOTOS = 32;
@@ -87,7 +80,6 @@ public final class MainActivity extends Activity {
     private static final String PREF_UI_SCALE = "ui_scale";
     private static final String PREF_FONT_SCALE = "font_scale";
     private static final long TREE_HINT_AUTO_HIDE_MS = 5L * 60L * 1000L;
-    private static final float FAR_CARD_DISTANCE = TreeLayoutEngine.GRID * 14f;
     static final String[][] TRAINING_STEPS = new String[][]{
         {"", "Как управлять деревом", "Перемещайте полотно одним пальцем, меняйте масштаб щипком, а карточку выбирайте обычным нажатием.", "next"},
         {"add-person", "Добавление человека", "Кнопка + создаёт первую карточку или открывает выбор родственника. В обучении мы ничего добавлять не будем.", "next"},
@@ -108,10 +100,6 @@ public final class MainActivity extends Activity {
     FrameLayout landscapeFullPanelHost;
     View landscapeTreePanelCloseButton;
     TextView stats;
-    EditText search;
-    Button searchToggleButton;
-    HorizontalScrollView searchSuggestionsScroll;
-    LinearLayout searchSuggestions;
     LinearLayout cardPanel;
     LinearLayout linksPanel;
     LinearLayout guidePanel;
@@ -161,6 +149,7 @@ public final class MainActivity extends Activity {
     View landscapePeopleCloseHost;
     TextView zoomIndicator;
     TextView treeHint;
+    View distantCardsWarning;
     View actionOverlay;
     boolean treeHintDismissed;
     boolean treeHintAutoHidden;
@@ -168,10 +157,6 @@ public final class MainActivity extends Activity {
     View bottomNavigation;
     Button addPersonButton;
     View trainingMoreMenuTarget;
-    LinearLayout distantCardsWarning;
-    TextView distantCardsWarningText;
-    Button distantCardsShowButton;
-    Button distantCardsMoveButton;
     final ArrayDeque<TreeCommand> undoStack = new ArrayDeque<>();
     final ArrayDeque<TreeCommand> redoStack = new ArrayDeque<>();
     String activePanel = "";
@@ -181,6 +166,10 @@ public final class MainActivity extends Activity {
     String pendingBranchMode = "";
     String branchMode = "all";
     String branchAnchorId = "";
+    int nearGenerations = 1;
+    private LinearLayout nearGenerationControls;
+    EditText nearGenerationInput;
+    LinearLayout kinshipStatusPanel;
     boolean editLocked = false;
     boolean onlineReadOnly = false;
     boolean viewMode = false;
@@ -188,12 +177,13 @@ public final class MainActivity extends Activity {
     boolean hideCardDetails = false;
     boolean compactCards = false;
     boolean focusTree = false;
+    boolean kinshipTerminological = true;
     int workspaceWidth = (int) TreeLayoutEngine.SURFACE_W;
     int workspaceHeight = (int) TreeLayoutEngine.SURFACE_H;
     float uiScale = 1f;
     float fontScale = 1f;
-    boolean distantWarningDismissed = false;
     String parentLineMode = "smart";
+    String familyLineMode = "centered";
     String activeGuideMode = "";
     String guideDraftLabel = "Поколение";
     String guideDraftColor = "#2f7d75";
@@ -212,6 +202,7 @@ public final class MainActivity extends Activity {
     private MainActivityFiles filesModule;
     private MainActivityHistory historyModule;
     private MainActivityHeader headerModule;
+    MainActivitySearch searchModule;
     private MainActivitySettings settingsModule;
     private MainActivityPanels panelsModule;
     private MainActivityRelations relationsModule;
@@ -225,7 +216,12 @@ public final class MainActivity extends Activity {
     private OnlineTreeManager onlineManager;
     private TreeSaveCoordinator saveCoordinator;
     private LayoutTrainingStore layoutTraining;
-    private MainActivityQuality qualityModule;
+    MainActivityQuality qualityModule;
+    private MainActivityPersonMenus personMenusModule;
+    private MainActivityAddPersonMenu addPersonMenuModule;
+    private MainActivityBiographyShare biographyShareModule;
+    private MainActivityDistantCards distantCardsModule;
+    private MainActivityPhotos photosModule;
     private final Handler toastHandler = new Handler(Looper.getMainLooper());
     private Toast currentToast;
     private int statusBarInsetPx;
@@ -248,6 +244,8 @@ public final class MainActivity extends Activity {
         }).start();
     };
     private OnBackInvokedCallback backInvokedCallback;
+    private boolean activityStarted;
+    private StartupSplash startupSplash;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -260,6 +258,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        StartupSplash.applyLaunchTheme(this);
         super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             backInvokedCallback = this::handlePredictiveBack;
@@ -271,13 +270,29 @@ public final class MainActivity extends Activity {
             guideDraftLabel = "Generation";
         }
         store = new TreeStore(this);
+        startupSplash = new StartupSplash(this, savedInstanceState);
+        StartupSplash splash = startupSplash;
+        new Thread(() -> {
+            StartupSplashView.Artwork artwork = splash.prepareArtwork();
+            runOnUiThread(() -> splash.setArtwork(artwork));
+            TreeState loaded = store.load();
+            runOnUiThread(() -> {
+                splash.whenAssemblyFinished(() -> {
+                    if (!isFinishing() && !isDestroyed()) initializeTree(loaded);
+                });
+            });
+        }, "tree-startup-loader").start();
+    }
+
+    private void initializeTree(TreeState loaded) {
         layoutTraining = new LayoutTrainingStore(this);
-        SmartLayoutSolver.setRuntimeWeights(layoutTraining.weights());
-        state = store.load();
+        state = loaded;
         AnalyticsReporter.treeLoaded(state);
         applyAutoArrangePreference(state);
         treeHintDismissed = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
             .getBoolean(PREF_TREE_HINT_DISMISSED, false);
+        kinshipTerminological = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
+            .getBoolean("kinship_terminological", true);
         filesModule = new MainActivityFiles(this);
         historyModule = new MainActivityHistory(this);
         headerModule = new MainActivityHeader(this);
@@ -288,6 +303,24 @@ public final class MainActivity extends Activity {
         quickStartModule = new MainActivityQuickStart(this);
         peopleModule = new MainActivityPeople(this);
         uiKit = new MainUiKit(this, () -> uiScale);
+        photosModule = new MainActivityPhotos(this);
+        distantCardsModule = new MainActivityDistantCards(
+            this,
+            uiKit,
+            () -> state,
+            () -> activePanel,
+            this::focusDistantCard,
+            this::moveDistantCardsCloser);
+        searchModule = new MainActivitySearch(
+            this,
+            uiKit,
+            () -> state,
+            () -> tr("Без имени"),
+            query -> { if (treeView != null) treeView.setFilter(query); },
+            this::selectTreeSearchPerson,
+            () -> stage,
+            this::showKeyboard,
+            this::hideKeyboard);
         aboutModule = new MainActivityAbout(
             this,
             uiKit,
@@ -308,12 +341,16 @@ public final class MainActivity extends Activity {
             this::showPanel,
             this::toast,
             this::openPersonEditor);
+        personMenusModule = new MainActivityPersonMenus(this);
+        addPersonMenuModule = new MainActivityAddPersonMenu(this);
+        biographyShareModule = new MainActivityBiographyShare(this);
         onlineManager = new OnlineTreeManager(this, store, new OnlineTreeManager.Listener() {
             @Override public void onRemoteTree(TreeState remote, String message) {
                 applyOnlineTree(remote, message);
             }
 
             @Override public void onMediaChanged() {
+                ThumbnailLoader.SHARED.clearFailures();
                 if (treeView != null) treeView.invalidate();
                 if (onlineModule != null) onlineModule.refreshOpenDashboard();
             }
@@ -350,7 +387,7 @@ public final class MainActivity extends Activity {
 
                 @Override public void onSaved(TreeState snapshot) {
                     AnalyticsReporter.treeSaved(snapshot);
-                    BirthdayWidgetProvider.updateAll(MainActivity.this);
+                    BirthdayWidgetProvider.updateAll(MainActivity.this, snapshot);
                     if (onlineManager != null) onlineManager.onLocalTreeSaved(snapshot);
                 }
             });
@@ -362,13 +399,20 @@ public final class MainActivity extends Activity {
         buildUi();
         bindState();
         onlineManager.reconcileLocalTree(state);
+        if (activityStarted) onlineManager.startForegroundChecks();
         String recoveryNotice = store.consumeRecoveryNotice();
         if (!recoveryNotice.isEmpty()) toast(recoveryNotice);
         handleIncomingIntent(getIntent());
+        Runnable afterStartup = () -> {
+            if (!isFinishing() && !isDestroyed() && stage != null) {
+                stage.postDelayed(this::offerTrainingIfNeeded, 420);
+            }
+        };
+        if (startupSplash != null) startupSplash.onTreeReady(headerIdentityIcon, afterStartup);
+        else afterStartup.run();
         treeView.post(() -> {
             if (state == null || state.people.isEmpty()) treeView.focusWorkspaceCenter();
             else treeView.fit();
-            stage.postDelayed(this::offerTrainingIfNeeded, 420);
             stage.postDelayed(() -> {
                 if (!editingBlocked()) hideTreeHintForSession();
             }, TREE_HINT_AUTO_HIDE_MS);
@@ -379,13 +423,14 @@ public final class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleIncomingIntent(intent);
+        if (state != null) handleIncomingIntent(intent);
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         if (state != null && headerModule != null && panelsModule != null) {
+            if (startupSplash != null) startupSplash.dismiss();
             rebuildUiKeepingPanel();
         }
     }
@@ -413,6 +458,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onStop() {
+        activityStarted = false;
         DiagnosticsLogger.breadcrumb(this, "activity.stop");
         if (saveCoordinator != null) saveCoordinator.flush();
         if (onlineManager != null) onlineManager.stopForegroundChecks();
@@ -422,11 +468,13 @@ public final class MainActivity extends Activity {
     @Override
     protected void onStart() {
         super.onStart();
+        activityStarted = true;
         if (onlineManager != null) onlineManager.startForegroundChecks();
     }
 
     @Override
     protected void onDestroy() {
+        if (startupSplash != null) startupSplash.close();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && backInvokedCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
@@ -435,6 +483,8 @@ public final class MainActivity extends Activity {
         if (saveCoordinator != null) saveCoordinator.close();
         if (onlineManager != null) onlineManager.close();
         if (peopleModule != null) peopleModule.close();
+        if (qualityModule != null) qualityModule.close();
+        if (searchModule != null) searchModule.close();
         if (settingsModule != null) settingsModule.close();
         if (filesModule != null) filesModule.close();
         if (workshopModule != null) workshopModule.close();
@@ -461,6 +511,7 @@ public final class MainActivity extends Activity {
         landscapeHeaderControls = null;
         landscapeFocusControlsHost = null;
         landscapePeopleCloseHost = null;
+        distantCardsWarning = null;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppThemePalette.isDark()
@@ -488,7 +539,8 @@ public final class MainActivity extends Activity {
             }
             return insets;
         });
-        setContentView(root);
+        if (startupSplash == null || !startupSplash.installContent(root)) setContentView(root);
+        filesModule.installFileDrop(root);
         root.post(root::requestApplyInsets);
 
         appHeader = buildHeader();
@@ -556,10 +608,6 @@ public final class MainActivity extends Activity {
                 String detail
             ) {
                 historyModule.recordMove(before, after, detail);
-                if (layoutTraining != null) {
-                    layoutTraining.learnFromManualMove(state, before, after, detail);
-                    SmartLayoutSolver.setRuntimeWeights(layoutTraining.weights());
-                }
             }
             @Override public void onTreeChanged() {
                 treeView.invalidateStructureCaches();
@@ -679,15 +727,14 @@ public final class MainActivity extends Activity {
         treeHint = hint;
         refreshLockUi();
 
-        distantCardsWarning = buildDistantCardsWarning();
-        FrameLayout.LayoutParams distantParams = new FrameLayout.LayoutParams(-1, dp(44), Gravity.TOP);
+        distantCardsWarning = distantCardsModule.buildWarning();
+        FrameLayout.LayoutParams distantParams = new FrameLayout.LayoutParams(-1, dp(44), Gravity.BOTTOM);
         distantParams.setMargins(
-            dp(isLandscapeLayout() ? 64 : 12),
-            dp(isLandscapeLayout() ? 56 : 124),
-            dp(isLandscapeLayout() ? 12 : 64),
-            0);
+            dp(12),
+            0,
+            dp(76),
+            dp(isLandscapeLayout() ? 12 : focusTree ? 66 : 86));
         stage.addView(distantCardsWarning, distantParams);
-        distantCardsWarning.setVisibility(View.GONE);
 
         canvasModePanel = buildCanvasModePanel();
         stage.addView(canvasModePanel, canvasModeParams());
@@ -741,176 +788,35 @@ public final class MainActivity extends Activity {
         applyFocusTreeUi();
         showPanel(activePanel);
 
-        search.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String query = String.valueOf(s);
-                treeView.setFilter(query);
-                updateSearchSuggestions(query);
-            }
-            @Override public void afterTextChanged(Editable s) {}
-        });
-    }
-
-    private LinearLayout buildDistantCardsWarning() {
-        LinearLayout warning = new LinearLayout(this);
-        warning.setGravity(Gravity.CENTER_VERTICAL);
-        warning.setOrientation(LinearLayout.HORIZONTAL);
-        warning.setPadding(dp(10), 0, dp(6), 0);
-        warning.setBackground(panelBg(Color.rgb(255, 251, 232), dp(8), Color.argb(120, 224, 162, 38)));
-        warning.setElevation(dp(9));
-
-        TextView icon = new LocalizedTextView(this);
-        icon.setText("!");
-        icon.setGravity(Gravity.CENTER);
-        icon.setTextSize(13);
-        icon.setTypeface(uiBold());
-        icon.setTextColor(Color.WHITE);
-        icon.setIncludeFontPadding(false);
-        icon.setBackground(panelBg(Color.rgb(224, 162, 38), dp(999), Color.TRANSPARENT));
-        warning.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
-        distantCardsWarningText = new LocalizedTextView(this);
-        distantCardsWarningText.setTextColor(Color.rgb(74, 73, 55));
-        distantCardsWarningText.setTextSize(11);
-        distantCardsWarningText.setTypeface(uiBold());
-        distantCardsWarningText.setSingleLine(true);
-        distantCardsWarningText.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        distantCardsWarningText.setIncludeFontPadding(false);
-        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0, -1, 1);
-        textParams.setMargins(dp(8), 0, dp(6), 0);
-        warning.addView(distantCardsWarningText, textParams);
-
-        distantCardsShowButton = compactWarningButton("Показать", v -> focusFirstDistantCard());
-        warning.addView(distantCardsShowButton, new LinearLayout.LayoutParams(dp(78), dp(32)));
-        distantCardsMoveButton = compactWarningButton("Вернуть", v -> moveDistantCardsCloser());
-        LinearLayout.LayoutParams moveParams = new LinearLayout.LayoutParams(dp(78), dp(32));
-        moveParams.setMargins(dp(6), 0, 0, 0);
-        warning.addView(distantCardsMoveButton, moveParams);
-        Button close = compactWarningButton("×", v -> {
-            distantWarningDismissed = true;
-            updateDistantCardsWarning();
-        });
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(34), dp(32));
-        closeParams.setMargins(dp(6), 0, 0, 0);
-        warning.addView(close, closeParams);
-        return warning;
-    }
-
-    private Button compactWarningButton(String label, View.OnClickListener listener) {
-        Button button = actionButton(label, listener);
-        button.setTextSize(label.length() <= 1 ? 15 : 9);
-        button.setSingleLine(true);
-        button.setTextColor(Color.rgb(126, 83, 10));
-        button.setBackground(panelBg(Color.rgb(255, 248, 220), dp(8), Color.argb(92, 224, 162, 38)));
-        return button;
     }
 
     void updateDistantCardsWarning() {
-        if (distantCardsWarning == null) return;
-        java.util.List<String> distantIds = distantCardIds();
-        boolean fullScreenPanel = "settings".equals(activePanel)
-            || "people".equals(activePanel)
-            || "more".equals(activePanel);
-        if (distantIds.isEmpty()) distantWarningDismissed = false;
-        boolean show = !fullScreenPanel && !distantWarningDismissed && !distantIds.isEmpty();
-        distantCardsWarning.setVisibility(show ? View.VISIBLE : View.GONE);
-        if (!show) return;
-        String label = distantIds.size()
-            + " "
-            + RussianWordForms.forCount(
-                distantIds.size(), "карточка", "карточки", "карточек")
-            + " далеко от основного дерева";
-        distantCardsWarningText.setText(label);
-    }
-
-    private java.util.List<String> distantCardIds() {
-        java.util.List<String> result = new java.util.ArrayList<>();
-        if (state == null || state.people.size() < 2) return result;
-        java.util.Set<String> mainIds = mainTreeComponentIds();
-        if (mainIds.isEmpty() || mainIds.size() == state.people.size()) return result;
-        RectF mainBounds = mainCardsBounds(new java.util.ArrayList<>(differenceIds(mainIds)));
-        for (Person person : state.people.values()) {
-            if (mainIds.contains(person.id)) continue;
-            float dx = horizontalGap(person, mainBounds);
-            float dy = verticalGap(person, mainBounds);
-            if ((float) Math.hypot(dx, dy) > FAR_CARD_DISTANCE) result.add(person.id);
-        }
-        return result;
-    }
-
-    private java.util.Set<String> mainTreeComponentIds() {
-        java.util.Set<String> visited = new java.util.HashSet<>();
-        java.util.Set<String> best = new java.util.LinkedHashSet<>();
-        for (String id : state.people.keySet()) {
-            if (visited.contains(id)) continue;
-            java.util.Set<String> component = connectedComponent(id);
-            visited.addAll(component);
-            boolean componentHasRoot = component.contains(state.rootId);
-            boolean bestHasRoot = best.contains(state.rootId);
-            if (componentHasRoot
-                || best.isEmpty()
-                || (!bestHasRoot && component.size() > best.size())) {
-                best = component;
+        if (distantCardsWarning != null
+            && distantCardsWarning.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams params =
+                (FrameLayout.LayoutParams) distantCardsWarning.getLayoutParams();
+            int bottomMargin = dp(isLandscapeLayout() ? 12 : focusTree ? 66 : 86);
+            if (params.bottomMargin != bottomMargin) {
+                params.bottomMargin = bottomMargin;
+                distantCardsWarning.setLayoutParams(params);
             }
         }
-        return best;
+        distantCardsModule.update();
     }
 
-    private java.util.Set<String> connectedComponent(String startId) {
-        java.util.Set<String> component = new java.util.LinkedHashSet<>();
-        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
-        if (state.people.containsKey(startId)) queue.add(startId);
-        while (!queue.isEmpty()) {
-            String id = queue.removeFirst();
-            if (!component.add(id)) continue;
-            for (Relation link : state.links) {
-                if (id.equals(link.from) && state.people.containsKey(link.to)) queue.addLast(link.to);
-                else if (id.equals(link.to) && state.people.containsKey(link.from)) queue.addLast(link.from);
-            }
-        }
-        return component;
-    }
-
-    private java.util.Set<String> differenceIds(java.util.Set<String> idsToKeep) {
-        java.util.Set<String> result = new java.util.HashSet<>();
-        for (String id : state.people.keySet()) if (!idsToKeep.contains(id)) result.add(id);
-        return result;
-    }
-
-    private float horizontalGap(Person person, RectF bounds) {
-        float right = person.x + TreeLayoutEngine.CARD_W;
-        if (right < bounds.left) return bounds.left - right;
-        if (bounds.right < person.x) return person.x - bounds.right;
-        return 0f;
-    }
-
-    private float verticalGap(Person person, RectF bounds) {
-        float bottom = person.y + TreeLayoutEngine.CARD_H;
-        if (bottom < bounds.top) return bounds.top - bottom;
-        if (bounds.bottom < person.y) return person.y - bounds.bottom;
-        return 0f;
-    }
-
-    private void focusFirstDistantCard() {
-        java.util.List<String> distantIds = distantCardIds();
-        if (distantIds.isEmpty()) {
-            updateDistantCardsWarning();
-            return;
-        }
-        state.selectedId = distantIds.get(0);
+    private void focusDistantCard(String personId) {
+        state.selectedId = personId;
         bindState();
-        treeView.focusPerson(state.selectedId);
+        treeView.focusPerson(personId);
     }
 
-    private void moveDistantCardsCloser() {
-        java.util.List<String> distantIds = distantCardIds();
+    private void moveDistantCardsCloser(java.util.List<String> distantIds) {
         if (distantIds.isEmpty() || state == null || !requireEditingEnabled()) {
             updateDistantCardsWarning();
             return;
         }
         recordUndo("Далёкие карточки возвращены ближе", distantIds.size() + " шт.");
-        RectF main = mainCardsBounds(distantIds);
+        DistantCardFinder.Bounds main = DistantCardFinder.boundsExcluding(state, distantIds);
         float startX = main.right + TreeLayoutEngine.GRID * 2f;
         float startY = main.top;
         int index = 0;
@@ -924,24 +830,10 @@ public final class MainActivity extends Activity {
             person.y = spot[1];
             index++;
         }
-        distantWarningDismissed = false;
+        distantCardsModule.resetDismissed();
         saveToast("Карточки возвращены ближе");
         bindState();
         treeView.fit();
-    }
-
-    private RectF mainCardsBounds(java.util.List<String> excludedIds) {
-        java.util.Set<String> excluded = new java.util.HashSet<>(excludedIds);
-        RectF bounds = new RectF(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE);
-        for (Person person : state.people.values()) {
-            if (excluded.contains(person.id)) continue;
-            bounds.left = Math.min(bounds.left, person.x);
-            bounds.top = Math.min(bounds.top, person.y);
-            bounds.right = Math.max(bounds.right, person.x + TreeLayoutEngine.CARD_W);
-            bounds.bottom = Math.max(bounds.bottom, person.y + TreeLayoutEngine.CARD_H);
-        }
-        if (bounds.left == Float.MAX_VALUE) bounds.set(0, 0, TreeLayoutEngine.CARD_W, TreeLayoutEngine.CARD_H);
-        return bounds;
     }
 
     private View buildHeader() {
@@ -1004,31 +896,84 @@ public final class MainActivity extends Activity {
 
     private LinearLayout buildBranchStatusPanel() {
         LinearLayout panel = new LinearLayout(this);
-        panel.setGravity(Gravity.CENTER_VERTICAL);
-        panel.setOrientation(LinearLayout.HORIZONTAL);
-        panel.setPadding(dp(10), 0, dp(6), 0);
-        panel.setBackground(panelBg(Color.argb(235, 248, 251, 252), dp(8), Color.argb(52, 63, 82, 94)));
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(8), dp(4), dp(4), dp(4));
+        panel.setBackground(panelBg(Color.argb(245, 248, 251, 252), dp(10), Color.argb(52, 63, 82, 94)));
         panel.setElevation(dp(7));
-
+        panel.setTag("canvas.branchStatus");
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
         branchStatusText = new LocalizedTextView(this);
-        branchStatusText.setTextColor(Color.rgb(28, 34, 38));
-        branchStatusText.setTextSize(12);
-        branchStatusText.setTypeface(uiBold());
-        branchStatusText.setGravity(Gravity.CENTER_VERTICAL);
-        branchStatusText.setIncludeFontPadding(false);
-        panel.addView(branchStatusText, new LinearLayout.LayoutParams(0, -1, 1));
+        branchStatusText.setTextColor(uiColor(Color.rgb(28, 34, 38)));
+        branchStatusText.setTextSize(12); branchStatusText.setTypeface(uiBold());
+        branchStatusText.setMaxLines(2); branchStatusText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        heading.addView(branchStatusText, new LinearLayout.LayoutParams(0, -2, 1));
+        Button reset = iconButton(R.drawable.ic_menu_target, v -> resetBranchAnchor());
+        reset.setContentDescription(tr("Выбрать другую карточку"));
+        heading.addView(reset, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        Button close = iconButton(R.drawable.ic_menu_close, v -> clearBranchFilter());
+        close.setContentDescription(tr("Закрыть"));
+        heading.addView(close, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        panel.addView(heading, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView reset = branchStatusButton("Сброс", v -> resetBranchAnchor());
-        LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(dp(72), dp(34));
-        resetParams.setMargins(dp(6), 0, 0, 0);
-        panel.addView(reset, resetParams);
-
-        TextView close = closeButton(v -> clearBranchFilter());
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(34), dp(34));
-        closeParams.setMargins(dp(6), 0, 0, 0);
-        panel.addView(close, closeParams);
+        nearGenerationControls = new LinearLayout(this);
+        nearGenerationControls.setGravity(Gravity.CENTER_VERTICAL);
+        TextView label = new LocalizedTextView(this);
+        label.setText("Поколения"); label.setTextSize(11); label.setTextColor(uiColor(Color.rgb(76, 87, 96)));
+        nearGenerationControls.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
+        Button minus = actionButton("−", v -> {
+            setNearGenerations(nearGenerations - 1);
+            nearGenerationInput.setText(String.valueOf(nearGenerations));
+        });
+        minus.setTag("near.minus"); minus.setContentDescription(tr("Уменьшить число поколений"));
+        nearGenerationControls.addView(minus, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        nearGenerationInput = field("");
+        nearGenerationInput.setTag("near.generations");
+        nearGenerationInput.setContentDescription(tr("Количество поколений близких"));
+        nearGenerationInput.setSingleLine(true); nearGenerationInput.setGravity(Gravity.CENTER);
+        nearGenerationInput.setPadding(dp(4), 0, dp(4), 0);
+        nearGenerationInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        nearGenerationInput.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(2)});
+        nearGenerationInput.setText(String.valueOf(nearGenerations));
+        nearGenerationInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        nearGenerationControls.addView(nearGenerationInput, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        nearGenerationInput.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                try { setNearGenerations(Integer.parseInt(s.toString())); } catch (NumberFormatException ignored) {}
+            }
+            public void afterTextChanged(Editable s) {}
+        });
+        nearGenerationInput.setOnFocusChangeListener((v, focused) -> {
+            if (!focused && !nearGenerationInput.getText().toString().equals(String.valueOf(nearGenerations)))
+                nearGenerationInput.setText(String.valueOf(nearGenerations));
+        });
+        nearGenerationInput.setOnEditorActionListener((v, action, event) -> {
+            if (action != android.view.inputmethod.EditorInfo.IME_ACTION_DONE) return false;
+            nearGenerationInput.clearFocus();
+            InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (keyboard != null) keyboard.hideSoftInputFromWindow(v.getWindowToken(), 0);
+            return true;
+        });
+        Button plus = actionButton("+", v -> {
+            setNearGenerations(nearGenerations + 1);
+            nearGenerationInput.setText(String.valueOf(nearGenerations));
+        });
+        plus.setTag("near.plus"); plus.setContentDescription(tr("Увеличить число поколений"));
+        nearGenerationControls.addView(plus, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        panel.addView(nearGenerationControls, new LinearLayout.LayoutParams(-1, -2));
+        nearGenerationControls.setVisibility(View.GONE);
         panel.setVisibility(View.GONE);
         return panel;
+    }
+
+    void setNearGenerations(int value) {
+        int next = Math.max(1, Math.min(99, value));
+        if (nearGenerations == next) return;
+        nearGenerations = next;
+        treeView.setNearGenerations(next);
+        updateBranchStatusPanel();
+        if ("near".equals(branchMode) && !branchAnchorId.isEmpty()) treeView.post(treeView::fit);
     }
 
     private LinearLayout buildCanvasModePanel() {
@@ -1198,10 +1143,21 @@ public final class MainActivity extends Activity {
     void setAdaptivePanelVisibility(View panel, boolean visible) {
         if (panel == null) return;
         View container = landscapePanelContainers.get(panel);
-        panel.setVisibility(visible ? View.VISIBLE : View.GONE);
-        if (container != null && container != panel) {
-            container.setVisibility(visible ? View.VISIBLE : View.GONE);
+        View target = container == null ? panel : container;
+        boolean opening = visible && (panel.getVisibility() != View.VISIBLE
+            || target.getVisibility() != View.VISIBLE);
+        if (!visible) {
+            if (panel == morePanel && panel instanceof ViewGroup) {
+                ViewGroup group = (ViewGroup) panel;
+                if (group.getChildCount() > 0) PanelTransitions.reset(group.getChildAt(0));
+            }
+            PanelTransitions.hide(target, panel == morePanel ? moreMenuRows() : null);
+            if (target != panel) PanelTransitions.hide(panel, null);
+            return;
         }
+        panel.setVisibility(View.VISIBLE);
+        target.setVisibility(View.VISIBLE);
+        if (opening && panel != morePanel) PanelTransitions.enter(target, isLandscapeLayout(), null);
     }
 
     void bringAdaptivePanelToFront(View panel) {
@@ -1291,6 +1247,10 @@ public final class MainActivity extends Activity {
         });
         nav.addView(linksNav, navigationItemParams(landscape));
         moreNav = navButton("Ещё", R.drawable.ic_nav_more, v -> {
+            if ("files".equals(activePanel)) {
+                showPanel("");
+                return;
+            }
             togglePanel("more");
             trainingTargetActivated("more-menu");
         });
@@ -1328,6 +1288,11 @@ public final class MainActivity extends Activity {
         bubbles.addView(moreBubble(R.drawable.ic_nav_files, "Файлы и экспорт", "Сохранение, импорт и отправка", () -> {
             showPanel("files");
         }), moreBubbleParams(false));
+        bubbles.addView(moreBubble(R.drawable.ic_menu_statistics, "Статистика дерева",
+            "Родство, возраст и дети", () -> {
+                showPanel("");
+                MainActivityStatistics.show(this, state.people.containsKey(state.rootId) ? state.rootId : state.selectedId);
+            }), moreBubbleParams(false));
         bubbles.addView(moreBubble(R.drawable.ic_editor_archive, "Сохранённые версии", "Последние локальные копии", () -> {
             showPanel("");
             filesModule.openVersions();
@@ -1357,7 +1322,10 @@ public final class MainActivity extends Activity {
             int menuWidth = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(24));
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.RIGHT | Gravity.BOTTOM);
             params.setMargins(dp(12), dp(12), dp(12), dp(86));
-            overlay.addView(bubbles, params);
+            ScrollView scroll = new ScrollView(this);
+            scroll.setClipToPadding(false);
+            scroll.addView(bubbles, new ScrollView.LayoutParams(-1, -2));
+            overlay.addView(scroll, params);
         }
         overlay.setVisibility(View.GONE);
         return overlay;
@@ -1491,14 +1459,6 @@ public final class MainActivity extends Activity {
 
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
-        rows.addView(menuRow(
-            R.drawable.ic_menu_sparkles,
-            "Обучение расстановки",
-            layoutTraining.learningEnabled() ? "Включено" : "Выключено",
-            v -> {
-                toggleLayoutLearning();
-                dialog.dismiss();
-            }));
         rows.addView(menuRow(
             R.drawable.ic_menu_data_object,
             "ИИ-логи тестирования",
@@ -1680,7 +1640,7 @@ public final class MainActivity extends Activity {
         return tile;
     }
 
-    private TextView cardActionTitle(String value, boolean danger) {
+    TextView cardActionTitle(String value, boolean danger) {
         TextView text = new LocalizedTextView(this);
         text.setText(value);
         text.setTextColor(danger ? Color.rgb(197, 83, 75) : Color.rgb(28, 34, 38));
@@ -1692,7 +1652,7 @@ public final class MainActivity extends Activity {
         return text;
     }
 
-    private TextView cardActionDetail(String value, boolean danger) {
+    TextView cardActionDetail(String value, boolean danger) {
         TextView text = new LocalizedTextView(this);
         text.setText(value);
         text.setTextColor(danger ? Color.rgb(173, 91, 84) : Color.rgb(101, 113, 122));
@@ -1721,27 +1681,24 @@ public final class MainActivity extends Activity {
             R.drawable.ic_menu_image,
             "Сохранить PNG",
             "Предпросмотр и точные настройки",
-            v -> filesModule.showPngSettings(),
+            v -> filesModule.showPngSaveSettings(),
             true), pngParams);
         panel.addView(primary, new LinearLayout.LayoutParams(-1, dp(112)));
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(0, dp(8), 0, 0);
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
-        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить", "Сохраняет дерево локально на устройстве.", v -> {
-            AnalyticsReporter.onlineAction("manual_save_requested", state);
-            saveToast("Дерево сохранено");
-        }));
+        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить", "Сохраняет файл дерева в выбранную папку на телефоне.", v -> filesModule.showSaveMenu()));
         rows.addView(menuRow(
             R.drawable.ic_editor_archive,
             "Сохранённые версии",
             "Показывает 10 последних локальных версий и позволяет восстановить любую из них.",
             v -> filesModule.openVersions()));
-        rows.addView(menuRow(R.drawable.ic_menu_import, "Импорт", "Загружает .ftree, JSON или совместимый текстовый файл.", v -> openImport()));
+        rows.addView(menuRow(R.drawable.ic_menu_import, "Импорт", "Загружает .ftree, JSON, GEDCOM и ZIP с фотографиями.", v -> openImport()));
         rows.addView(menuRow(
             R.drawable.ic_menu_export,
             "Экспорт",
-            "Открывает форматы Family Tree DS, JSON, GEDCOM и PDF.",
+            "Отправляет файл дерева в мессенджер, облако или другое приложение.",
             v -> filesModule.showExportMenu()));
         return panel;
     }
@@ -1938,8 +1895,9 @@ public final class MainActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        HueSliderView slider = new HueSliderView(this);
+        row.setGravity(Gravity.TOP);
+        ColorPickerView slider = new ColorPickerView(this);
+        slider.setTag("guide.colorPicker");
         slider.setColor(TreeState.parseColor(guideDraftColor, Color.rgb(47, 125, 117)));
         TextView preview = new LocalizedTextView(this);
         preview.setBackground(colorSwatchBg(slider.color(), dp(999)));
@@ -1948,11 +1906,11 @@ public final class MainActivity extends Activity {
             preview.setBackground(colorSwatchBg(color, dp(999)));
             if (treeView != null) treeView.setGuideDraft(guideDraftColor, guideDraftLabel);
         });
-        row.addView(slider, new LinearLayout.LayoutParams(0, dp(48), 1));
+        row.addView(slider, new LinearLayout.LayoutParams(0, -2, 1));
         LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(dp(38), dp(38));
-        previewParams.setMargins(dp(8), 0, 0, 0);
+        previewParams.setMargins(dp(8), dp(20), 0, 0);
         row.addView(preview, previewParams);
-        block.addView(row, new LinearLayout.LayoutParams(-1, dp(48)));
+        block.addView(row, new LinearLayout.LayoutParams(-1, -2));
         return block;
     }
 
@@ -1993,6 +1951,10 @@ public final class MainActivity extends Activity {
     }
 
     private void startManualArrange() {
+        startManualArrange(false);
+    }
+
+    private void startManualArrange(boolean automatic) {
         if (!requireEditingEnabled()) return;
         if (arrangeInProgress) {
             toast("Упорядочивание уже выполняется");
@@ -2056,7 +2018,7 @@ public final class MainActivity extends Activity {
             final Throwable[] failure = {null};
             boolean completed = false;
             try {
-                completed = TreeLayoutEngine.rebuildStepwise(working, new TreeLayoutEngine.RebuildProgress() {
+                completed = TreeLayoutEngine.layoutFresh(working, new TreeLayoutEngine.RebuildProgress() {
                     @Override public boolean isCancelled() {
                         return cancelled.get();
                     }
@@ -2064,10 +2026,13 @@ public final class MainActivity extends Activity {
                     @Override public void onProgress(int current, int total, String message) {
                         runOnUiThread(() -> {
                             progress.setMax(Math.max(1, total));
-                            progress.setProgress(Math.max(0, Math.min(current, total)));
+                            // Let ProgressBar interpolate between real engine
+                            // checkpoints instead of jumping to the next one.
+                            int bounded = Math.max(0, Math.min(current, total));
+                            progress.setProgress(bounded, true);
                             detail.setText(message == null || message.trim().isEmpty()
                                 ? "Размещаем карточки…"
-                                : message + " · " + Math.min(current, total) + " из " + total);
+                                : message + " · " + Math.round(100f * bounded / Math.max(1, total)) + "%");
                         });
                     }
                 });
@@ -2075,7 +2040,16 @@ public final class MainActivity extends Activity {
                 failure[0] = error;
             }
             boolean success = completed;
-            runOnUiThread(() -> finishManualArrange(dialog, working, cancelled.get(), success, failure[0]));
+            runOnUiThread(() -> {
+                Runnable complete = () -> finishManualArrange(
+                    dialog, working, cancelled.get(), success, failure[0], automatic);
+                if (success && failure[0] == null && !cancelled.get()) {
+                    progress.setProgress(progress.getMax(), true);
+                    progress.postDelayed(complete, 180L);
+                } else {
+                    complete.run();
+                }
+            });
         }, "tree-manual-arrange").start();
     }
 
@@ -2162,10 +2136,11 @@ public final class MainActivity extends Activity {
                     @Override public void onProgress(int current, int total, String message) {
                         runOnUiThread(() -> {
                             progress.setMax(Math.max(1, total));
-                            progress.setProgress(Math.max(0, Math.min(current, total)));
+                            int bounded = Math.max(0, Math.min(current, total));
+                            progress.setProgress(bounded, true);
                             detail.setText(message == null || message.trim().isEmpty()
                                 ? "Размещаем выбранные карточки…"
-                                : message + " · " + Math.min(current, total) + " из " + total);
+                                : message + " · " + Math.round(100f * bounded / Math.max(1, total)) + "%");
                         });
                     }
                 });
@@ -2173,14 +2148,22 @@ public final class MainActivity extends Activity {
                 failure[0] = error;
             }
             boolean success = completed;
-            runOnUiThread(() -> finishSelectedArrange(
-                dialog,
-                working,
-                arrangedIds,
-                cancelled.get(),
-                success,
-                failure[0],
-                trainingSession));
+            runOnUiThread(() -> {
+                Runnable complete = () -> finishSelectedArrange(
+                    dialog,
+                    working,
+                    arrangedIds,
+                    cancelled.get(),
+                    success,
+                    failure[0],
+                    trainingSession);
+                if (success && failure[0] == null && !cancelled.get()) {
+                    progress.setProgress(progress.getMax(), true);
+                    progress.postDelayed(complete, 180L);
+                } else {
+                    complete.run();
+                }
+            });
         }, "tree-selected-arrange").start();
     }
 
@@ -2189,7 +2172,8 @@ public final class MainActivity extends Activity {
         TreeState arranged,
         boolean cancelled,
         boolean success,
-        Throwable failure
+        Throwable failure,
+        boolean automatic
     ) {
         arrangeInProgress = false;
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
@@ -2202,13 +2186,13 @@ public final class MainActivity extends Activity {
             toast("Упорядочивание отменено");
             return;
         }
-        recordUndo("Упорядочено дерево");
+        if (!automatic) recordUndo("Упорядочено дерево");
         applyArrangedLayout(arranged);
         workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth);
         workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight);
         treeView.setWorkspaceSize(workspaceWidth, workspaceHeight);
         bindState();
-        saveToast("Дерево упорядочено");
+        saveToast(automatic ? "Карточка добавлена, дерево упорядочено" : "Дерево упорядочено");
         treeView.invalidate();
     }
 
@@ -2303,7 +2287,7 @@ public final class MainActivity extends Activity {
         }
         if ("ancestors".equals(mode)) return state.ancestorsOf(anchorId);
         if ("descendants".equals(mode)) return state.descendantsOf(anchorId);
-        if ("near".equals(mode)) return state.nearOf(anchorId);
+        if ("near".equals(mode)) return state.nearOf(anchorId, nearGenerations);
         return new java.util.LinkedHashSet<>(state.people.keySet());
     }
 
@@ -2343,6 +2327,22 @@ public final class MainActivity extends Activity {
         panel.setPadding(dp(14), dp(10), dp(14), 0);
         panel.setElevation(0f);
         panel.setBackgroundColor(AppThemePalette.surface(Color.rgb(248, 251, 252)));
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        TextView title = new LocalizedTextView(this);
+        title.setText("Параметры");
+        title.setTextColor(Color.rgb(28, 34, 38));
+        title.setTextSize(isLandscapeLayout() ? 18 : 20);
+        title.setTypeface(uiBold());
+        title.setIncludeFontPadding(false);
+        title.setSingleLine(true);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(title, new LinearLayout.LayoutParams(0, dp(44), 1));
+        TextView close = closeButton(v -> showPanel(""));
+        close.setContentDescription(tr("Закрыть параметры"));
+        top.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        panel.addView(top, new LinearLayout.LayoutParams(-1, dp(44)));
         ScrollView scroll = new ScrollView(this);
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         settingsContent = new LinearLayout(this);
@@ -2353,17 +2353,9 @@ public final class MainActivity extends Activity {
     }
 
     void addSettingsContent(LinearLayout panel) {
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        TextView title = new LocalizedTextView(this);
-        title.setText("Параметры");
-        title.setTextColor(Color.rgb(28, 34, 38));
-        title.setTextSize(14);
-        title.setTypeface(uiBold());
-        top.addView(title, new LinearLayout.LayoutParams(-1, dp(42)));
-        panel.addView(top);
-        panel.addView(settingsSection("Основное"));
+        View mainSection = settingsSection("Основное");
+        mainSection.setPadding(dp(4), dp(3), 0, dp(3));
+        panel.addView(mainSection);
         panel.addView(settingActionRow(
             R.drawable.ic_menu_language,
             tr("Язык") + ": " + AppLanguage.modeLabel(this),
@@ -2374,6 +2366,11 @@ public final class MainActivity extends Activity {
             "Обучение",
             "Интерактивно подсвечивает нужные кнопки и проводит через создание карточки, связи, дерево, файлы и параметры.",
             v -> startTraining()));
+        panel.addView(settingActionRow(
+            R.drawable.ic_menu_route,
+            "Степень родства",
+            KinshipModeDialog.HELP,
+            v -> showKinshipModeDialog()));
         panel.addView(settingSwitchRow(R.drawable.ic_menu_history, "История действий", state == null || !state.historyHidden, "Показывает или скрывает панель последних действий на поле дерева.", v -> toggleHistoryPanel()));
         boolean editingBlocked = editingBlocked();
         panel.addView(settingSwitchRow(
@@ -2385,6 +2382,17 @@ public final class MainActivity extends Activity {
                 : "Блокирует или разрешает редактирование, чтобы не изменить дерево случайно.",
             v -> toggleLock()));
         panel.addView(settingsSection("Визуал"));
+        panel.addView(settingSwitchRow(R.drawable.ic_menu_eye, "Значок качества карточки", state.showQualityBadge,
+            "Показывает на карточках небольшой значок ошибок, предупреждений или полноты данных. Проверка качества дерева продолжает работать и при скрытых значках.",
+            v -> { state.showQualityBadge = !state.showQualityBadge; saveOnly(); treeView.invalidate(); refreshSettingsIfVisible(); }));
+        panel.addView(settingSwitchRow(R.drawable.ic_life_heart_outline, "Значок статуса жизни", state.showLifeStatusBadge,
+            "Значок располагается над качеством карточки или на его месте, если качество скрыто. Статус можно указать в профиле человека, а иконки и цвета — выбрать ниже.",
+            v -> { state.showLifeStatusBadge = !state.showLifeStatusBadge; saveOnly(); treeView.invalidate(); refreshSettingsIfVisible(); }));
+        View lifeAppearanceRow = settingActionRow(R.drawable.ic_menu_paint_can, "Иконки и цвета статуса жизни",
+            "Выберите символы для живых, умерших и неизвестного статуса, их цвет и фон. Изменения сразу видны на карточках.",
+            v -> LifeStatusAppearanceDialog.show(this));
+        lifeAppearanceRow.setTag("settings.lifeStatusAppearance");
+        panel.addView(lifeAppearanceRow);
         panel.addView(themeRow());
         panel.addView(scaleChoiceRow(
             R.drawable.ic_menu_sliders,
@@ -2415,6 +2423,12 @@ public final class MainActivity extends Activity {
             "orthogonal".equals(parentLineMode),
             "По умолчанию связи родителей с детьми рисуются плавными кривыми. Этот режим включает ровные прямоугольные связи.",
             v -> toggleParentLineMode()));
+        panel.addView(settingSwitchRow(
+            R.drawable.ic_nav_links,
+            "От середины пары",
+            "centered".equals(familyLineMode),
+            "Включено — родители используют общий семейный маршрут от середины пары. Выключено — линия идёт отдельно от каждого человека, как раньше.",
+            v -> toggleFamilyLineMode()));
         panel.addView(settingSwitchRow(hideCardDetails ? R.drawable.ic_menu_eye_off : R.drawable.ic_menu_eye, "Скрыть детали карточек", hideCardDetails, "Скрывает вторичные детали карточек, оставляя основной текст чище.", v -> toggleHideDetails()));
         panel.addView(settingSwitchRow(compactCards ? R.drawable.ic_menu_compress : R.drawable.ic_menu_expand, "Компактные карточки", compactCards, "Переключает обычные карточки 4 на 7 на компактные 3 на 5. Линии автоматически подстраиваются под размер.", v -> toggleCompactCards()));
         panel.addView(settingSwitchRow(focusTree ? R.drawable.ic_menu_focus_off : R.drawable.ic_menu_focus, "Фокус на дереве", focusTree, "Оставляет больше места дереву и делает нижнюю панель компактнее.", v -> toggleFocusTree()));
@@ -2503,7 +2517,7 @@ public final class MainActivity extends Activity {
         choice.setIncludeFontPadding(false);
         choice.setTextColor(selected ? Color.WHITE : Color.rgb(28, 34, 38));
         choice.setBackground(selected
-            ? panelBg(AppThemePalette.secondary(), dp(7), Color.argb(70, 255, 255, 255))
+            ? panelBg(AppThemePalette.isDark() ? AppThemePalette.ctaSecondary() : AppThemePalette.secondary(), dp(7), Color.argb(70, 255, 255, 255))
             : panelBg(Color.TRANSPARENT, dp(7), Color.TRANSPARENT));
         choice.setContentDescription(tr(group + ": " + label));
         choice.setOnClickListener(v -> setter.accept(value));
@@ -2683,9 +2697,9 @@ public final class MainActivity extends Activity {
     private void applyLanguageChoice(Dialog dialog, String next) {
         if (!next.equals(AppLanguage.mode(this))) {
             AppLanguage.setMode(this, next);
-            if (saveCoordinator != null) saveCoordinator.flush();
             dialog.dismiss();
-            recreate();
+            if (saveCoordinator != null) saveCoordinator.saveThen(saved -> { if (saved && !isDestroyed()) recreate(); });
+            else recreate();
         } else {
             dialog.dismiss();
         }
@@ -2702,8 +2716,10 @@ public final class MainActivity extends Activity {
         treeView.setFontScale(fontScale);
         treeView.setWorkspaceSize(workspaceWidth, workspaceHeight);
         treeView.setParentLineMode(parentLineMode);
+        treeView.setFamilyLineMode(familyLineMode);
         treeView.setTheme(theme);
         if (workshopModule != null) workshopModule.applyStyles();
+        treeView.setNearGenerations(nearGenerations);
         treeView.setBranchMode(branchMode, branchAnchorId);
         treeView.setLinkState(pendingLinkFrom, selectedLinkId);
         bindEditor(state.selectedPerson());
@@ -2731,21 +2747,26 @@ public final class MainActivity extends Activity {
             remote.adminCollapsed = local.adminCollapsed;
             remote.guidesVisible = local.guidesVisible;
             remote.hideCardDetails = local.hideCardDetails;
+            remote.useMaidenNames = local.useMaidenNames;
+            remote.showQualityBadge = local.showQualityBadge;
+            remote.showLifeStatusBadge = local.showLifeStatusBadge;
+            remote.lifeStatusAppearance = local.lifeStatusAppearance.copy();
             remote.compactCards = local.compactCards;
             remote.focusTree = local.focusTree;
             remote.autoArrangeOnAdd = local.autoArrangeOnAdd;
             remote.workspaceWidth = local.workspaceWidth;
             remote.workspaceHeight = local.workspaceHeight;
             remote.parentLineMode = local.parentLineMode;
-            if (remote.photoAlbums.isEmpty()) {
+            remote.familyLineMode = local.familyLineMode;
+            if (remote.omittedAlbumFields.contains("photoAlbums")) {
                 for (java.util.Map.Entry<String, java.util.List<String>> album : local.photoAlbums.entrySet()) {
                     remote.photoAlbums.put(album.getKey(), new java.util.ArrayList<>(album.getValue()));
                 }
             }
-            if (remote.photoAlbumMedia.isEmpty()) copyAlbumMedia(local.photoAlbumMedia, remote.photoAlbumMedia);
-            if (remote.familyAlbumMedia.isEmpty()) copyAlbumMedia(local.familyAlbumMedia, remote.familyAlbumMedia);
-            if (remote.personAlbumMedia.isEmpty()) copyAlbumMedia(local.personAlbumMedia, remote.personAlbumMedia);
-            if (remote.photoAlbumFolders.isEmpty()) {
+            if (remote.omittedAlbumFields.contains("photoAlbumMedia")) copyAlbumMedia(local.photoAlbumMedia, remote.photoAlbumMedia);
+            if (remote.omittedAlbumFields.contains("familyAlbumMedia")) copyAlbumMedia(local.familyAlbumMedia, remote.familyAlbumMedia);
+            if (remote.omittedAlbumFields.contains("personAlbumMedia")) copyAlbumMedia(local.personAlbumMedia, remote.personAlbumMedia);
+            if (remote.omittedAlbumFields.contains("photoAlbumFolders")) {
                 for (java.util.Map.Entry<String, java.util.List<PhotoAlbumFolder>> entry : local.photoAlbumFolders.entrySet()) {
                     java.util.List<PhotoAlbumFolder> folders = new java.util.ArrayList<>();
                     for (PhotoAlbumFolder original : entry.getValue()) {
@@ -2759,10 +2780,11 @@ public final class MainActivity extends Activity {
                     remote.photoAlbumFolders.put(entry.getKey(), folders);
                 }
             }
-            if (remote.familyAlbums.isEmpty()) remote.familyAlbums.addAll(local.familyAlbums);
+            if (remote.omittedAlbumFields.contains("familyAlbums")) remote.familyAlbums.addAll(local.familyAlbums);
             if (remote.people.containsKey(local.selectedId)) remote.selectedId = local.selectedId;
         }
         state = remote;
+        if (historyModule != null) historyModule.cancelPendingUndo();
         undoStack.clear();
         redoStack.clear();
         resetTransientCanvasModes(false);
@@ -2811,7 +2833,9 @@ public final class MainActivity extends Activity {
         workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth);
         workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight);
         parentLineMode = "orthogonal".equals(state.parentLineMode) ? "orthogonal" : "smart";
+        familyLineMode = "individual".equals(state.familyLineMode) ? "individual" : "centered";
         theme = normalizeTheme(state.theme);
+        StartupSplash.rememberTheme(this, theme);
     }
 
     private void syncSettingsToState() {
@@ -2827,6 +2851,7 @@ public final class MainActivity extends Activity {
         state.workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(workspaceWidth);
         state.workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(workspaceHeight);
         state.parentLineMode = "orthogonal".equals(parentLineMode) ? "orthogonal" : "smart";
+        state.familyLineMode = "individual".equals(familyLineMode) ? "individual" : "centered";
         state.theme = normalizeTheme(theme);
     }
 
@@ -2865,41 +2890,27 @@ public final class MainActivity extends Activity {
         treeHint.animate().cancel();
         treeHint.setTranslationX(0f);
         treeHint.setAlpha(1f);
-        treeHint.setText(locked
-            ? (onlineReadOnly ? "Дерево доступно только для просмотра" : "Дерево заблокировано")
-            : "Один палец - движение, два пальца - масштаб");
-        treeHint.setTextColor(locked ? Color.rgb(166, 55, 50) : Color.rgb(101, 113, 122));
-        treeHint.setCompoundDrawablesWithIntrinsicBounds(
-            locked ? R.drawable.ic_menu_lock : 0,
-            0,
-            0,
-            0);
-        treeHint.setCompoundDrawablePadding(locked ? dp(7) : 0);
-        if (locked) tintDrawables(treeHint, Color.rgb(197, 83, 75));
+        treeHint.setText("Один палец - движение, два пальца - масштаб");
+        treeHint.setTextColor(Color.rgb(101, 113, 122));
+        treeHint.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+        treeHint.setCompoundDrawablePadding(0);
         treeHint.setBackground(panelBg(
-            locked ? Color.argb(242, 255, 241, 239) : Color.argb(218, 255, 255, 255),
+            Color.argb(218, 255, 255, 255),
             dp(8),
-            locked ? Color.argb(108, 197, 83, 75) : Color.argb(42, 24, 169, 153)));
+            Color.argb(42, 24, 169, 153)));
         if (treeHint.getLayoutParams() instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) treeHint.getLayoutParams();
-            params.gravity = locked ? Gravity.BOTTOM : Gravity.TOP;
-            if (locked) {
-                params.setMargins(
-                    dp(isLandscapeLayout() ? 64 : 12),
-                    0,
-                    dp(isLandscapeLayout() ? 12 : 12),
-                    dp(isLandscapeLayout() ? 12 : focusTree ? 60 : 80));
-            } else {
-                params.setMargins(
-                    dp(isLandscapeLayout() ? 64 : 12),
-                    dp(isLandscapeLayout() ? 8 : 72),
-                    dp(isLandscapeLayout() ? 12 : 64),
-                    0);
-            }
+            params.gravity = Gravity.TOP;
+            params.setMargins(
+                dp(isLandscapeLayout() ? 64 : 12),
+                dp(isLandscapeLayout() ? 8 : 72),
+                dp(isLandscapeLayout() ? 12 : 64),
+                0);
             treeHint.setLayoutParams(params);
         }
         boolean fullScreenPanel = "settings".equals(activePanel) || "people".equals(activePanel);
-        boolean show = !fullScreenPanel && (locked || (!focusTree && !treeHintDismissed && !treeHintAutoHidden));
+        boolean show = !fullScreenPanel && !locked && !focusTree
+            && !treeHintDismissed && !treeHintAutoHidden;
         treeHint.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
@@ -2927,7 +2938,7 @@ public final class MainActivity extends Activity {
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(R.drawable.ic_menu_lock);
-        icon.setColorFilter(Color.rgb(197, 83, 75));
+        icon.setColorFilter(AppThemePalette.text(Color.rgb(197, 83, 75)));
         icon.setPadding(dp(10), dp(10), dp(10), dp(10));
         icon.setBackground(panelBg(Color.rgb(255, 235, 232), dp(13), Color.TRANSPARENT));
         card.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -3023,6 +3034,7 @@ public final class MainActivity extends Activity {
         float[] spot = findOpenSpot(center.x, center.y);
         Person person = state.addPerson(tr("Пустая карточка"), spot[0], spot[1]);
         state.selectedId = person.id;
+        arrangeAfterPersonAddedIfEnabled();
         AnalyticsReporter.personAdded("loose", 1, firstCard, state);
         saveToast("Карточка добавлена");
         bindState();
@@ -3031,864 +3043,62 @@ public final class MainActivity extends Activity {
     }
 
     private void showAddPersonMenu() {
-        if (state == null || addPersonButton == null || !requireEditingEnabled()) return;
-        Person selected = state.selectedPerson();
-        if (selected == null) {
-            addLoosePerson();
-            return;
-        }
-
-        final int popupWidth = Math.min(
-            dp(300),
-            getResources().getDisplayMetrics().widthPixels - dp(24));
-        LinearLayout menu = new LinearLayout(this);
-        menu.setOrientation(LinearLayout.VERTICAL);
-        menu.setPadding(dp(9), dp(9), dp(9), dp(9));
-        menu.setBackground(panelBg(
-            Color.rgb(248, 251, 252),
-            dp(14),
-            Color.argb(64, 24, 169, 153)));
-        menu.setElevation(dp(12));
-
-        PopupWindow popup = new PopupWindow(menu, popupWidth, -2, true);
-        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        popup.setOutsideTouchable(true);
-        popup.setElevation(dp(12));
-
-        menu.addView(
-            personMenuHeader(selected, "Выбрана карточка"),
-            new LinearLayout.LayoutParams(-1, dp(64)));
-        menu.addView(
-            personMenuSection("ДОБАВИТЬ К ВЫБРАННОЙ КАРТОЧКЕ"),
-            new LinearLayout.LayoutParams(-1, dp(30)));
-        menu.addView(personMenuAction(
-            R.drawable.ic_menu_add_person,
-            "Добавить родителей",
-            false,
-            popup,
-            () -> showRelativeCountDialog(selected, "parents", 2)));
-        menu.addView(personMenuAction(
-            R.drawable.ic_menu_child,
-            "Добавить детей",
-            false,
-            popup,
-            () -> showRelativeCountDialog(selected, "children", 4)));
-        menu.addView(personMenuAction(
-            R.drawable.ic_menu_heart,
-            "Добавить партнёра",
-            false,
-            popup,
-            () -> addRelationAction("add-partner")));
-        menu.addView(personMenuAction(
-            R.drawable.ic_menu_people,
-            "Добавить брата/сестру",
-            false,
-            popup,
-            () -> showRelativeCountDialog(selected, "siblings", 3)));
-        menu.addView(
-            personMenuSection("ОТДЕЛЬНАЯ КАРТОЧКА"),
-            new LinearLayout.LayoutParams(-1, dp(30)));
-        menu.addView(personMenuAction(
-            R.drawable.ic_menu_add_box,
-            "Создать пустую карточку",
-            false,
-            popup,
-            this::addLoosePerson));
-        menu.addView(
-            personMenuSection("АВТОМАТИЧЕСКОЕ РАЗМЕЩЕНИЕ"),
-            new LinearLayout.LayoutParams(-1, dp(30)));
-        menu.addView(personMenuToggleAction(
-            R.drawable.ic_menu_layout,
-            "Упорядочивать после добавления",
-            state.autoArrangeOnAdd,
-            enabled -> {
-                state.autoArrangeOnAdd = enabled;
-                rememberAutoArrangePreference(enabled);
-                saveOnly();
-                toast(enabled
-                    ? "Автоупорядочивание включено"
-                    : "Автоупорядочивание выключено");
-            }));
-
-        menu.measure(
-            View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int[] anchor = new int[2];
-        addPersonButton.getLocationOnScreen(anchor);
-        int popupHeight = menu.getMeasuredHeight();
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int x = Math.max(
-            dp(8),
-            Math.min(screenWidth - popupWidth - dp(8), anchor[0] + addPersonButton.getWidth() - popupWidth));
-        int y = Math.max(dp(12), anchor[1] - popupHeight - dp(8));
-        popup.showAtLocation(treeView, Gravity.TOP | Gravity.LEFT, x, y);
-    }
-
-    private void showRelativeCountDialog(Person selected, String kind, int maximum) {
-        if (selected == null || !state.people.containsKey(selected.id)) return;
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(dp(18), dp(17), dp(18), dp(16));
-        shell.setBackground(panelBg(Color.WHITE, dp(20), Color.argb(60, 63, 82, 94)));
-
-        TextView eyebrow = new LocalizedTextView(this);
-        eyebrow.setText("ВЫБРАНА КАРТОЧКА");
-        eyebrow.setTextSize(9);
-        eyebrow.setTypeface(uiBold());
-        eyebrow.setTextColor(Color.rgb(8, 122, 115));
-        eyebrow.setIncludeFontPadding(false);
-        shell.addView(eyebrow, new LinearLayout.LayoutParams(-1, dp(20)));
-
-        TextView personName = cardActionTitle(
-            selected.name == null || selected.name.trim().isEmpty() ? "Без имени" : selected.name.trim(),
-            false);
-        personName.setTextSize(15);
-        personName.setSingleLine(true);
-        personName.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        shell.addView(personName, new LinearLayout.LayoutParams(-1, dp(30)));
-
-        String relation = "parents".equals(kind)
-            ? "родителей"
-            : "children".equals(kind) ? "детей" : "братьев или сестёр";
-        TextView title = cardActionTitle("Сколько добавить?", false);
-        title.setTextSize(18);
-        title.setPadding(0, dp(7), 0, 0);
-        shell.addView(title, new LinearLayout.LayoutParams(-1, dp(40)));
-        TextView detail = cardActionDetail("Выберите количество " + relation, false);
-        detail.setTextSize(11);
-        shell.addView(detail, new LinearLayout.LayoutParams(-1, dp(26)));
-
-        LinearLayout choices = new LinearLayout(this);
-        choices.setOrientation(LinearLayout.HORIZONTAL);
-        choices.setGravity(Gravity.CENTER);
-        for (int count = 1; count <= maximum; count++) {
-            final int selectedCount = count;
-            Button choice = actionButton(String.valueOf(count), v -> {
-                dialog.dismiss();
-                if (!state.people.containsKey(selected.id)) return;
-                state.selectedId = selected.id;
-                addRelationAction("add-" + kind + "-" + selectedCount);
-            });
-            choice.setTextSize(18);
-            choice.setTextColor(Color.rgb(8, 122, 115));
-            choice.setBackground(panelBg(Color.rgb(232, 248, 246), dp(13), Color.argb(88, 24, 169, 153)));
-            LinearLayout.LayoutParams choiceParams = new LinearLayout.LayoutParams(0, dp(52), 1);
-            if (count > 1) choiceParams.setMargins(dp(8), 0, 0, 0);
-            choices.addView(choice, choiceParams);
-        }
-        LinearLayout.LayoutParams choicesParams = new LinearLayout.LayoutParams(-1, dp(52));
-        choicesParams.setMargins(0, dp(10), 0, 0);
-        shell.addView(choices, choicesParams);
-
-        Button cancel = actionButton("Отмена", v -> dialog.dismiss());
-        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(-1, dp(46));
-        cancelParams.setMargins(0, dp(10), 0, 0);
-        shell.addView(cancel, cancelParams);
-
-        dialog.setContentView(shell);
-        dialog.setCanceledOnTouchOutside(true);
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(390));
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = width;
-            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attrs.dimAmount = 0.34f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
+        addPersonMenuModule.showAddPersonMenu();
     }
 
     private void openPersonActions(Person person, float screenX, float screenY) {
-        if (person == null) return;
-        refreshTreeQuality();
-        final int popupWidth = Math.min(dp(324), getResources().getDisplayMetrics().widthPixels - dp(24));
-        LinearLayout menu = new LinearLayout(this);
-        menu.setOrientation(LinearLayout.VERTICAL);
-        menu.setPadding(dp(9), dp(9), dp(9), dp(9));
-        menu.setBackground(panelBg(Color.rgb(248, 251, 252), dp(12), Color.argb(51, 93, 85, 72)));
-        menu.setElevation(dp(12));
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.addView(menu, new ScrollView.LayoutParams(-1, -2));
-        PopupWindow popup = new PopupWindow(scroll, popupWidth, -2, true);
-        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        popup.setOutsideTouchable(true);
-        popup.setElevation(dp(12));
-
-        TreeQualityAnalyzer.PersonReport report = qualityModule == null
-            ? new TreeQualityAnalyzer.PersonReport(person.id)
-            : qualityModule.person(person.id);
-        menu.addView(selectedPersonMenuHeader(person, report), new LinearLayout.LayoutParams(-1, dp(86)));
-        menu.addView(personMenuSpaced(
-            personMenuAction(
-                R.drawable.ic_nav_card,
-                "Открыть карточку",
-                false,
-                popup,
-                this::openPersonEditor),
-            dp(7),
-            dp(7)));
-
-        menu.addView(personMenuSection("ПОКАЗАТЬ ВЕТКУ"), new LinearLayout.LayoutParams(-1, dp(30)));
-        Person rootPerson = state.people.get(state.rootId);
-        KinshipCalculator.Result kinship = rootPerson == null
-            ? null
-            : KinshipCalculator.calculate(state, person.id, rootPerson.id);
-        String kinshipDetail = person.id.equals(state.rootId)
-            ? "Это ваша карточка"
-            : kinship != null && kinship.found
-                ? "Для вас: " + kinship.firstToSecond
-                : "Родство пока не найдено";
-        menu.addView(personMenuGridRow(
-            personMenuGridTile(R.drawable.ic_menu_ancestors, "Предки", "", false, popup, () -> showPersonBranch(person, "ancestors")),
-            personMenuGridTile(R.drawable.ic_menu_descendants, "Потомки", "", false, popup, () -> showPersonBranch(person, "descendants"))));
-        menu.addView(personMenuGridRow(
-            personMenuGridTile(R.drawable.ic_menu_near, "Близкие", "", false, popup, () -> showPersonBranch(person, "near")),
-            personMenuGridTile(R.drawable.ic_menu_route, "Связь со мной", kinshipDetail, false, popup, () -> showKinshipToRoot(person))));
-
-        menu.addView(personQualityDisclosure(person, report, popup));
-
-        menu.addView(personMenuSection("ДЕЙСТВИЯ"), new LinearLayout.LayoutParams(-1, dp(30)));
-        menu.addView(personMenuGridRow(
-            personMenuGridTile(
-                R.drawable.ic_menu_pin,
-                person.pinned ? "Открепить" : "Закрепить",
-                "",
-                false,
-                popup,
-                () -> togglePersonPin(person)),
-            personMenuGridTile(R.drawable.ic_menu_copy, "Дублировать", "", false, popup, this::duplicateSelected)));
-        menu.addView(personMenuAction(R.drawable.ic_menu_share, "Поделиться биографией", false, popup, () -> shareBiography(person)));
-        menu.addView(personMenuAction(R.drawable.ic_menu_trash, "Удалить человека", true, popup, this::confirmDelete));
-
-        menu.measure(
-            View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        int popupHeight = Math.min(menu.getMeasuredHeight(), screenHeight - dp(32));
-        popup.setHeight(popupHeight);
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int x = Math.max(dp(8), Math.min(screenWidth - popupWidth - dp(8), Math.round(screenX) - popupWidth + dp(18)));
-        int y = Math.round(screenY) + dp(8);
-        if (y + popupHeight > screenHeight - dp(16)) y = Math.max(dp(16), Math.round(screenY) - popupHeight - dp(8));
-        popup.showAtLocation(treeView, Gravity.TOP | Gravity.LEFT, x, y);
+        personMenusModule.openPersonActions(person, screenX, screenY);
     }
 
-    private View selectedPersonMenuHeader(Person person, TreeQualityAnalyzer.PersonReport report) {
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(dp(12), dp(8), dp(12), dp(8));
-        header.setBackground(softAccentGradientBg(dp(10)));
-        TextView eyebrow = new LocalizedTextView(this);
-        eyebrow.setText("Выбрана карточка");
-        eyebrow.setTextColor(AppThemePalette.secondary());
-        eyebrow.setTextSize(9);
-        eyebrow.setTypeface(uiBold());
-        eyebrow.setIncludeFontPadding(false);
-        header.addView(eyebrow, new LinearLayout.LayoutParams(-1, dp(18)));
-        TextView name = cardActionTitle(
-            person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim(),
-            false);
-        name.setTextSize(15);
-        name.setSingleLine(true);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        header.addView(name, new LinearLayout.LayoutParams(-1, dp(27)));
-        TextView quality = cardActionDetail(personQualitySummary(report), false);
-        quality.setTextSize(10);
-        quality.setTextColor(qualitySummaryColor(report));
-        header.addView(quality, new LinearLayout.LayoutParams(-1, dp(22)));
-        return header;
-    }
-
-    private View personMenuHeader(Person person) {
-        return personMenuHeader(
-            person,
-            person.pinned ? "Положение закреплено" : "Меню выбранной карточки");
-    }
-
-    private View personMenuHeader(Person person, String detailText) {
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(10), dp(7), dp(10), dp(7));
-        header.setBackground(softAccentGradientBg(dp(10)));
-        TextView avatar = new LocalizedTextView(this);
-        LocalizedViews.setRaw(avatar, personInitials(person.name));
-        avatar.setTextColor(Color.WHITE);
-        avatar.setTextSize(12);
-        avatar.setTypeface(uiBold());
-        avatar.setGravity(Gravity.CENTER);
-        avatar.setIncludeFontPadding(false);
-        avatar.setBackground(panelBg(person.color, dp(999), Color.argb(72, 255, 255, 255)));
-        header.addView(avatar, new LinearLayout.LayoutParams(dp(40), dp(40)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(10), 0, 0, 0);
-        TextView name = cardActionTitle(
-            person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim(),
-            false);
-        name.setTextSize(14);
-        copy.addView(name, new LinearLayout.LayoutParams(-1, dp(24)));
-        TextView detail = cardActionDetail(detailText, false);
-        detail.setTextSize(10);
-        copy.addView(detail, new LinearLayout.LayoutParams(-1, dp(20)));
-        header.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-        return header;
-    }
-
-    private TextView personMenuSection(String value) {
-        TextView section = new LocalizedTextView(this);
-        section.setText(value);
-        section.setTextColor(Color.rgb(101, 113, 122));
-        section.setTextSize(9);
-        section.setTypeface(uiBold());
-        section.setGravity(Gravity.LEFT | Gravity.BOTTOM);
-        section.setPadding(dp(8), 0, 0, dp(5));
-        section.setIncludeFontPadding(false);
-        return section;
-    }
-
-    private View personMenuGroup(int iconRes, String label, String[] optionLabels, String[] actions, PopupWindow popup) {
-        LinearLayout group = new LinearLayout(this);
-        group.setOrientation(LinearLayout.VERTICAL);
-        TextView summary = personMenuText(iconRes, label, false);
-        LinearLayout options = new LinearLayout(this);
-        options.setOrientation(LinearLayout.VERTICAL);
-        options.setPadding(dp(8), dp(2), dp(8), dp(5));
-        options.setBackground(panelBg(Color.rgb(232, 248, 246), dp(8), Color.argb(52, 24, 169, 153)));
-        options.setVisibility(View.GONE);
-        summary.setOnClickListener(v -> {
-            options.setVisibility(options.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
-            View content = popup.getContentView();
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(popup.getWidth(), View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-            popup.update(popup.getWidth(), content.getMeasuredHeight());
-        });
-        group.addView(summary, new LinearLayout.LayoutParams(-1, dp(48)));
-        for (int i = 0; i < optionLabels.length; i++) {
-            final String action = actions[i];
-            TextView option = personMenuText(0, optionLabels[i], false);
-            option.setPadding(dp(42), 0, dp(10), 0);
-            option.setOnClickListener(v -> {
-                popup.dismiss();
-                addRelationAction(action);
-            });
-            options.addView(option, new LinearLayout.LayoutParams(-1, dp(42)));
-        }
-        group.addView(options);
-        return group;
-    }
-
-    private View personMenuAction(int iconRes, String label, boolean danger, PopupWindow popup, Runnable action) {
-        TextView row = personMenuText(iconRes, label, danger);
-        row.setOnClickListener(v -> {
-            popup.dismiss();
-            action.run();
-        });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(50));
-        params.setMargins(0, 0, 0, dp(7));
-        row.setLayoutParams(params);
-        return row;
-    }
-
-    private View personMenuToggleAction(
-        int iconRes,
-        String label,
-        boolean enabled,
-        java.util.function.Consumer<Boolean> action
-    ) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), 0, dp(10), 0);
-        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(225, 231, 235)));
-
-        TextView title = personMenuText(iconRes, label, false);
-        title.setBackgroundColor(Color.TRANSPARENT);
-        row.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1f));
-
-        FrameLayout toggle = toggleControl(enabled);
-        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(dp(44), dp(26));
-        toggleParams.setMargins(dp(8), 0, 0, 0);
-        row.addView(toggle, toggleParams);
-
-        final boolean[] value = {enabled};
-        Runnable refresh = () -> {
-            toggle.setBackground(toggleBg(value[0]));
-            positionToggleThumb(toggle, value[0]);
-        };
-        refresh.run();
-        row.setOnClickListener(v -> {
-            value[0] = !value[0];
-            refresh.run();
-            action.accept(value[0]);
-        });
-        row.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(48)));
-        return row;
-    }
-
-    private View personMenuDetailedAction(
-        int iconRes,
-        String label,
-        String detail,
-        boolean danger,
-        PopupWindow popup,
-        Runnable action
-    ) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(10), dp(5), dp(10), dp(5));
-        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(225, 231, 235)));
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(iconRes);
-        icon.setColorFilter(uiColor(danger ? Color.rgb(197, 83, 75) : Color.rgb(8, 122, 115)));
-        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(9), 0, 0, 0);
-        TextView title = cardActionTitle(label, danger);
-        title.setTextSize(12);
-        copy.addView(title, new LinearLayout.LayoutParams(-1, dp(23)));
-        TextView caption = cardActionDetail(detail, danger);
-        caption.setTextSize(9);
-        caption.setSingleLine(true);
-        caption.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        copy.addView(caption, new LinearLayout.LayoutParams(-1, dp(19)));
-        row.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-        row.setOnClickListener(v -> {
-            popup.dismiss();
-            action.run();
-        });
-        row.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(54)));
-        return row;
-    }
-
-    private View personMenuGridRow(View first, View second) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.addView(first, new LinearLayout.LayoutParams(0, dp(54), 1));
-        LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, dp(54), 1);
-        secondParams.setMargins(dp(7), 0, 0, 0);
-        row.addView(second, secondParams);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(61));
-        params.setMargins(0, 0, 0, dp(7));
-        row.setLayoutParams(params);
-        return row;
-    }
-
-    private View personMenuSpaced(View view, int top, int bottom) {
-        ViewGroup.LayoutParams current = view.getLayoutParams();
-        int height = current == null ? ViewGroup.LayoutParams.WRAP_CONTENT : current.height;
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, height);
-        params.setMargins(0, top, 0, bottom);
-        view.setLayoutParams(params);
-        return view;
-    }
-
-    private View personMenuGridTile(
-        int iconRes,
-        String label,
-        String detail,
-        boolean danger,
-        PopupWindow popup,
-        Runnable action
-    ) {
-        LinearLayout tile = new LinearLayout(this);
-        tile.setOrientation(LinearLayout.HORIZONTAL);
-        tile.setGravity(Gravity.CENTER_VERTICAL);
-        tile.setPadding(dp(9), dp(4), dp(7), dp(4));
-        tile.setBackground(panelBg(
-            danger ? Color.rgb(255, 244, 241) : Color.WHITE,
-            dp(9),
-            danger ? Color.argb(88, 197, 83, 75) : Color.rgb(225, 231, 235)));
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(iconRes);
-        icon.setColorFilter(uiColor(danger ? Color.rgb(197, 83, 75) : Color.rgb(8, 122, 115)));
-        tile.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(7), 0, 0, 0);
-        TextView title = cardActionTitle(label, danger);
-        title.setTextSize(12);
-        title.setSingleLine(true);
-        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        copy.addView(title, new LinearLayout.LayoutParams(-1, detail == null || detail.isEmpty() ? dp(42) : dp(25)));
-        if (detail != null && !detail.isEmpty()) {
-            TextView caption = cardActionDetail(detail, danger);
-            caption.setTextSize(8);
-            caption.setSingleLine(true);
-            caption.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            copy.addView(caption, new LinearLayout.LayoutParams(-1, dp(16)));
-        }
-        tile.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-        tile.setOnClickListener(v -> {
-            popup.dismiss();
-            action.run();
-        });
-        return tile;
-    }
-
-    private View personQualityAction(
-        Person person,
-        TreeQualityAnalyzer.PersonReport report,
-        String category,
-        String label,
-        int iconRes,
-        PopupWindow popup
-    ) {
-        int count = report.countCategory(category);
-        String detail = count == 0
-            ? "Замечаний нет"
-            : count + " " + RussianWordForms.forCount(
-                count, "замечание", "замечания", "замечаний");
-        return personMenuDetailedAction(
-            iconRes,
-            label,
-            detail,
-            false,
-            popup,
-            () -> showPersonQualityDialog(person, category));
-    }
-
-    private View personQualityDisclosure(Person person, TreeQualityAnalyzer.PersonReport report, PopupWindow popup) {
-        LinearLayout group = new LinearLayout(this);
-        group.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(-1, -2);
-        groupParams.setMargins(0, 0, 0, dp(7));
-        group.setLayoutParams(groupParams);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(10), dp(6), dp(8), dp(6));
-        header.setBackground(softAccentGradientBg(dp(9)));
-
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_menu_shield);
-        icon.setColorFilter(uiColor(AppThemePalette.secondary()));
-        header.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-
-        LinearLayout copy = new LinearLayout(this);
-        copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(9), 0, 0, 0);
-        TextView title = cardActionTitle("Проверить данные", false);
-        title.setTextColor(AppThemePalette.secondary());
-        title.setTextSize(12);
-        copy.addView(title, new LinearLayout.LayoutParams(-1, dp(23)));
-        TextView detail = cardActionDetail(personQualitySummary(report), false);
-        detail.setSingleLine(true);
-        detail.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        copy.addView(detail, new LinearLayout.LayoutParams(-1, dp(18)));
-        header.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
-
-        TextView arrow = new LocalizedTextView(this);
-        arrow.setText("⌄");
-        arrow.setTextColor(AppThemePalette.secondary());
-        arrow.setTextSize(18);
-        arrow.setTypeface(uiBold());
-        arrow.setGravity(Gravity.CENTER);
-        arrow.setIncludeFontPadding(false);
-        header.addView(arrow, new LinearLayout.LayoutParams(dp(30), -1));
-
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, dp(7), 0, 0);
-        content.setVisibility(View.GONE);
-        content.addView(personMenuGridRow(
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_PARENT_AGE, "Возраст родителей", R.drawable.ic_menu_people, popup),
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_DATES, "Даты", R.drawable.ic_field_calendar, popup)));
-        content.addView(personMenuGridRow(
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_RELATIONS, "Связи", R.drawable.ic_nav_links, popup),
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_DUPLICATES, "Дубли", R.drawable.ic_menu_copy, popup)));
-        content.addView(personMenuGridRow(
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_STRUCTURE, "Ветки", R.drawable.ic_menu_branch, popup),
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_MEMORY, "Архив", R.drawable.ic_editor_archive, popup)));
-        content.addView(personMenuGridRow(
-            personQualityGridTile(person, report, TreeQualityAnalyzer.CATEGORY_MISSING, "Сведения", R.drawable.ic_menu_note_add, popup),
-            personMenuGridSpacer()));
-
-        final boolean[] expanded = {false};
-        header.setOnClickListener(v -> {
-            expanded[0] = !expanded[0];
-            content.setVisibility(expanded[0] ? View.VISIBLE : View.GONE);
-            arrow.setText(expanded[0] ? "⌃" : "⌄");
-            updatePersonPopupHeight(popup);
-        });
-
-        group.addView(header, new LinearLayout.LayoutParams(-1, dp(54)));
-        group.addView(content, new LinearLayout.LayoutParams(-1, -2));
-        return group;
-    }
-
-    private View personQualityGridTile(
-        Person person,
-        TreeQualityAnalyzer.PersonReport report,
-        String category,
-        String label,
-        int iconRes,
-        PopupWindow popup
-    ) {
-        int count = report == null ? 0 : report.countCategory(category);
-        String detail = count == 0
-            ? "Чисто"
-            : count + " " + RussianWordForms.forCount(
-                count, "пункт", "пункта", "пунктов");
-        return personMenuGridTile(iconRes, label, detail, false, popup, () -> showPersonQualityDialog(person, category));
-    }
-
-    private View personMenuGridSpacer() {
-        TextView spacer = new LocalizedTextView(this);
-        spacer.setVisibility(View.INVISIBLE);
-        return spacer;
-    }
-
-    private void updatePersonPopupHeight(PopupWindow popup) {
-        if (popup == null || popup.getContentView() == null) return;
-        View content = popup.getContentView();
-        content.measure(
-            View.MeasureSpec.makeMeasureSpec(popup.getWidth(), View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        popup.update(popup.getWidth(), Math.min(content.getMeasuredHeight(), screenHeight - dp(32)));
-    }
-
-    private TextView personMenuText(int iconRes, String label, boolean danger) {
-        TextView row = new LocalizedTextView(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setText(label);
-        row.setTextSize(13);
-        row.setTypeface(uiBold());
-        row.setIncludeFontPadding(false);
-        row.setTextColor(danger ? Color.rgb(197, 83, 75) : Color.rgb(28, 34, 38));
-        row.setPadding(dp(10), 0, dp(10), 0);
-        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(225, 231, 235)));
-        if (iconRes != 0) {
-            row.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
-            row.setCompoundDrawablePadding(dp(9));
-            tintDrawables(row, danger ? Color.rgb(197, 83, 75) : Color.rgb(8, 122, 115));
-        }
-        return row;
-    }
-
-    private void showPersonBranch(Person person, String mode) {
+    void showPersonBranch(Person person, String mode) {
         if (person == null || state == null) return;
         state.selectedId = person.id;
         branchMode = mode;
+        if (kinshipStatusPanel != null) kinshipStatusPanel.setVisibility(View.GONE);
+        if ("near".equals(mode)) { nearGenerations = 1; treeView.setNearGenerations(1); }
         branchAnchorId = person.id;
         pendingBranchMode = "";
         treeView.setBranchMode(mode, person.id);
         updateBranchStatusPanel();
         showPanel("");
         treeView.post(treeView::fit);
-        toast(branchLabel(mode) + ": " + (person.name.isEmpty() ? "Без имени" : person.name));
     }
 
-    private void showKinshipToRoot(Person person) {
+    void showKinshipToRoot(Person person) {
         if (person == null || state == null) return;
         Person root = state.people.get(state.rootId);
         if (root == null) {
             toast("Ваша корневая карточка не найдена");
             return;
         }
-        KinshipCalculator.Result result = KinshipCalculator.calculate(state, person.id, root.id);
-        treeView.highlightKinshipPath(shortestPersonPath(person.id, root.id));
+        KinshipCalculator.Result result = calculateKinship(person.id, root.id);
+        treeView.highlightKinshipPath(PersonPathFinder.shortestPath(state, person.id, root.id));
         showKinshipResult(person, root, result);
     }
 
-    private java.util.List<String> shortestPersonPath(String startId, String endId) {
-        java.util.List<String> empty = new java.util.ArrayList<>();
-        if (state == null || startId == null || endId == null
-            || !state.people.containsKey(startId) || !state.people.containsKey(endId)) return empty;
-        if (startId.equals(endId)) {
-            empty.add(startId);
-            return empty;
-        }
-        java.util.Map<String, java.util.List<String>> graph = new java.util.HashMap<>();
-        for (String id : state.people.keySet()) graph.put(id, new java.util.ArrayList<>());
-        for (Relation link : state.links) {
-            if (!graph.containsKey(link.from) || !graph.containsKey(link.to)) continue;
-            graph.get(link.from).add(link.to);
-            graph.get(link.to).add(link.from);
-        }
-        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>();
-        java.util.Map<String, String> previous = new java.util.HashMap<>();
-        queue.add(startId);
-        previous.put(startId, "");
-        while (!queue.isEmpty() && !previous.containsKey(endId)) {
-            String current = queue.removeFirst();
-            for (String next : graph.getOrDefault(current, java.util.Collections.emptyList())) {
-                if (previous.containsKey(next)) continue;
-                previous.put(next, current);
-                queue.addLast(next);
-            }
-        }
-        if (!previous.containsKey(endId)) return empty;
-        String current = endId;
-        while (!current.isEmpty()) {
-            empty.add(0, current);
-            current = previous.getOrDefault(current, "");
-        }
-        return empty;
+    KinshipCalculator.Result calculateKinship(String firstId, String secondId) {
+        return KinshipCalculator.calculate(state, firstId, secondId, kinshipTerminological);
     }
 
-    private void shareBiography(Person person) {
-        if (person == null) return;
-        String subject = person.name == null ? "" : person.name.trim();
-        String biography = biographyText(person);
-        String mediaId = person.photoMediaId == null ? "" : person.photoMediaId.trim();
-        String dataUrl = person.photo == null ? "" : person.photo.trim();
-        if (mediaId.isEmpty() && dataUrl.isEmpty()) {
-            startBiographyShare(subject, biography, null, "text/plain");
-            return;
-        }
-        new Thread(() -> {
-            try {
-                String extension = biographyPhotoExtension(mediaId, dataUrl);
-                String mime = "png".equals(extension)
-                    ? "image/png"
-                    : "webp".equals(extension) ? "image/webp" : "image/jpeg";
-                File shared = new File(getCacheDir(), "shared");
-                if (!shared.isDirectory() && !shared.mkdirs()) {
-                    throw new java.io.IOException("Не удалось подготовить фотографию");
-                }
-                File photo = new File(shared, "biography-photo-" + System.currentTimeMillis() + "." + extension);
-                try (OutputStream output = new FileOutputStream(photo)) {
-                    if (!mediaId.isEmpty() && store.mediaStore().exists(mediaId)) {
-                        store.mediaStore().copyTo(mediaId, output);
-                    } else {
-                        int comma = dataUrl.indexOf(',');
-                        if (comma < 0 || comma + 1 >= dataUrl.length()) {
-                            throw new java.io.IOException("Фотография повреждена");
-                        }
-                        output.write(Base64.decode(dataUrl.substring(comma + 1), Base64.DEFAULT));
-                    }
-                    output.flush();
-                }
-                Uri photoUri = TreeShareProvider.uriFor(photo.getName());
-                runOnUiThread(() -> startBiographyShare(subject, biography, photoUri, mime));
-            } catch (Exception error) {
-                DiagnosticsLogger.handled(this, "biography.share.photo", error);
-                runOnUiThread(() -> {
-                    toast("Фото не удалось приложить, отправляю текст");
-                    startBiographyShare(subject, biography, null, "text/plain");
-                });
-            }
-        }, "biography-photo-share").start();
+    Dialog showKinshipModeDialog() {
+        return KinshipModeDialog.show(this, terminology -> {
+            kinshipTerminological = terminology;
+            getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE).edit().putBoolean("kinship_terminological", terminology).apply();
+            rebuildUiKeepingPanel();
+        });
     }
 
-    private String biographyText(Person person) {
-        StringBuilder biography = new StringBuilder();
-        biography.append(person.name == null || person.name.trim().isEmpty() ? tr("Без имени") : person.name.trim());
-        String gender = PersonGender.resolve(person);
-        if (PersonGender.MALE.equals(gender)) biography.append("\nПол: мужской");
-        else if (PersonGender.FEMALE.equals(gender)) biography.append("\nПол: женский");
-        int age = personAge(person);
-        if (age >= 0) {
-            biography.append("\nВозраст: ").append(age).append(" ")
-                .append(RussianWordForms.forCount(age, "год", "года", "лет"));
-        }
-        String born = humanDate(person.bornDay, person.bornMonth, person.bornYear);
-        String died = humanDate(person.diedDay, person.diedMonth, person.diedYear);
-        if (!born.isEmpty() && !died.isEmpty()) biography.append("\n").append(born).append(" — ").append(died);
-        else if (!born.isEmpty()) biography.append("\nДата рождения: ").append(born);
-        else if (!died.isEmpty()) biography.append("\nДата смерти: ").append(died);
-        if (person.place != null && !person.place.trim().isEmpty()) biography.append("\n").append(person.place.trim());
-        if (person.notes != null && !person.notes.trim().isEmpty()) biography.append("\n\n").append(person.notes.trim());
-        if (!person.memories.isEmpty()) {
-            biography.append("\n\n").append(tr("Память")).append(":");
-            int limit = Math.min(8, person.memories.size());
-            for (int index = 0; index < limit; index++) {
-                Memory memory = person.memories.get(index);
-                String title = memory.title == null || memory.title.trim().isEmpty()
-                    ? tr("Воспоминание")
-                    : memory.title.trim();
-                biography.append("\n• ").append(title);
-                if (memory.text != null && !memory.text.trim().isEmpty()) {
-                    biography.append(": ").append(memory.text.trim());
-                }
-            }
-        }
-        return biography.toString();
+    void shareBiography(Person person) {
+        biographyShareModule.shareBiography(person);
     }
 
-    private int personAge(Person person) {
-        int bornYear = positiveYear(person == null ? "" : person.bornYear);
-        if (bornYear <= 0) return -1;
-        Calendar endpoint = Calendar.getInstance();
-        int diedYear = positiveYear(person.diedYear);
-        boolean deceased = diedYear > 0;
-        int endYear = deceased ? diedYear : endpoint.get(Calendar.YEAR);
-        int age = endYear - bornYear;
-        if (age < 0) return -1;
-        int bornMonth = positiveNumber(person.bornMonth, 1, 12);
-        int bornDay = positiveNumber(person.bornDay, 1, 31);
-        int endMonth = deceased ? positiveNumber(person.diedMonth, 1, 12) : endpoint.get(Calendar.MONTH) + 1;
-        int endDay = deceased ? positiveNumber(person.diedDay, 1, 31) : endpoint.get(Calendar.DAY_OF_MONTH);
-        if (bornMonth > 0 && endMonth > 0
-            && (endMonth < bornMonth || endMonth == bornMonth && bornDay > 0 && endDay > 0 && endDay < bornDay)) {
-            age--;
-        }
-        return Math.max(-1, age);
-    }
-
-    private int positiveYear(String value) {
-        return positiveNumber(value, 1, 9999);
-    }
-
-    private int positiveNumber(String value, int minimum, int maximum) {
-        try {
-            int parsed = Integer.parseInt(value == null ? "" : value.trim());
-            return parsed >= minimum && parsed <= maximum ? parsed : -1;
-        } catch (NumberFormatException ignored) {
-            return -1;
-        }
-    }
-
-    private String biographyPhotoExtension(String mediaId, String dataUrl) {
-        String source = mediaId == null ? "" : mediaId.toLowerCase(Locale.ROOT);
-        int dot = source.lastIndexOf('.');
-        if (dot >= 0 && dot + 1 < source.length()) {
-            String extension = source.substring(dot + 1);
-            if ("png".equals(extension) || "webp".equals(extension) || "jpg".equals(extension)) return extension;
-            if ("jpeg".equals(extension)) return "jpg";
-        }
-        String legacy = dataUrl == null ? "" : dataUrl.toLowerCase(Locale.ROOT);
-        if (legacy.startsWith("data:image/png")) return "png";
-        if (legacy.startsWith("data:image/webp")) return "webp";
-        return "jpg";
-    }
-
-    private void startBiographyShare(String subject, String biography, Uri photoUri, String mime) {
-        Intent send = new Intent(Intent.ACTION_SEND);
-        send.setType(mime);
-        send.putExtra(Intent.EXTRA_SUBJECT, subject);
-        send.putExtra(Intent.EXTRA_TEXT, biography);
-        if (photoUri != null) {
-            send.putExtra(Intent.EXTRA_STREAM, photoUri);
-            send.setClipData(ClipData.newRawUri("Фото", photoUri));
-            send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        }
-        startActivity(Intent.createChooser(send, tr("Поделиться биографией")));
-    }
-
-    private String personQualitySummary(TreeQualityAnalyzer.PersonReport report) {
+    String personQualitySummary(TreeQualityAnalyzer.PersonReport report) {
         return qualityModule == null
             ? "Заполнено 0%"
             : qualityModule.personSummary(report);
     }
 
-    private int qualitySummaryColor(TreeQualityAnalyzer.PersonReport report) {
+    int qualitySummaryColor(TreeQualityAnalyzer.PersonReport report) {
         return qualityModule == null
             ? Color.rgb(8, 122, 115)
             : qualityModule.summaryColor(report);
@@ -3902,7 +3112,7 @@ public final class MainActivity extends Activity {
         if (qualityModule != null) qualityModule.showTreeDialog();
     }
 
-    private void showPersonQualityDialog(Person person, String category) {
+    void showPersonQualityDialog(Person person, String category) {
         if (qualityModule != null) qualityModule.showPersonDialog(person, category);
     }
 
@@ -3913,7 +3123,7 @@ public final class MainActivity extends Activity {
         if (treeView != null) treeView.focusPerson(personId);
     }
 
-    private void togglePersonPin(Person person) {
+    void togglePersonPin(Person person) {
         if (person == null || !requireEditingEnabled()) return;
         recordUndo(person.pinned ? "Откреплена карточка: " + person.name : "Закреплена карточка: " + person.name);
         person.pinned = !person.pinned;
@@ -3925,6 +3135,16 @@ public final class MainActivity extends Activity {
         if (!requireEditingEnabled()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
+        // Editor quick actions and the add-person popup share this entry point.
+        // Resolve relationship choices before recording undo or creating a card.
+        if ("add-partner".equals(action)) {
+            addPersonMenuModule.requestAddPartner(current);
+            return;
+        }
+        if (action.startsWith("add-children-") && action.indexOf('|') < 0) {
+            addPersonMenuModule.requestAddChildren(current, Math.min(4, countFromAction(action, 1)));
+            return;
+        }
         recordUndo();
         java.util.List<String> newIds = new java.util.ArrayList<>();
 
@@ -3956,7 +3176,7 @@ public final class MainActivity extends Activity {
             }
         } else if (action.startsWith("add-children-")) {
             int count = Math.min(4, countFromAction(action, 1));
-            String partner = firstPartnerOf(current.id);
+            String partner = coParentFromAction(action, current.id);
             java.util.List<String> parentIds = new java.util.ArrayList<>();
             parentIds.add(current.id);
             if (!partner.isEmpty()) parentIds.add(partner);
@@ -3972,11 +3192,14 @@ public final class MainActivity extends Activity {
                 linkChildToSiblings(parentIds, created.id);
                 newIds.add(created.id);
             }
-        } else if ("add-partner".equals(action)) {
+        } else if (action.startsWith("add-partner")) {
             float[] spot = positionNear(current, -320f, 0f);
             Person created = state.addPerson(tr("Новый партнёр"), spot[0], spot[1]);
             state.addRelation("partner", current.id, created.id, "left");
-            state.copyParentLinks(current.id, created.id);
+            if ("add-partner-with-children".equals(action)
+                || "add-partner".equals(action)) {
+                state.copyParentLinks(current.id, created.id);
+            }
             newIds.add(created.id);
         } else if (action.startsWith("add-siblings-") || "add-sibling".equals(action)) {
             int count = "add-sibling".equals(action) ? 1 : Math.min(3, countFromAction(action, 1));
@@ -4012,7 +3235,7 @@ public final class MainActivity extends Activity {
             : "Добавлен: " + (state.people.get(newId) == null ? "новый человек" : state.people.get(newId).name);
         recordAction(label, current.name.isEmpty() ? "Без имени" : current.name);
         state.selectedId = newId;
-        arrangeAfterPersonAddedIfEnabled(newIds, current.id, action);
+        arrangeAfterPersonAddedIfEnabled();
         AnalyticsReporter.personAdded(action, newIds.size(), false, state);
         saveToast(newIds.size() > 1 ? "Карточки добавлены: " + newIds.size() : "Родственник добавлен");
         bindState();
@@ -4021,10 +3244,21 @@ public final class MainActivity extends Activity {
 
     private int countFromAction(String action, int fallback) {
         try {
-            return Math.max(1, Integer.parseInt(action.substring(action.lastIndexOf('-') + 1)));
+            String value = action.substring(action.lastIndexOf('-') + 1);
+            int separator = value.indexOf('|');
+            if (separator >= 0) value = value.substring(0, separator);
+            return Math.max(1, Integer.parseInt(value));
         } catch (Exception ignored) {
             return fallback;
         }
+    }
+
+    private String coParentFromAction(String action, String personId) {
+        int separator = action == null ? -1 : action.indexOf('|');
+        if (separator < 0) return firstPartnerOf(personId);
+        String chosenId = action.substring(separator + 1);
+        if ("none".equals(chosenId)) return "";
+        return FamilyRelationPolicy.validChosenCoParent(state, personId, chosenId);
     }
 
     private float[] distribute(int count, float gap) {
@@ -4094,15 +3328,12 @@ public final class MainActivity extends Activity {
         }
         state.selectedId = created.id;
         recordAction("Добавлен: " + created.name, current.name.isEmpty() ? "Без имени" : current.name);
-        arrangeAfterPersonAddedIfEnabled(
-            java.util.Collections.singletonList(created.id),
-            current.id,
-            kind);
+        arrangeAfterPersonAddedIfEnabled();
         saveToast("Родственник добавлен");
         bindState();
     }
 
-    private void duplicateSelected() {
+    void duplicateSelected() {
         if (!requireEditingEnabled()) return;
         Person current = state.selectedPerson();
         if (current == null) return;
@@ -4113,6 +3344,9 @@ public final class MainActivity extends Activity {
                 + tr(" (копия)"),
             spot[0],
             spot[1]);
+        PersonNames.copy(current, copy);
+        if (copy.namePartsSet) PersonNames.set(copy, current.surname, current.givenName,
+            PersonNames.clean(current.patronymic + tr(" (копия)")));
         copy.born = current.born;
         copy.died = current.died;
         copy.bornDay = current.bornDay;
@@ -4154,30 +3388,14 @@ public final class MainActivity extends Activity {
             }
             copy.memories.add(next);
         }
+        arrangeAfterPersonAddedIfEnabled();
         saveToast("Карточка дублирована");
         bindState();
     }
 
-    private void arrangeAfterPersonAddedIfEnabled(
-        java.util.Collection<String> addedIds,
-        String anchorId,
-        String action
-    ) {
+    private void arrangeAfterPersonAddedIfEnabled() {
         if (state == null || !state.autoArrangeOnAdd || state.people.isEmpty()) return;
-        LayoutTrainingStore.Session trainingSession = layoutTraining == null
-            ? null
-            : layoutTraining.beginAutoArrange(state, addedIds, anchorId, action);
-        TreeLayoutEngine.layoutAfterAddition(state, addedIds, anchorId, action);
-        if (layoutTraining != null) {
-            layoutTraining.finishAutoArrange(trainingSession, state, true);
-            SmartLayoutSolver.setRuntimeWeights(layoutTraining.weights());
-        }
-        workspaceWidth = TreeLayoutEngine.normalizeSurfaceWidth(state.workspaceWidth);
-        workspaceHeight = TreeLayoutEngine.normalizeSurfaceHeight(state.workspaceHeight);
-        if (treeView != null) {
-            treeView.setWorkspaceSize(workspaceWidth, workspaceHeight);
-            treeView.invalidateStructureCaches();
-        }
+        startManualArrange(true);
     }
 
     void applyAutoArrangePreference(TreeState target) {
@@ -4194,7 +3412,7 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void rememberAutoArrangePreference(boolean enabled) {
+    void rememberAutoArrangePreference(boolean enabled) {
         getSharedPreferences("androidft-ui", MODE_PRIVATE)
             .edit()
             .putBoolean("auto_arrange_on_add", enabled)
@@ -4242,15 +3460,6 @@ public final class MainActivity extends Activity {
         showPanel(panel);
     }
 
-    private void toggleLayoutLearning() {
-        if (layoutTraining == null) layoutTraining = new LayoutTrainingStore(this);
-        boolean enabled = layoutTraining.toggleLearning();
-        SmartLayoutSolver.setRuntimeWeights(layoutTraining.weights());
-        toast(enabled
-            ? "Обучение расстановки включено"
-            : "Обучение расстановки выключено");
-    }
-
     private void toggleLayoutLogging() {
         if (layoutTraining == null) layoutTraining = new LayoutTrainingStore(this);
         boolean enabled = layoutTraining.toggleLogging();
@@ -4287,8 +3496,9 @@ public final class MainActivity extends Activity {
             }
         }
         if (selectedInTreeOrder.size() > 1) {
-            clearSelection();
-            confirmDeleteSequence(selectedInTreeOrder, 0, 0);
+            treeView.clearSelection();
+            updateSelectionToolbar();
+            showMultiDeleteDialog(selectedInTreeOrder);
             return;
         }
         Person person = state.selectedPerson();
@@ -4314,46 +3524,155 @@ public final class MainActivity extends Activity {
             });
     }
 
-    private void confirmDeleteSequence(java.util.List<String> personIds, int index, int deleted) {
-        int nextIndex = index;
-        while (nextIndex < personIds.size() && !state.people.containsKey(personIds.get(nextIndex))) {
-            nextIndex++;
-        }
-        if (nextIndex >= personIds.size()) {
-            historyModule.commitPendingUndo();
+    private void showMultiDeleteDialog(java.util.List<String> personIds) {
+        Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(18), dp(18), dp(18), dp(16));
+        shell.setBackground(panelBg(Color.WHITE, dp(18), Color.argb(56, 63, 82, 94)));
+        shell.setElevation(dp(12));
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.drawable.ic_menu_trash);
+        icon.setColorFilter(uiColor(Color.rgb(197, 83, 75)));
+        icon.setPadding(dp(13), dp(13), dp(13), dp(13));
+        icon.setBackground(panelBg(Color.rgb(255, 244, 241), dp(999), Color.argb(60, 63, 82, 94)));
+        LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(54), dp(54));
+        iconParams.gravity = Gravity.CENTER_HORIZONTAL;
+        shell.addView(icon, iconParams);
+
+        TextView heading = new LocalizedTextView(this);
+        heading.setText("Удаление выбранных");
+        heading.setTextColor(Color.rgb(28, 34, 38));
+        heading.setTextSize(20);
+        heading.setTypeface(uiBold());
+        heading.setGravity(Gravity.CENTER);
+        heading.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(-1, -2);
+        headingParams.setMargins(0, dp(14), 0, 0);
+        shell.addView(heading, headingParams);
+
+        TextView body = new TextView(this);
+        body.setTextColor(AppThemePalette.text(Color.rgb(83, 94, 103)));
+        body.setTextSize(14);
+        body.setTypeface(ui());
+        body.setGravity(Gravity.CENTER);
+        body.setMinLines(2);
+        body.setMaxLines(2);
+        body.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        body.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+        bodyParams.setMargins(dp(4), dp(10), dp(4), 0);
+        shell.addView(body, bodyParams);
+
+        int[] index = {0};
+        int[] deleted = {0};
+        Runnable updateText = () -> {
+            while (index[0] < personIds.size() && !state.people.containsKey(personIds.get(index[0]))) index[0]++;
+            if (index[0] >= personIds.size()) return;
+            Person person = state.people.get(personIds.get(index[0]));
+            String name = person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim();
+            body.setText(AppLanguage.isEnglish(this)
+                ? "Person " + (index[0] + 1) + " of " + personIds.size() + "\n" + name
+                : "Человек " + (index[0] + 1) + " из " + personIds.size() + "\n" + name);
+        };
+        updateText.run();
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(48));
+        actionsParams.setMargins(0, dp(18), 0, 0);
+        Button cancel = actionButton("Отмена", v -> dialog.dismiss());
+        cancel.setTextColor(Color.rgb(28, 34, 38));
+        cancel.setBackground(panelBg(Color.WHITE, dp(10), Color.rgb(205, 214, 220)));
+        actions.addView(cancel, new LinearLayout.LayoutParams(0, -1, 1));
+        Button deleteOne = actionButton("Удалить", v -> {
+            if (!requireEditingEnabled()) return;
+            while (index[0] < personIds.size() && !state.people.containsKey(personIds.get(index[0]))) index[0]++;
+            if (index[0] >= personIds.size()) {
+                dialog.dismiss();
+                return;
+            }
+            Person person = state.people.get(personIds.get(index[0]));
+            String name = person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim();
+            int peopleBefore = state.people.size();
+            int linksBefore = state.links.size();
+            state.selectedId = person.id;
+            recordUndo(peopleBefore <= 1 ? "Очищена последняя карточка" : "Удалён: " + name);
+            if (peopleBefore <= 1) clearLastPerson(person);
+            else state.deletePerson(person.id);
+            AnalyticsReporter.personDeleted(1, false, peopleBefore, linksBefore);
+            deleted[0]++;
+            index[0]++;
+            while (index[0] < personIds.size() && !state.people.containsKey(personIds.get(index[0]))) index[0]++;
+            if (index[0] < personIds.size()) state.selectedId = personIds.get(index[0]);
+            saveOnly();
             bindState();
             treeView.invalidate();
-            saveToast("Удалено карточек: " + deleted);
-            return;
-        }
+            if (index[0] >= personIds.size()) dialog.dismiss();
+            else updateText.run();
+        });
+        deleteOne.setTextColor(Color.WHITE);
+        deleteOne.setBackground(panelBg(Color.rgb(197, 83, 75), dp(10), Color.TRANSPARENT));
+        LinearLayout.LayoutParams deleteOneParams = new LinearLayout.LayoutParams(0, -1, 1.35f);
+        deleteOneParams.setMargins(dp(10), 0, 0, 0);
+        actions.addView(deleteOne, deleteOneParams);
+        shell.addView(actions, actionsParams);
 
-        final int currentIndex = nextIndex;
-        Person person = state.people.get(personIds.get(currentIndex));
-        if (person == null) {
-            confirmDeleteSequence(personIds, currentIndex + 1, deleted);
-            return;
-        }
-        state.selectedId = person.id;
-        bindState();
-        String name = person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim();
-        showStyledConfirmation(
-            R.drawable.ic_menu_trash,
-            "Удалить человека " + (currentIndex + 1) + " из " + personIds.size() + "?",
-            name,
-            "Удалить",
-            true,
-            () -> {
-                int peopleBefore = state.people.size();
-                int linksBefore = state.links.size();
-                recordUndo(state.people.size() <= 1 ? "Очищена последняя карточка" : "Удалён: " + name);
+        Button deleteAll = actionButton("Удалить всех", v -> {
+            if (!requireEditingEnabled()) return;
+            int remaining = 0;
+            for (int i = index[0]; i < personIds.size(); i++) {
+                if (state.people.containsKey(personIds.get(i))) remaining++;
+            }
+            if (remaining == 0) {
+                dialog.dismiss();
+                return;
+            }
+            int peopleBefore = state.people.size();
+            int linksBefore = state.links.size();
+            recordUndo("Удалены выбранные карточки: " + remaining);
+            for (int i = index[0]; i < personIds.size(); i++) {
+                Person person = state.people.get(personIds.get(i));
+                if (person == null) continue;
+                state.selectedId = person.id;
                 if (state.people.size() <= 1) clearLastPerson(person);
                 else state.deletePerson(person.id);
-                AnalyticsReporter.personDeleted(1, false, peopleBefore, linksBefore);
-                saveOnly();
-                bindState();
-                treeView.invalidate();
-                treeView.post(() -> confirmDeleteSequence(personIds, currentIndex + 1, deleted + 1));
-            });
+            }
+            AnalyticsReporter.personDeleted(remaining, false, peopleBefore, linksBefore);
+            deleted[0] += remaining;
+            saveOnly();
+            bindState();
+            treeView.invalidate();
+            dialog.dismiss();
+        });
+        deleteAll.setTextColor(Color.rgb(197, 83, 75));
+        deleteAll.setBackground(panelBg(Color.rgb(255, 244, 241), dp(10), Color.argb(90, 197, 83, 75)));
+        LinearLayout.LayoutParams deleteAllParams = new LinearLayout.LayoutParams(-1, dp(44));
+        deleteAllParams.setMargins(0, dp(10), 0, 0);
+        shell.addView(deleteAll, deleteAllParams);
+
+        dialog.setContentView(shell);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.setOnDismissListener(ignored -> {
+            if (deleted[0] == 0) return;
+            historyModule.commitPendingUndo();
+            saveToast("Удалено карточек: " + deleted[0]);
+        });
+        Window window = dialog.getWindow();
+        if (window != null) {
+            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(470));
+            shell.setMinimumWidth(width);
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            WindowManager.LayoutParams attrs = window.getAttributes();
+            attrs.width = width;
+            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+            attrs.dimAmount = 0.32f;
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.setAttributes(attrs);
+        }
+        dialog.show();
     }
 
     private void confirmDeleteWholeTree() {
@@ -4511,12 +3830,8 @@ public final class MainActivity extends Activity {
     }
 
     private String firstPartnerOf(String personId) {
-        for (Relation link : state.links) {
-            if (!"partner".equals(link.type) && !"family".equals(link.type)) continue;
-            if (personId.equals(link.from) && state.people.containsKey(link.to)) return link.to;
-            if (personId.equals(link.to) && state.people.containsKey(link.from)) return link.from;
-        }
-        return "";
+        java.util.List<String> partners = FamilyRelationPolicy.partnerIds(state, personId);
+        return partners.isEmpty() ? "" : partners.get(0);
     }
 
     private java.util.List<String> childrenForParents(java.util.List<String> parentIds, String excludedId) {
@@ -4537,6 +3852,8 @@ public final class MainActivity extends Activity {
 
     private void setBranch(String mode) {
         branchMode = mode == null ? "all" : mode;
+        if (kinshipStatusPanel != null) kinshipStatusPanel.setVisibility(View.GONE);
+        if ("near".equals(branchMode)) { nearGenerations = 1; treeView.setNearGenerations(1); }
         if ("all".equals(branchMode)) {
             pendingBranchMode = "";
             branchAnchorId = "";
@@ -4633,6 +3950,10 @@ public final class MainActivity extends Activity {
         settingsModule.toggleParentLineMode();
     }
 
+    private void toggleFamilyLineMode() {
+        settingsModule.toggleFamilyLineMode();
+    }
+
     private void toggleHideDetails() {
         settingsModule.toggleHideDetails();
     }
@@ -4654,10 +3975,11 @@ public final class MainActivity extends Activity {
     }
 
     void recreateWithTheme() {
+        StartupSplash.rememberTheme(this, theme);
         syncSettingsToState();
-        if (store != null && state != null) store.save(TreeStateCopier.copy(state));
-        AppThemePalette.setDark("dark".equals(theme));
-        recreate();
+        if (saveCoordinator != null) saveCoordinator.saveThen(saved -> {
+            if (saved && !isDestroyed()) { AppThemePalette.setDark("dark".equals(theme)); recreate(); }
+        });
     }
 
     private void dismissTreeHint(int direction) {
@@ -4692,6 +4014,7 @@ public final class MainActivity extends Activity {
     private void applySystemBars() {
         boolean dark = AppThemePalette.isDark();
         int headerColor = AppThemePalette.surface(Color.rgb(248, 251, 252));
+        getWindow().setBackgroundDrawable(new ColorDrawable(dark ? Color.rgb(16, 23, 27) : Color.rgb(250, 250, 250)));
         getWindow().setStatusBarColor(headerColor);
         getWindow().setNavigationBarColor(dark ? Color.rgb(16, 23, 27) : Color.rgb(248, 251, 252));
         View decor = getWindow().getDecorView();
@@ -4702,6 +4025,29 @@ public final class MainActivity extends Activity {
             flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
             if (android.os.Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
+        decor.setSystemUiVisibility(flags);
+        applyFocusSystemBars();
+    }
+
+    /** Focus mode uses the whole canvas, including the status/notification bar area. */
+    void applyFocusSystemBars() {
+        View decor = getWindow().getDecorView();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                if (focusTree) {
+                    controller.hide(android.view.WindowInsets.Type.statusBars());
+                    controller.setSystemBarsBehavior(
+                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                } else {
+                    controller.show(android.view.WindowInsets.Type.statusBars());
+                }
+            }
+            return;
+        }
+        int flags = decor.getSystemUiVisibility();
+        if (focusTree) flags |= View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        else flags &= ~(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         decor.setSystemUiVisibility(flags);
     }
 
@@ -4819,41 +4165,20 @@ public final class MainActivity extends Activity {
     }
 
     void showPanel(String panel) {
+        if (kinshipStatusPanel != null && panel != null && !panel.isEmpty()) kinshipStatusPanel.setVisibility(View.GONE);
         clearSearchFocus();
         panelsModule.showPanel(panel);
     }
 
     void clearSearchFocus() {
-        if (search != null) search.clearFocus();
-        if (stage != null) stage.requestFocus();
-        hideKeyboard();
-        if (search != null && search.getText().length() == 0) collapseSearchField();
-    }
-
-    void toggleSearchField() {
-        if (search == null) return;
-        if (search.getVisibility() == View.VISIBLE) {
-            search.requestFocus();
-            showKeyboard(search);
-            return;
-        }
-        if (searchToggleButton != null) searchToggleButton.setVisibility(View.GONE);
-        search.setVisibility(View.VISIBLE);
-        search.requestFocus();
-        showKeyboard(search);
-    }
-
-    private void collapseSearchField() {
-        if (search == null || search.getText().length() > 0) return;
-        search.setVisibility(View.INVISIBLE);
-        if (searchToggleButton != null) searchToggleButton.setVisibility(View.VISIBLE);
-        if (searchSuggestionsScroll != null) searchSuggestionsScroll.setVisibility(View.GONE);
+        searchModule.clearFocus();
     }
 
     private void showZoomIndicator(float scale) {
         if (zoomIndicator == null || !Float.isFinite(scale)) return;
         int percent = Math.max(5, Math.round(scale * 100f));
-        zoomIndicator.setText(percent + "%");
+        String label=percent+"%";
+        if(!android.text.TextUtils.equals(zoomIndicator.getText(),label))zoomIndicator.setText(label);
         zoomIndicator.animate().cancel();
         zoomIndicator.setVisibility(View.VISIBLE);
         zoomIndicator.setAlpha(1f);
@@ -4866,24 +4191,7 @@ public final class MainActivity extends Activity {
         int stroke = dimmed ? Color.rgb(174, 184, 188) : Color.rgb(217, 224, 229);
         int icon = dimmed ? Color.rgb(101, 113, 122) : Color.rgb(8, 122, 115);
 
-        if (searchToggleButton != null) {
-            searchToggleButton.setAlpha(1f);
-            searchToggleButton.setEnabled(!dimmed);
-            searchToggleButton.setBackground(panelBg(surface, dp(11), stroke));
-            tintHeaderAction(searchToggleButton, icon);
-        }
-        if (search != null) {
-            search.setAlpha(1f);
-            search.setEnabled(!dimmed);
-            search.setBackground(panelBg(surface, dp(8), stroke));
-            search.setTextColor(AppThemePalette.text(dimmed
-                ? Color.rgb(70, 83, 92)
-                : Color.rgb(28, 34, 38)));
-            search.setHintTextColor(AppThemePalette.text(dimmed
-                ? Color.rgb(101, 113, 122)
-                : Color.rgb(128, 137, 144)));
-            tintDrawables(search, icon);
-        }
+        searchModule.setDimmed(dimmed, surface, stroke, icon);
         for (Button action : new Button[]{undoBtn, redoBtn}) {
             if (action == null) continue;
             action.setAlpha(1f);
@@ -4899,246 +4207,10 @@ public final class MainActivity extends Activity {
         if (foreground != null) foreground.mutate().setTint(AppThemePalette.text(color));
     }
 
-    private void updateSearchSuggestions(String query) {
-        if (searchSuggestions == null || searchSuggestionsScroll == null || search == null) return;
-        String value = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        search.setCompoundDrawablesWithIntrinsicBounds(
-            R.drawable.ic_menu_search,
-            0,
-            value.isEmpty() ? 0 : R.drawable.ic_menu_close,
-            0);
-        tintDrawables(search, Color.rgb(8, 122, 115));
-        searchSuggestions.removeAllViews();
-        if (value.isEmpty() || state == null) {
-            searchSuggestionsScroll.setVisibility(View.GONE);
-            return;
-        }
-        int count = 0;
-        for (TreeSearchSuggestion suggestion : treeSearchSuggestions(query, 8)) {
-            TextView pill = new LocalizedTextView(this);
-            LocalizedViews.setRaw(pill, suggestion.label);
-            pill.setTextColor(Color.rgb(8, 122, 115));
-            pill.setTextSize(11);
-            pill.setTypeface(uiBold());
-            pill.setSingleLine(true);
-            pill.setGravity(Gravity.CENTER);
-            pill.setPadding(dp(13), 0, dp(13), 0);
-            pill.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.argb(72, 24, 169, 153)));
-            pill.setOnClickListener(v -> selectSearchSuggestion(suggestion));
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(34));
-            params.setMargins(0, 0, dp(7), 0);
-            searchSuggestions.addView(pill, params);
-            count++;
-        }
-        if (count == 0) {
-            TextView empty = new LocalizedTextView(this);
-            empty.setText("Совпадений нет — попробуйте фамилию, год или место");
-            empty.setTextColor(Color.rgb(101, 113, 122));
-            empty.setTextSize(11);
-            empty.setTypeface(ui());
-            empty.setGravity(Gravity.CENTER_VERTICAL);
-            empty.setPadding(dp(4), 0, dp(12), 0);
-            searchSuggestions.addView(empty, new LinearLayout.LayoutParams(-2, dp(34)));
-        }
-        searchSuggestionsScroll.setVisibility(View.VISIBLE);
-    }
-
-    private void selectSearchSuggestion(Person person) {
-        if (person == null || state == null) return;
-        state.selectedId = person.id;
-        search.setText("");
-        clearSearchFocus();
+    private void selectTreeSearchPerson(Person person) {
         bindEditor(person);
         showPanel("");
         treeView.focusPerson(person.id);
-    }
-
-    private void selectSearchSuggestion(TreeSearchSuggestion suggestion) {
-        if (suggestion == null || state == null) return;
-        Person person = suggestion.personId.isEmpty() ? null : state.people.get(suggestion.personId);
-        if (person != null) {
-            selectSearchSuggestion(person);
-            return;
-        }
-        search.setText(suggestion.applyText);
-        search.setSelection(search.getText().length());
-    }
-
-    private java.util.List<TreeSearchSuggestion> treeSearchSuggestions(String input, int limit) {
-        java.util.List<TreeSearchSuggestion> result = new java.util.ArrayList<>();
-        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
-        String commandPrefix = relationCommandPrefix(input);
-        String suggestionInput = commandPrefix.isEmpty() ? input : input.substring(Math.min(commandPrefix.length(), input == null ? 0 : input.length()));
-        String normalizedInput = normalizeSearch(suggestionInput);
-        if (normalizedInput.isEmpty() || state == null) return result;
-        boolean trailingSpace = suggestionInput != null && suggestionInput.endsWith(" ");
-        String[] tokens = normalizedInput.split("\\s+");
-        java.util.List<Person> rankedPeople = new java.util.ArrayList<>(state.people.values());
-        rankedPeople.sort((first, second) -> Integer.compare(
-            SmartPeopleSearch.suggestionScore(displayName(second), normalizedInput),
-            SmartPeopleSearch.suggestionScore(displayName(first), normalizedInput)));
-        for (Person person : rankedPeople) {
-            String name = displayName(person);
-            if (SmartPeopleSearch.suggestionScore(name, normalizedInput) <= 0) continue;
-            addTreeSuggestion(result, seen, normalizedInput, commandPrefix, name, name, person.id, limit);
-            if (result.size() >= limit) return result;
-        }
-        if (commandPrefix.isEmpty() && tokens.length <= 1 && !trailingSpace) {
-            for (String place : uniqueSearchPlaces()) {
-                if (!normalizeSearch(place).startsWith(tokens[0])) continue;
-                addTreeSuggestion(result, seen, normalizedInput, "", place, place, "", limit);
-                if (result.size() >= limit) return result;
-            }
-            for (int month = 1; month <= 12; month++) {
-                String monthName = monthName(month);
-                if (normalizeSearch(monthName).startsWith(tokens[0])) {
-                    addTreeSuggestion(result, seen, normalizedInput, "", monthName, monthName, "", limit);
-                }
-                if (result.size() >= limit) return result;
-            }
-            for (String year : uniqueSearchYears()) {
-                if (year.startsWith(tokens[0])) {
-                    addTreeSuggestion(result, seen, normalizedInput, "", year, year, "", limit);
-                }
-                if (result.size() >= limit) return result;
-            }
-        }
-        return result;
-    }
-
-    private void addTreeSuggestion(
-        java.util.List<TreeSearchSuggestion> result,
-        java.util.Set<String> seen,
-        String normalizedInput,
-        String prefix,
-        String label,
-        String apply,
-        String personId,
-        int limit
-    ) {
-        String key = normalizeSearch(label);
-        if (result.size() >= limit || key.isEmpty()
-            || key.equals(normalizedInput) && (personId == null || personId.isEmpty())
-            || !seen.add(key)) return;
-        result.add(new TreeSearchSuggestion(label, prefix + apply, personId));
-    }
-
-    private String relationCommandPrefix(String input) {
-        String raw = input == null ? "" : input;
-        String normalized = normalizeSearch(raw);
-        for (String command : new String[]{"предки", "потомки", "родственники", "родственников", "предков", "потомков"}) {
-            if (normalized.equals(command)) return raw.endsWith(" ") ? raw : raw + " ";
-            if (normalized.startsWith(command + " ")) {
-                int index = raw.toLowerCase(Locale.ROOT).replace('ё', 'е').indexOf(command);
-                if (index >= 0) {
-                    int end = Math.min(raw.length(), index + command.length());
-                    while (end < raw.length() && Character.isWhitespace(raw.charAt(end))) end++;
-                    return raw.substring(0, end);
-                }
-            }
-        }
-        return "";
-    }
-
-    private String progressiveNameSuggestion(String name, int tokenCount, boolean trailingSpace) {
-        String[] parts = nameParts(name);
-        if (parts.length <= 2) return displayNameFromParts(parts, parts.length);
-        if (tokenCount <= 1) return displayNameFromParts(parts, 2);
-        if (tokenCount == 2 && !trailingSpace) return displayNameFromParts(parts, 2);
-        return displayNameFromParts(parts, parts.length);
-    }
-
-    private String surnameDisplayOf(Person person) {
-        String[] parts = nameParts(displayName(person));
-        return parts.length == 0 ? "" : parts[0];
-    }
-
-    private String displayName(Person person) {
-        return person == null || person.name == null || person.name.trim().isEmpty()
-            ? tr("Без имени")
-            : person.name.trim();
-    }
-
-    private String[] nameParts(String name) {
-        String value = name == null ? "" : name.trim();
-        return value.isEmpty() || tr("Без имени").equals(value) ? new String[0] : value.split("\\s+");
-    }
-
-    private String displayNameFromParts(String[] parts, int count) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < Math.min(parts.length, count); i++) {
-            if (builder.length() > 0) builder.append(' ');
-            builder.append(parts[i]);
-        }
-        return builder.toString();
-    }
-
-    private java.util.List<String> uniqueSearchPlaces() {
-        java.util.List<String> places = new java.util.ArrayList<>();
-        if (state == null) return places;
-        for (Person person : state.people.values()) {
-            String place = person.place == null ? "" : person.place.trim();
-            if (place.isEmpty()) continue;
-            for (String part : place.split("[,;·/\\\\]")) {
-                String clean = part.trim();
-                if (clean.isEmpty()) continue;
-                boolean exists = false;
-                for (String item : places) {
-                    if (normalizeSearch(item).equals(normalizeSearch(clean))) {
-                        exists = true;
-                        break;
-                    }
-                }
-                if (!exists) places.add(clean);
-            }
-        }
-        return places;
-    }
-
-    private java.util.List<String> uniqueSearchYears() {
-        java.util.List<String> years = new java.util.ArrayList<>();
-        if (state == null) return years;
-        for (Person person : state.people.values()) {
-            addSearchYear(years, person.bornYear);
-        }
-        java.util.Collections.sort(years);
-        return years;
-    }
-
-    private void addSearchYear(java.util.List<String> years, String value) {
-        String year = value == null ? "" : value.replaceAll("[^0-9]", "");
-        if (year.length() >= 3 && !years.contains(year)) years.add(year);
-    }
-
-    private static String normalizeSearch(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT)
-            .replace('ё', 'е')
-            .replaceAll("[^\\p{L}\\d ]", " ")
-            .replaceAll("\\s+", " ")
-            .trim();
-    }
-
-    private static String monthName(int month) {
-        String[] months = {"январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"};
-        return month >= 1 && month <= 12 ? months[month - 1] : "";
-    }
-
-    private static String capitalize(String value) {
-        return value == null || value.isEmpty()
-            ? ""
-            : value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1);
-    }
-
-    private static final class TreeSearchSuggestion {
-        final String label;
-        final String applyText;
-        final String personId;
-
-        TreeSearchSuggestion(String label, String applyText, String personId) {
-            this.label = label;
-            this.applyText = applyText;
-            this.personId = personId == null ? "" : personId;
-        }
     }
 
     private void togglePanel(String panel) {
@@ -5180,6 +4252,12 @@ public final class MainActivity extends Activity {
 
     void updateBranchStatusPanel() {
         if (branchStatusPanel == null || branchStatusText == null) return;
+        branchStatusPanel.setLayoutParams(branchStatusParams());
+        if (kinshipStatusPanel != null && kinshipStatusPanel.getVisibility() == View.VISIBLE && activePanel.isEmpty()) {
+            branchStatusPanel.setVisibility(View.GONE);
+            if (historyPanel != null) historyPanel.setVisibility(View.GONE);
+            return;
+        }
         boolean active = !"all".equals(branchMode) || !pendingBranchMode.isEmpty();
         boolean visible = active && activePanel.isEmpty();
         branchStatusPanel.setVisibility(visible ? View.VISIBLE : View.GONE);
@@ -5191,6 +4269,9 @@ public final class MainActivity extends Activity {
         String mode = pendingBranchMode.isEmpty() ? branchMode : pendingBranchMode;
         Person anchor = state == null ? null : state.people.get(branchAnchorId);
         String label = branchLabel(mode);
+        nearGenerationControls.setVisibility("near".equals(mode) ? View.VISIBLE : View.GONE);
+        if (!nearGenerationInput.hasFocus() && !nearGenerationInput.getText().toString().equals(String.valueOf(nearGenerations)))
+            nearGenerationInput.setText(String.valueOf(nearGenerations));
         branchStatusText.setText(anchor == null ? label + ": нажмите карточку" : label + ": " + (anchor.name.isEmpty() ? "Без имени" : anchor.name));
     }
 
@@ -5351,15 +4432,19 @@ public final class MainActivity extends Activity {
             styleCanvasModeAction(true);
             canvasModeTitle.setText(linkModeTitle(pendingLinkType));
             if (pendingLinkFrom.isEmpty()) {
-                canvasModeDetail.setText("kinship".equals(pendingLinkType)
-                    ? "Шаг 1/2: выберите первого человека"
-                    : "Шаг 1/2: выберите первую карточку");
+                canvasModeDetail.setText("parent".equals(pendingLinkType)
+                    ? "Шаг 1/2: выберите первого родителя"
+                    : "kinship".equals(pendingLinkType)
+                        ? "Шаг 1/2: выберите первого человека"
+                        : "Шаг 1/2: выберите первую карточку");
             } else {
                 Person first = state == null ? null : state.people.get(pendingLinkFrom);
                 String name = first == null || first.name.isEmpty() ? "первая карточка" : first.name;
-                canvasModeDetail.setText(name + ("kinship".equals(pendingLinkType)
-                    ? " → выберите второго человека"
-                    : " → выберите вторую карточку"));
+                canvasModeDetail.setText("parent".equals(pendingLinkType)
+                    ? name + " — первый родитель. Шаг 2/2: выберите ребёнка"
+                    : name + ("kinship".equals(pendingLinkType)
+                        ? " → выберите второго человека"
+                        : " → выберите вторую карточку"));
             }
             return;
         }
@@ -5391,125 +4476,52 @@ public final class MainActivity extends Activity {
     }
 
     void showKinshipResult(Person first, Person second, KinshipCalculator.Result result) {
-        String firstName = first == null || first.name == null || first.name.trim().isEmpty()
-            ? "Первый человек"
-            : first.name.trim();
-        String secondName = second == null || second.name == null || second.name.trim().isEmpty()
-            ? "Второй человек"
-            : second.name.trim();
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(dp(18), dp(16), dp(18), dp(16));
-        shell.setBackground(panelBg(Color.WHITE, dp(18), Color.argb(56, 63, 82, 94)));
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_menu_route);
-        icon.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
-        icon.setPadding(dp(10), dp(10), dp(10), dp(10));
-        icon.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.argb(62, 24, 169, 153)));
-        top.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        showPanel("");
+        if (kinshipStatusPanel == null) {
+            kinshipStatusPanel = new LinearLayout(this);
+            kinshipStatusPanel.setOrientation(LinearLayout.VERTICAL);
+            kinshipStatusPanel.setTag("canvas.kinshipStatus");
+            kinshipStatusPanel.setPadding(dp(10), dp(4), dp(6), dp(10));
+            kinshipStatusPanel.setBackground(panelBg(Color.argb(245, 248, 251, 252), dp(10), Color.argb(52, 63, 82, 94)));
+            kinshipStatusPanel.setElevation(dp(8));
+            stage.addView(kinshipStatusPanel, branchStatusParams());
+        }
+        kinshipStatusPanel.removeAllViews();
         LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(12), 0, 0, 0);
-        TextView eyebrow = new LocalizedTextView(this);
-        eyebrow.setText("СЕМЕЙНАЯ СВЯЗЬ");
-        eyebrow.setTextColor(Color.rgb(8, 122, 115));
-        eyebrow.setTextSize(10);
-        eyebrow.setTypeface(uiBold());
-        eyebrow.setIncludeFontPadding(false);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = new LocalizedTextView(this);
         title.setText(result != null && result.found ? "Кто кому приходится" : "Родство не найдено");
-        title.setTextColor(Color.rgb(28, 34, 38));
-        title.setTextSize(19);
-        title.setTypeface(uiBold());
-        title.setIncludeFontPadding(false);
-        heading.addView(eyebrow, new LinearLayout.LayoutParams(-1, dp(18)));
-        heading.addView(title, new LinearLayout.LayoutParams(-1, dp(28)));
-        top.addView(heading, new LinearLayout.LayoutParams(0, dp(48), 1));
-        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(42), dp(42)));
-        shell.addView(top);
-
-        View divider = new View(this);
-        divider.setBackgroundColor(AppThemePalette.stroke(Color.argb(44, 63, 82, 94)));
-        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
-        dividerParams.setMargins(0, dp(14), 0, dp(12));
-        shell.addView(divider, dividerParams);
-
+        title.setTextSize(12); title.setTypeface(uiBold()); title.setTextColor(uiColor(Color.rgb(8, 122, 115)));
+        heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        Button close = iconButton(R.drawable.ic_menu_close, v -> {
+            kinshipStatusPanel.setVisibility(View.GONE);
+            treeView.highlightKinshipPath(java.util.Collections.emptyList());
+            updateBranchStatusPanel();
+        });
+        close.setContentDescription(tr("Закрыть"));
+        heading.addView(close, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        kinshipStatusPanel.addView(heading);
+        String firstName = first == null || first.name.isEmpty() ? tr("Первый человек") : first.name;
+        String secondName = second == null || second.name.isEmpty() ? tr("Второй человек") : second.name;
         if (result != null && result.found) {
-            shell.addView(kinshipResultCard(firstName, secondName, result.firstToSecond), kinshipCardParams());
-            TextView arrow = new LocalizedTextView(this);
-            arrow.setText("⇅");
-            arrow.setTextColor(Color.rgb(24, 169, 153));
-            arrow.setTextSize(20);
-            arrow.setTypeface(uiBold());
-            arrow.setGravity(Gravity.CENTER);
-            shell.addView(arrow, new LinearLayout.LayoutParams(-1, dp(30)));
-            shell.addView(kinshipResultCard(secondName, firstName, result.secondToFirst), kinshipCardParams());
+            addKinshipStatusLine(firstName + " → " + secondName + ": " + tr(result.firstToSecond));
+            addKinshipStatusLine(secondName + " → " + firstName + ": " + tr(result.secondToFirst));
         } else {
-            LinearLayout empty = new LinearLayout(this);
-            empty.setOrientation(LinearLayout.VERTICAL);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(dp(16), dp(18), dp(16), dp(18));
-            empty.setBackground(panelBg(Color.rgb(248, 251, 252), dp(12), Color.rgb(217, 224, 229)));
-            TextView pair = new LocalizedTextView(this);
-            LocalizedViews.setRaw(pair, firstName + "  ↔  " + secondName);
-            pair.setTextColor(Color.rgb(28, 34, 38));
-            pair.setTextSize(14);
-            pair.setTypeface(uiBold());
-            pair.setGravity(Gravity.CENTER);
-            empty.addView(pair, new LinearLayout.LayoutParams(-1, dp(30)));
-            TextView explanation = new LocalizedTextView(this);
-            explanation.setText("Проверьте родительские, братские и партнёрские связи между карточками.");
-            explanation.setTextColor(Color.rgb(101, 113, 122));
-            explanation.setTextSize(12);
-            explanation.setTypeface(ui());
-            explanation.setGravity(Gravity.CENTER);
-            empty.addView(explanation, new LinearLayout.LayoutParams(-1, -2));
-            shell.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+            addKinshipStatusLine(firstName + " ↔ " + secondName);
         }
+        kinshipStatusPanel.setLayoutParams(branchStatusParams());
+        kinshipStatusPanel.setVisibility(View.VISIBLE);
+        kinshipStatusPanel.bringToFront();
+        updateBranchStatusPanel();
+    }
 
-        if (result != null && result.detail != null && !result.detail.isEmpty()) {
-            TextView path = new LocalizedTextView(this);
-            path.setText(result.detail);
-            path.setTextColor(Color.rgb(76, 87, 96));
-            path.setTextSize(11);
-            path.setTypeface(ui());
-            path.setLineSpacing(dp(2), 1f);
-            path.setPadding(dp(12), dp(10), dp(12), dp(10));
-            path.setBackground(panelBg(Color.rgb(243, 248, 249), dp(10), Color.argb(52, 24, 169, 153)));
-            LinearLayout.LayoutParams pathParams = new LinearLayout.LayoutParams(-1, -2);
-            pathParams.setMargins(0, dp(12), 0, 0);
-            shell.addView(path, pathParams);
-        }
-
-        Button done = actionButton("Понятно", v -> dialog.dismiss());
-        done.setTextColor(Color.WHITE);
-        done.setBackground(tealGradientBg(dp(10)));
-        LinearLayout.LayoutParams doneParams = new LinearLayout.LayoutParams(-1, dp(46));
-        doneParams.setMargins(0, dp(14), 0, 0);
-        shell.addView(done, doneParams);
-
-        dialog.setContentView(shell);
-        dialog.setCanceledOnTouchOutside(true);
-        Window window = dialog.getWindow();
-        if (window != null) {
-            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(28), dp(500));
-            shell.setMinimumWidth(width);
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = width;
-            attrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
-            attrs.dimAmount = 0.3f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
-        dialog.show();
+    private void addKinshipStatusLine(String value) {
+        TextView line = new LocalizedTextView(this);
+        LocalizedViews.setRaw(line, value);
+        line.setTextSize(12); line.setTypeface(ui());
+        line.setTextColor(uiColor(Color.rgb(28, 34, 38)));
+        line.setPadding(0, 0, 0, dp(4));
+        kinshipStatusPanel.addView(line, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private View kinshipResultCard(String subject, String reference, String relation) {
@@ -5593,7 +4605,7 @@ public final class MainActivity extends Activity {
 
     boolean saveOnly() {
         syncSettingsToState();
-        if (onlineManager != null) onlineManager.markLocalTreeChanged();
+        if (onlineManager != null) state.localEditEpoch = onlineManager.markLocalTreeChanged();
         if (saveCoordinator != null) saveCoordinator.requestDebounced();
         updateStats();
         return true;
@@ -5605,7 +4617,7 @@ public final class MainActivity extends Activity {
 
     void saveToast(String message) {
         syncSettingsToState();
-        if (onlineManager != null) onlineManager.markLocalTreeChanged();
+        if (onlineManager != null) state.localEditEpoch = onlineManager.markLocalTreeChanged();
         if (saveCoordinator != null) saveCoordinator.requestImmediate();
         updateStats();
         toast(message);
@@ -5750,7 +4762,7 @@ public final class MainActivity extends Activity {
         filesModule.shareJsonText();
     }
 
-    void showHelp(String title, String text) {
+    Dialog showHelp(String title, String text) {
         Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
 
@@ -5778,9 +4790,10 @@ public final class MainActivity extends Activity {
         heading.setTextColor(Color.rgb(28, 34, 38));
         heading.setTextSize(18);
         heading.setTypeface(uiBold());
-        heading.setIncludeFontPadding(false);
+        heading.setIncludeFontPadding(true);
+        heading.setSingleLine(false);
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, dp(40), 1);
+        LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, -2, 1);
         headingParams.setMargins(dp(10), 0, dp(8), 0);
         top.addView(heading, headingParams);
 
@@ -5800,7 +4813,8 @@ public final class MainActivity extends Activity {
         body.setTextSize(14);
         body.setTypeface(ui());
         body.setLineSpacing(dp(2), 1.0f);
-        body.setPadding(dp(2), 0, dp(2), 0);
+        body.setIncludeFontPadding(true);
+        body.setPadding(dp(2), dp(2), dp(2), dp(8));
         scroll.addView(body);
         shell.addView(scroll, new LinearLayout.LayoutParams(-1, -2));
 
@@ -5825,6 +4839,15 @@ public final class MainActivity extends Activity {
             window.setAttributes(attrs);
         }
         dialog.show();
+        if (window != null) {
+            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(36), dp(460));
+            int maxHeight = (int) (getResources().getDisplayMetrics().heightPixels * 0.85f);
+            shell.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int wanted = shell.getMeasuredHeight();
+            if (wanted > maxHeight) scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1));
+            window.setLayout(width, Math.min(wanted, maxHeight));
+        }
+        return dialog;
     }
 
     void showStyledConfirmation(
@@ -5938,330 +4961,15 @@ public final class MainActivity extends Activity {
     }
 
     void showPhotoPreview(String dataUrl) {
-        showPhotoPreviewBitmap(bitmapFromDataUrl(dataUrl), "", dataUrl);
+        photosModule.showPhotoPreview(dataUrl);
     }
 
     void showMediaPhotoPreview(String mediaId) {
-        showPhotoPreviewBitmap(store.mediaStore().decodeBitmap(mediaId, 1800), mediaId, "");
+        photosModule.showMediaPhotoPreview(mediaId);
     }
 
     void showPersonPhotoEditor(Person person) {
-        if (person == null) return;
-        Bitmap source = person.photoMediaId == null || person.photoMediaId.isEmpty()
-            ? bitmapFromDataUrl(person.photo)
-            : store.mediaStore().decodeBitmap(person.photoMediaId, 2200);
-        if (source == null) {
-            showHelp("Фото", "Фото не удалось открыть.");
-            return;
-        }
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(dp(12), dp(12), dp(12), dp(12));
-        shell.setBackground(panelBg(Color.WHITE, dp(20), Color.argb(56, 63, 82, 94)));
-
-        LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        ImageView mark = new ImageView(this);
-        mark.setImageResource(R.drawable.ic_menu_edit);
-        mark.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
-        mark.setPadding(dp(9), dp(9), dp(9), dp(9));
-        mark.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT));
-        top.addView(mark, new LinearLayout.LayoutParams(dp(42), dp(42)));
-        LinearLayout heading = new LinearLayout(this);
-        heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(10), 0, dp(6), 0);
-        TextView title = new LocalizedTextView(this);
-        title.setText("Редактор аватара");
-        title.setTextSize(17);
-        title.setTextColor(uiColor(Color.rgb(28, 34, 38)));
-        title.setTypeface(uiBold());
-        heading.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
-        TextView subtitle = new LocalizedTextView(this);
-        subtitle.setText(person.name == null || person.name.trim().isEmpty() ? "Без имени" : person.name.trim());
-        subtitle.setTextSize(10);
-        subtitle.setTextColor(uiColor(Color.rgb(101, 113, 122)));
-        subtitle.setTypeface(ui());
-        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
-        top.addView(heading, new LinearLayout.LayoutParams(0, dp(44), 1));
-        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
-        shell.addView(top, new LinearLayout.LayoutParams(-1, dp(46)));
-
-        FrameLayout imagePlate = new FrameLayout(this);
-        imagePlate.setPadding(dp(5), dp(5), dp(5), dp(5));
-        imagePlate.setBackground(panelBg(Color.rgb(235, 241, 243), dp(16), Color.rgb(207, 219, 225)));
-        ImageView image = new ImageView(this);
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        image.setImageBitmap(source);
-        imagePlate.addView(image, new FrameLayout.LayoutParams(-1, -1));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(-1, 0, 1);
-        imageParams.setMargins(0, dp(10), 0, dp(10));
-        shell.addView(imagePlate, imageParams);
-
-        final Bitmap[] working = {source};
-        final boolean[] bitmapChanged = {false};
-        final float[] position = {person.avatarScale, person.avatarOffsetX, person.avatarOffsetY};
-
-        LinearLayout rotationTools = new LinearLayout(this);
-        rotationTools.setPadding(dp(5), dp(5), dp(5), dp(5));
-        rotationTools.setBackground(panelBg(Color.rgb(247, 250, 251), dp(15), Color.rgb(217, 224, 229)));
-        Button rotateLeft = avatarToolButton("↶ 90°", v -> {
-            if (!requireEditingEnabled()) return;
-            Bitmap transformed = transformAvatar(working[0], -90f, false);
-            if (transformed != null) {
-                working[0] = transformed;
-                image.setImageBitmap(transformed);
-                bitmapChanged[0] = true;
-                resetAvatarPosition(position);
-            }
-        });
-        Button rotateRight = avatarToolButton("↷ 90°", v -> {
-            if (!requireEditingEnabled()) return;
-            Bitmap transformed = transformAvatar(working[0], 90f, false);
-            if (transformed != null) {
-                working[0] = transformed;
-                image.setImageBitmap(transformed);
-                bitmapChanged[0] = true;
-                resetAvatarPosition(position);
-            }
-        });
-        Button mirror = avatarToolButton("↔ Отразить", v -> {
-            if (!requireEditingEnabled()) return;
-            Bitmap transformed = transformAvatar(working[0], 0f, true);
-            if (transformed != null) {
-                working[0] = transformed;
-                image.setImageBitmap(transformed);
-                bitmapChanged[0] = true;
-                resetAvatarPosition(position);
-            }
-        });
-        rotationTools.addView(rotateLeft, avatarToolParams(0));
-        rotationTools.addView(rotateRight, avatarToolParams(dp(4)));
-        rotationTools.addView(mirror, avatarToolParams(dp(4)));
-        shell.addView(rotationTools, new LinearLayout.LayoutParams(-1, dp(58)));
-
-        LinearLayout cropTools = new LinearLayout(this);
-        cropTools.setPadding(dp(5), dp(5), dp(5), dp(5));
-        cropTools.setBackground(panelBg(Color.rgb(247, 250, 251), dp(15), Color.rgb(217, 224, 229)));
-        Button crop = avatarToolButton("✂ Обрезать", v -> {
-            if (!requireEditingEnabled()) return;
-            showFreeAvatarCropDialog(working[0], transformed -> {
-                working[0] = transformed;
-                image.setImageBitmap(transformed);
-                bitmapChanged[0] = true;
-                resetAvatarPosition(position);
-            });
-        });
-        Button positionButton = avatarToolButton("▣ Позиция", v -> {
-            if (!requireEditingEnabled()) return;
-            showAvatarPositionDialog(working[0], position[0], position[1], position[2], (scale, x, y) -> {
-                position[0] = scale;
-                position[1] = x;
-                position[2] = y;
-            });
-        });
-        cropTools.addView(crop, avatarToolParams(0));
-        cropTools.addView(positionButton, avatarToolParams(dp(4)));
-        LinearLayout.LayoutParams cropToolsParams = new LinearLayout.LayoutParams(-1, dp(58));
-        cropToolsParams.setMargins(0, dp(6), 0, 0);
-        shell.addView(cropTools, cropToolsParams);
-
-        TextView hint = new LocalizedTextView(this);
-        hint.setText("«Обрезать» удаляет края. «Позиция» меняет вид на карточке, не обрезая фото.");
-        hint.setTextSize(9);
-        hint.setTextColor(uiColor(Color.rgb(101, 113, 122)));
-        hint.setTypeface(ui());
-        hint.setGravity(Gravity.CENTER_VERTICAL);
-        shell.addView(hint, new LinearLayout.LayoutParams(-1, dp(34)));
-
-        LinearLayout actions = new LinearLayout(this);
-        Button cancel = actionButton("Закрыть", v -> dialog.dismiss());
-        cancel.setBackground(panelBg(Color.rgb(247, 250, 251), dp(13), Color.rgb(217, 224, 229)));
-        actions.addView(cancel, new LinearLayout.LayoutParams(0, dp(50), 1));
-        Button save = actionButton("Сохранить", v -> {
-            if (!requireEditingEnabled()) return;
-            v.setEnabled(false);
-            rotateLeft.setEnabled(false);
-            rotateRight.setEnabled(false);
-            mirror.setEnabled(false);
-            crop.setEnabled(false);
-            positionButton.setEnabled(false);
-            Bitmap result = working[0];
-            toast("Сохранение аватара…");
-            if (bitmapChanged[0]) {
-                new Thread(() -> saveEditedAvatar(person, result, true, position[0], position[1], position[2], dialog), "avatar-editor-save").start();
-            } else {
-                saveEditedAvatar(person, result, false, position[0], position[1], position[2], dialog);
-            }
-        });
-        save.setTextColor(Color.WHITE);
-        save.setBackground(tealGradientBg(dp(13)));
-        LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, dp(50), 1.25f);
-        saveParams.setMargins(dp(8), 0, 0, 0);
-        actions.addView(save, saveParams);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(50));
-        actionsParams.setMargins(0, dp(6), 0, 0);
-        shell.addView(actions, actionsParams);
-
-        dialog.setContentView(shell);
-        dialog.setCanceledOnTouchOutside(true);
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(20), dp(640));
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = width;
-            attrs.height = Math.min(Math.round(getResources().getDisplayMetrics().heightPixels * 0.9f), dp(880));
-            attrs.dimAmount = 0.44f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
-    }
-
-    private Button avatarToolButton(String label, View.OnClickListener action) {
-        Button button = actionButton(label, action);
-        button.setTextSize(10);
-        button.setSingleLine(true);
-        button.setMinHeight(0);
-        button.setMinimumHeight(0);
-        button.setPadding(dp(4), 0, dp(4), dp(2));
-        button.setTextColor(uiColor(Color.rgb(8, 122, 115)));
-        button.setBackground(panelBg(Color.rgb(235, 248, 246), dp(11), Color.argb(64, 24, 169, 153)));
-        return button;
-    }
-
-    private LinearLayout.LayoutParams avatarToolParams(int leftMargin) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(48), 1);
-        params.setMargins(leftMargin, 0, 0, 0);
-        return params;
-    }
-
-    private static Bitmap transformAvatar(Bitmap source, float degrees, boolean mirror) {
-        if (source == null) return null;
-        try {
-            Matrix matrix = new Matrix();
-            if (mirror) matrix.postScale(-1f, 1f);
-            if (degrees != 0f) matrix.postRotate(degrees);
-            return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
-        } catch (RuntimeException ignored) {
-            return null;
-        }
-    }
-
-    private void resetAvatarPosition(float[] position) {
-        position[0] = 1f;
-        position[1] = 0f;
-        position[2] = 0f;
-    }
-
-    private void saveEditedAvatar(Person person, Bitmap bitmap, boolean bitmapChanged,
-                                  float scale, float offsetX, float offsetY, Dialog dialog) {
-        try {
-            TreeMediaStore.StoredMedia stored = null;
-            if (bitmapChanged) {
-                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 96, bytes)) {
-                    throw new IllegalStateException("Фото не удалось подготовить");
-                }
-                try (ByteArrayInputStream input = new ByteArrayInputStream(bytes.toByteArray())) {
-                    stored = store.mediaStore().importPhoto(input, "avatar_edited.jpg", "image/jpeg");
-                }
-            }
-            TreeMediaStore.StoredMedia finalStored = stored;
-            runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed() || state.people.get(person.id) != person) return;
-                recordUndo("Изменён аватар", person.name == null || person.name.isEmpty() ? "Без имени" : person.name);
-                if (finalStored != null) {
-                    person.photoMediaId = finalStored.id;
-                    person.photo = "";
-                }
-                person.avatarScale = AvatarTransform.clamp(scale, 1f, 8f);
-                person.avatarOffsetX = offsetX;
-                person.avatarOffsetY = offsetY;
-                saveOnly();
-                bindState();
-                treeView.invalidate();
-                refreshOpenPersonEditor();
-                dialog.dismiss();
-                toast("Аватар сохранён");
-            });
-        } catch (Exception error) {
-            runOnUiThread(() -> toast("Аватар не сохранён: " + error.getMessage()));
-        }
-    }
-
-    private interface BitmapCropResult {
-        void accept(Bitmap bitmap);
-    }
-
-    private interface AvatarPositionResult {
-        void accept(float scale, float offsetX, float offsetY);
-    }
-
-    private void showFreeAvatarCropDialog(Bitmap bitmap, BitmapCropResult result) {
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout shell = editorDialogShell();
-        shell.addView(editorDialogHeader(dialog, R.drawable.ic_menu_edit, "Свободная обрезка", "Перемещайте и тяните углы"));
-        FreeAvatarCropView cropView = new FreeAvatarCropView(this);
-        cropView.setBitmap(bitmap);
-        LinearLayout.LayoutParams cropParams = new LinearLayout.LayoutParams(-1, 0, 1);
-        cropParams.setMargins(0, dp(10), 0, dp(10));
-        shell.addView(cropView, cropParams);
-        LinearLayout actions = new LinearLayout(this);
-        actions.addView(actionButton("Отмена", v -> dialog.dismiss()), new LinearLayout.LayoutParams(0, dp(50), 1));
-        Button apply = actionButton("Применить обрезку", v -> {
-            Bitmap cropped = cropView.croppedBitmap();
-            if (cropped == null) {
-                toast("Не удалось обрезать фото");
-                return;
-            }
-            result.accept(cropped);
-            dialog.dismiss();
-        });
-        apply.setTextColor(Color.WHITE);
-        apply.setBackground(tealGradientBg(dp(13)));
-        LinearLayout.LayoutParams applyParams = new LinearLayout.LayoutParams(0, dp(50), 1.45f);
-        applyParams.setMargins(dp(8), 0, 0, 0);
-        actions.addView(apply, applyParams);
-        shell.addView(actions, new LinearLayout.LayoutParams(-1, dp(50)));
-        showEditorDialog(dialog, shell);
-    }
-
-    private void showAvatarPositionDialog(Bitmap bitmap, float scale, float x, float y, AvatarPositionResult result) {
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout shell = editorDialogShell();
-        shell.addView(editorDialogHeader(dialog, R.drawable.ic_menu_image, "Вид на карточке", "Фото останется целым"));
-        AvatarPositionView positionView = new AvatarPositionView(this);
-        positionView.setBitmap(bitmap);
-        positionView.setPosition(scale, x, y);
-        LinearLayout.LayoutParams positionParams = new LinearLayout.LayoutParams(-1, 0, 1);
-        positionParams.setMargins(0, dp(10), 0, dp(6));
-        shell.addView(positionView, positionParams);
-        TextView hint = new LocalizedTextView(this);
-        hint.setText("Перемещайте фото одним пальцем, масштабируйте щипком. Затемнённая область не удаляется.");
-        hint.setTextSize(9);
-        hint.setTextColor(uiColor(Color.rgb(101, 113, 122)));
-        hint.setTypeface(ui());
-        hint.setPadding(dp(4), 0, dp(4), dp(6));
-        shell.addView(hint, new LinearLayout.LayoutParams(-1, dp(50)));
-        LinearLayout actions = new LinearLayout(this);
-        Button reset = actionButton("Сбросить", v -> positionView.setPosition(1f, 0f, 0f));
-        actions.addView(reset, new LinearLayout.LayoutParams(0, dp(50), 1));
-        Button apply = actionButton("Готово", v -> {
-            result.accept(positionView.positionScale(), positionView.positionX(), positionView.positionY());
-            dialog.dismiss();
-        });
-        apply.setTextColor(Color.WHITE);
-        apply.setBackground(tealGradientBg(dp(13)));
-        LinearLayout.LayoutParams applyParams = new LinearLayout.LayoutParams(0, dp(50), 1.2f);
-        applyParams.setMargins(dp(8), 0, 0, 0);
-        actions.addView(apply, applyParams);
-        shell.addView(actions, new LinearLayout.LayoutParams(-1, dp(50)));
-        showEditorDialog(dialog, shell);
+        photosModule.showPersonPhotoEditor(person);
     }
 
     LinearLayout editorDialogShell() {
@@ -6317,88 +5025,7 @@ public final class MainActivity extends Activity {
         window.setAttributes(attrs);
     }
 
-    private void showPhotoPreviewBitmap(Bitmap bitmap, String mediaId, String dataUrl) {
-        if (bitmap == null) {
-            showHelp("Фото", "Фото не удалось открыть.");
-            return;
-        }
-        Dialog dialog = new Dialog(this);
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-        LinearLayout shell = new LinearLayout(this);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(dp(12), dp(12), dp(12), dp(12));
-        shell.setBackground(panelBg(Color.WHITE, dp(18), Color.argb(56, 63, 82, 94)));
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        ImageView mark = new ImageView(this);
-        mark.setImageResource(R.drawable.ic_menu_image);
-        mark.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
-        mark.setPadding(dp(9), dp(9), dp(9), dp(9));
-        mark.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT));
-        top.addView(mark, new LinearLayout.LayoutParams(dp(42), dp(42)));
-        TextView title = new LocalizedTextView(this);
-        title.setText("Фотография");
-        title.setTextColor(Color.rgb(28, 34, 38));
-        title.setTextSize(18);
-        title.setTypeface(uiBold());
-        title.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, dp(44), 1);
-        titleParams.setMargins(dp(10), 0, dp(8), 0);
-        top.addView(title, titleParams);
-        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
-        shell.addView(top);
-
-        FrameLayout imagePlate = new FrameLayout(this);
-        imagePlate.setPadding(dp(4), dp(4), dp(4), dp(4));
-        imagePlate.setBackground(panelBg(Color.rgb(239, 244, 246), dp(14), Color.rgb(213, 223, 228)));
-        ImageView image = new ImageView(this);
-        image.setImageBitmap(bitmap);
-        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        imagePlate.addView(image, new FrameLayout.LayoutParams(-1, -1));
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(-1, 0, 1);
-        imageParams.setMargins(0, dp(12), 0, 0);
-        shell.addView(imagePlate, imageParams);
-
-        LinearLayout actions = new LinearLayout(this);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        Button download = actionButton("Скачать фото", v -> requestPhotoDownload(mediaId, dataUrl));
-        download.setTextColor(Color.WHITE);
-        download.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_download, 0, 0, 0);
-        download.setCompoundDrawablePadding(dp(8));
-        tintDrawables(download, Color.WHITE);
-        download.setBackground(tealGradientBg(dp(10)));
-        actions.addView(download, new LinearLayout.LayoutParams(0, dp(48), 1.35f));
-
-        Button close = actionButton("Закрыть", v -> dialog.dismiss());
-        LinearLayout.LayoutParams closeButtonParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        closeButtonParams.setMargins(dp(8), 0, 0, 0);
-        actions.addView(close, closeButtonParams);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, dp(48));
-        actionsParams.setMargins(0, dp(12), 0, 0);
-        shell.addView(actions, actionsParams);
-
-        dialog.setContentView(shell);
-        dialog.setCanceledOnTouchOutside(true);
-        dialog.show();
-        Window window = dialog.getWindow();
-        if (window != null) {
-            int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(24), dp(620));
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.width = width;
-            attrs.height = Math.min(
-                Math.round(getResources().getDisplayMetrics().heightPixels * 0.84f),
-                dp(820));
-            attrs.dimAmount = 0.42f;
-            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setAttributes(attrs);
-        }
-    }
-
-    private void requestPhotoDownload(String mediaId, String dataUrl) {
+    void requestPhotoDownload(String mediaId, String dataUrl) {
         pendingPreviewPhotoMediaId = mediaId == null ? "" : mediaId;
         pendingPreviewPhotoDataUrl = dataUrl == null ? "" : dataUrl;
         if (pendingPreviewPhotoMediaId.isEmpty() && pendingPreviewPhotoDataUrl.isEmpty()) return;
@@ -6508,6 +5135,7 @@ public final class MainActivity extends Activity {
         button.setForeground(centeredIcon(R.drawable.ic_menu_close, Color.rgb(28, 34, 38)));
         button.setForegroundGravity(Gravity.CENTER);
         button.setOnClickListener(listener);
+        PressFeedback.install(button);
         return button;
     }
 
@@ -6555,6 +5183,7 @@ public final class MainActivity extends Activity {
         button.setMinWidth(dp(44));
         button.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
         button.setPadding(dp(10), 0, dp(10), 0);
+        PressFeedback.install(button);
         return button;
     }
 
@@ -6608,6 +5237,8 @@ public final class MainActivity extends Activity {
 
     private Button navButton(String label, int iconRes, View.OnClickListener listener) {
         Button button = actionButton(label, listener);
+        // Navigation already has its own selected lift and scale.
+        button.setStateListAnimator(null);
         button.setTextSize(isLandscapeLayout() ? 9 : 10);
         button.setTypeface(uiBold());
         button.setGravity(Gravity.CENTER);
@@ -6627,10 +5258,14 @@ public final class MainActivity extends Activity {
         button.setTextColor(color);
         Drawable top = button.getCompoundDrawables()[1];
         if (top != null) top.mutate().setTint(color);
+        // Non-central tabs use a quiet teal selection; the people tab has its
+        // own gradient treatment below. Keep the first-variant motion: the
+        // selected item lifts and settles instead of snapping.
         button.setBackground(active
-            ? softAccentGradientBg(dp(isLandscapeLayout() ? 12 : 8))
+            ? panelBg(Color.argb(30, 36, 177, 165), dp(isLandscapeLayout() ? 12 : 10),
+                Color.argb(76, 36, 177, 165))
             : panelBg(Color.TRANSPARENT, dp(8), Color.TRANSPARENT));
-        button.setElevation(active ? dp(2) : 0f);
+        if (button != peopleNav) animateNavButton(button, active, false);
     }
 
     void stylePeopleNav(boolean active) {
@@ -6645,6 +5280,40 @@ public final class MainActivity extends Activity {
             : Color.argb(120, 255, 255, 255));
         peopleNav.setBackground(background);
         peopleNav.setElevation(dp(active ? 7 : 5));
+        animateNavButton(peopleNav, active, true);
+    }
+
+    private void animateNavButton(Button button, boolean active, boolean central) {
+        float targetScale = active ? (central ? 1.035f : 1.015f) : 1f;
+        float targetY = active ? -dp(central ? 3 : 2) : 0f;
+        if (!PanelTransitions.enabled(button)) {
+            button.animate().cancel();
+            button.setTranslationY(targetY);
+            button.setScaleX(targetScale);
+            button.setScaleY(targetScale);
+            return;
+        }
+        if (Math.abs(button.getScaleX() - targetScale) < .001f
+            && Math.abs(button.getTranslationY() - targetY) < .5f) return;
+        button.animate().cancel();
+        button.animate()
+            .translationY(targetY)
+            .scaleX(targetScale)
+            .scaleY(targetScale)
+            .setDuration(260L)
+            .setInterpolator(new DecelerateInterpolator(2f))
+            .start();
+    }
+
+    void animateMorePanel(boolean visible) {
+        if (morePanel == null) return;
+        View sheet = ((ViewGroup) morePanel).getChildAt(0);
+        PanelTransitions.overlay(morePanel, sheet, moreMenuRows(), visible,
+            isLandscapeLayout(), this::updateAddPersonButtonVisibility);
+    }
+
+    private ViewGroup moreMenuRows() {
+        return trainingMoreMenuTarget instanceof ViewGroup ? (ViewGroup) trainingMoreMenuTarget : null;
     }
 
     private View menuRow(int iconRes, String label, String help, View.OnClickListener listener) {
@@ -6911,7 +5580,7 @@ public final class MainActivity extends Activity {
         return row;
     }
 
-    private GradientDrawable toggleBg(boolean enabled) {
+    GradientDrawable toggleBg(boolean enabled) {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(enabled
             ? AppThemePalette.primaryBright()
@@ -6992,7 +5661,7 @@ public final class MainActivity extends Activity {
         return bg;
     }
 
-    private FrameLayout toggleControl(boolean enabled) {
+    FrameLayout toggleControl(boolean enabled) {
         FrameLayout toggle = new FrameLayout(this);
         toggle.setBackground(toggleBg(enabled));
         View thumb = new View(this);
@@ -7002,7 +5671,7 @@ public final class MainActivity extends Activity {
         return toggle;
     }
 
-    private void positionToggleThumb(FrameLayout toggle, boolean enabled) {
+    void positionToggleThumb(FrameLayout toggle, boolean enabled) {
         if (toggle == null || toggle.getChildCount() == 0) return;
         View thumb = toggle.getChildAt(0);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(20), dp(20));
@@ -7020,16 +5689,7 @@ public final class MainActivity extends Activity {
     }
 
     GradientDrawable qualityGradientBg(int radius) {
-        GradientDrawable bg = new GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            new int[]{
-                Color.rgb(220, 249, 232),
-                Color.rgb(250, 247, 255),
-                Color.rgb(231, 218, 255)
-            });
-        bg.setCornerRadius(radius);
-        bg.setStroke(dp(1), Color.argb(110, 122, 91, 177));
-        return bg;
+        return uiKit.qualityGradientBg(radius);
     }
 
     private GradientDrawable gradientBg() {
@@ -7097,8 +5757,8 @@ public final class MainActivity extends Activity {
     }
 
     private FrameLayout.LayoutParams branchStatusParams() {
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(330), dp(48), Gravity.RIGHT | Gravity.BOTTOM);
-        params.setMargins(0, 0, dp(16), dp(isLandscapeLayout() ? 12 : 154));
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
+        params.setMargins(dp(isLandscapeLayout() ? 64 : 12), 0, dp(76), dp(isLandscapeLayout() ? 12 : focusTree ? 66 : 86));
         return params;
     }
 
@@ -7195,9 +5855,18 @@ public final class MainActivity extends Activity {
     }
 
     void applyFocusTreeUi() {
+        if (branchStatusPanel != null) branchStatusPanel.setLayoutParams(branchStatusParams());
+        if (kinshipStatusPanel != null) kinshipStatusPanel.setLayoutParams(branchStatusParams());
         if (isLandscapeLayout()) {
             boolean peopleTab = "people".equals(activePanel);
             boolean fullScreenPanel = "settings".equals(activePanel) || peopleTab;
+            if (settingsPanel != null) {
+                settingsPanel.setPadding(
+                    dp(14),
+                    focusTree ? statusBarHeight() + dp(8) : dp(10),
+                    dp(14),
+                    0);
+            }
             if (landscapePanelHost != null
                 && landscapePanelHost.getLayoutParams() instanceof LinearLayout.LayoutParams) {
                 LinearLayout.LayoutParams hostParams =
@@ -7317,12 +5986,11 @@ public final class MainActivity extends Activity {
 
     void updateAddPersonButtonVisibility() {
         if (addPersonButton == null) return;
-        boolean settingsTab = "settings".equals(activePanel)
-            || "people".equals(activePanel)
-            || "more".equals(activePanel);
+        boolean menuVisible = activePanel != null && !activePanel.isEmpty();
+        boolean menuClosing = morePanel != null && morePanel.getVisibility() == View.VISIBLE;
         boolean selectionVisible = selectionToolbar != null
             && selectionToolbar.getVisibility() == View.VISIBLE;
-        addPersonButton.setVisibility(settingsTab || selectionVisible ? View.GONE : View.VISIBLE);
+        addPersonButton.setVisibility(menuVisible || menuClosing || selectionVisible ? View.GONE : View.VISIBLE);
     }
 
     private void applyFocusNavStyle(Button button, String label) {

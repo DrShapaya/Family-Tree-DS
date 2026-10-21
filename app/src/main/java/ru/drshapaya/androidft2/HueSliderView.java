@@ -11,8 +11,7 @@ import android.view.MotionEvent;
 import android.view.View;
 
 final class HueSliderView extends View {
-    private static final float PALETTE_SATURATION = 0.58f;
-    private static final float PALETTE_BRIGHTNESS = 0.94f;
+    static final int HUE=0, SATURATION=1, BRIGHTNESS=2;
     private static final int TRACK_SEGMENTS = 72;
     private static final int[] TRACK_COLORS = new int[TRACK_SEGMENTS + 1];
     private static final float[] TRACK_POSITIONS = new float[TRACK_SEGMENTS + 1];
@@ -33,14 +32,20 @@ final class HueSliderView extends View {
     private final Paint thumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint thumbStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF track = new RectF();
-    private float hue;
+    private final float[] hsv={0f,1f,1f};
+    private final int component;
     private Listener listener;
 
     HueSliderView(Context context) {
+        this(context,HUE);
+    }
+
+    HueSliderView(Context context,int component) {
         super(context);
+        this.component=component;
         setFocusable(true);
         setClickable(true);
-        setContentDescription(AppLanguage.translate(context, "Выбор цвета"));
+        setContentDescription(AppLanguage.translate(context,component==HUE ? "Оттенок" : component==SATURATION ? "Насыщенность" : "Яркость"));
         thumbStroke.setStyle(Paint.Style.STROKE);
         thumbStroke.setStrokeWidth(dp(3));
         thumbStroke.setColor(Color.WHITE);
@@ -50,12 +55,19 @@ final class HueSliderView extends View {
     void setColor(int color) {
         float[] hsv = new float[3];
         Color.colorToHSV(color, hsv);
-        hue = hsv[0];
+        if(hsv[1]==0 || hsv[2]==0) hsv[0]=this.hsv[0];
+        setHsv(hsv);
+    }
+
+    void setHsv(float[] value) {
+        System.arraycopy(value,0,hsv,0,3);
         invalidate();
     }
 
+    void getHsv(float[] value) { System.arraycopy(hsv,0,value,0,3); }
+
     int color() {
-        return paletteColor(hue);
+        return Color.HSVToColor(hsv);
     }
 
     void setListener(Listener listener) {
@@ -75,18 +87,21 @@ final class HueSliderView extends View {
         float trackHeight = dp(18);
         float centerY = getHeight() / 2f;
         track.set(pad, centerY - trackHeight / 2f, getWidth() - pad, centerY + trackHeight / 2f);
-        trackPaint.setShader(new LinearGradient(
+        trackPaint.setShader(component==HUE ? new LinearGradient(
             track.left,
             0,
             track.right,
             0,
             TRACK_COLORS,
             TRACK_POSITIONS,
-            Shader.TileMode.CLAMP));
+            Shader.TileMode.CLAMP) : new LinearGradient(track.left,0,track.right,0,
+                component==SATURATION ? Color.HSVToColor(new float[]{hsv[0],0,hsv[2]}) : Color.BLACK,
+                component==SATURATION ? Color.HSVToColor(new float[]{hsv[0],1,hsv[2]}) : Color.HSVToColor(new float[]{hsv[0],hsv[1],1}),
+                Shader.TileMode.CLAMP));
         canvas.drawRoundRect(track, trackHeight / 2f, trackHeight / 2f, trackPaint);
         trackPaint.setShader(null);
 
-        float x = track.left + (hue / 360f) * track.width();
+        float x = track.left + (component==HUE ? hsv[0]/360f : hsv[component]) * track.width();
         thumbPaint.setStyle(Paint.Style.FILL);
         thumbPaint.setColor(color());
         thumbPaint.setShadowLayer(dp(3), 0, dp(1), Color.argb(96, 0, 0, 0));
@@ -97,15 +112,17 @@ final class HueSliderView extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!isEnabled()) return false;
+        if(event.getActionMasked()==MotionEvent.ACTION_CANCEL) { if(getParent()!=null) getParent().requestDisallowInterceptTouchEvent(false); return true; }
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
             || event.getActionMasked() == MotionEvent.ACTION_MOVE
             || event.getActionMasked() == MotionEvent.ACTION_UP) {
             float pad = dp(12);
             float width = Math.max(1f, getWidth() - pad * 2f);
-            hue = Math.max(0f, Math.min(360f, ((event.getX() - pad) / width) * 360f));
+            hsv[component]=Math.max(0f,Math.min(1f,(event.getX()-pad)/width)) * (component==HUE ? 360f : 1f);
+            if(event.getActionMasked()==MotionEvent.ACTION_DOWN && getParent()!=null) getParent().requestDisallowInterceptTouchEvent(true);
             invalidate();
             if (listener != null) listener.onColorChanged(color(), true);
-            if (event.getActionMasked() == MotionEvent.ACTION_UP) performClick();
+            if (event.getActionMasked() == MotionEvent.ACTION_UP) { if(getParent()!=null) getParent().requestDisallowInterceptTouchEvent(false); performClick(); }
             return true;
         }
         return super.onTouchEvent(event);
@@ -124,8 +141,8 @@ final class HueSliderView extends View {
     private static int paletteColor(float hue) {
         return Color.HSVToColor(new float[]{
             hue,
-            PALETTE_SATURATION,
-            PALETTE_BRIGHTNESS
+            1f,
+            1f
         });
     }
 }

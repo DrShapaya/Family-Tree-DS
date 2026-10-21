@@ -1,0 +1,3146 @@
+﻿0 HEAD
+1 SOUR ChatGPT
+2 NAME Synthetic 400 Person Stress Test
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Юрий Сергеевич /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 16 OCT 1897
+1 DEAT
+2 DATE 14 AUG 1986
+0 @I2@ INDI
+1 NAME Алина Сергеевна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 07 AUG 1900
+1 DEAT
+2 DATE 05 JUL 1986
+0 @I3@ INDI
+1 NAME Николай Павлович /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 10 JUL 1889
+1 DEAT
+2 DATE 14 APR 1973
+0 @I4@ INDI
+1 NAME Ольга Михайловна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 28 JUN 1889
+1 DEAT
+2 DATE 23 OCT 1956
+0 @I5@ INDI
+1 NAME Максим Павлович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 01 NOV 1890
+1 DEAT
+2 DATE 04 JAN 1956
+0 @I6@ INDI
+1 NAME Наталья Владимировна /Волкова/
+1 SEX F
+1 BIRT
+2 DATE 20 FEB 1890
+1 DEAT
+2 DATE 13 JUN 1964
+0 @I7@ INDI
+1 NAME Александр Дмитриевич /Кузнецов/
+1 SEX M
+1 BIRT
+2 DATE 10 JUL 1903
+1 DEAT
+2 DATE 22 JUL 1990
+0 @I8@ INDI
+1 NAME Валентина Ивановна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 11 SEP 1904
+1 DEAT
+2 DATE 10 OCT 1991
+0 @I9@ INDI
+1 NAME Владимир Иванович /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 01 OCT 1895
+1 DEAT
+2 DATE 03 FEB 1962
+0 @I10@ INDI
+1 NAME Екатерина Владимировна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 17 OCT 1895
+1 DEAT
+2 DATE 04 AUG 1983
+0 @I11@ INDI
+1 NAME Антон Андреевич /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 25 NOV 1900
+1 DEAT
+2 DATE 12 DEC 1982
+0 @I12@ INDI
+1 NAME Анна Владимировна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 20 MAY 1904
+1 DEAT
+2 DATE 21 DEC 1984
+0 @I13@ INDI
+1 NAME Александр Александрович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 25 JUL 1900
+1 DEAT
+2 DATE 02 FEB 1967
+0 @I14@ INDI
+1 NAME Юлия Андреевна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 02 JUN 1897
+1 DEAT
+2 DATE 25 APR 1969
+0 @I15@ INDI
+1 NAME Алексей Дмитриевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 16 OCT 1903
+1 DEAT
+2 DATE 27 APR 1991
+0 @I16@ INDI
+1 NAME Полина Александровна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 19 NOV 1904
+1 DEAT
+2 DATE 17 NOV 1971
+0 @I17@ INDI
+1 NAME Антон Николаевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 12 JUN 1904
+1 DEAT
+2 DATE 28 APR 1991
+0 @I18@ INDI
+1 NAME Надежда Андреевна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 21 SEP 1906
+1 DEAT
+2 DATE 06 JUL 1985
+0 @I19@ INDI
+1 NAME Николай Владимирович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 02 DEC 1892
+1 DEAT
+2 DATE 25 MAR 1959
+0 @I20@ INDI
+1 NAME Ольга Павловна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 13 FEB 1890
+1 DEAT
+2 DATE 05 JAN 1982
+0 @I21@ INDI
+1 NAME Юрий Иванович /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 07 AUG 1904
+1 DEAT
+2 DATE 05 MAY 1979
+0 @I22@ INDI
+1 NAME Ирина Николаевна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 05 MAY 1905
+1 DEAT
+2 DATE 22 MAY 1971
+0 @I23@ INDI
+1 NAME Павел Михайлович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 21 MAR 1897
+1 DEAT
+2 DATE 23 JAN 1978
+0 @I24@ INDI
+1 NAME Екатерина Николаевна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 20 OCT 1900
+1 DEAT
+2 DATE 02 DEC 1972
+0 @I25@ INDI
+1 NAME Сергей Владимирович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 21 JAN 1900
+1 DEAT
+2 DATE 13 JAN 1988
+0 @I26@ INDI
+1 NAME Елена Александровна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 01 JUN 1898
+1 DEAT
+2 DATE 26 MAR 1973
+0 @I27@ INDI
+1 NAME Павел Павлович /Захаров/
+1 SEX M
+1 BIRT
+2 DATE 17 APR 1897
+1 DEAT
+2 DATE 27 JUN 1981
+0 @I28@ INDI
+1 NAME Валентина Николаевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 06 NOV 1898
+1 DEAT
+2 DATE 24 JUL 1975
+0 @I29@ INDI
+1 NAME Юрий Владимирович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 10 FEB 1901
+1 DEAT
+2 DATE 04 AUG 1969
+0 @I30@ INDI
+1 NAME Дарья Владимировна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 07 MAY 1904
+1 DEAT
+2 DATE 14 AUG 1979
+0 @I31@ INDI
+1 NAME Сергей Николаевич /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 18 SEP 1889
+1 DEAT
+2 DATE 11 JAN 1961
+0 @I32@ INDI
+1 NAME Надежда Дмитриевна /Семенова/
+1 SEX F
+1 BIRT
+2 DATE 15 SEP 1887
+1 DEAT
+2 DATE 28 MAY 1952
+0 @I33@ INDI
+1 NAME Надежда Николаевна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 27 JAN 1932
+1 DEAT
+2 DATE 07 JUL 2008
+0 @I34@ INDI
+1 NAME Николай Павлович /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 24 SEP 1924
+1 DEAT
+2 DATE 05 DEC 1995
+0 @I35@ INDI
+1 NAME Владимир Владимирович /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 24 JUL 1925
+1 DEAT
+2 DATE 02 APR 2007
+0 @I36@ INDI
+1 NAME Надежда Николаевна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 03 DEC 1915
+1 DEAT
+2 DATE 13 DEC 2007
+0 @I37@ INDI
+1 NAME Иван Иванович /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 09 JUL 1909
+1 DEAT
+2 DATE 11 DEC 1981
+0 @I38@ INDI
+1 NAME Ксения Павловна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 12 SEP 1910
+1 DEAT
+2 DATE 02 MAY 2002
+0 @I39@ INDI
+1 NAME Константин Алексеевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 06 APR 1922
+1 DEAT
+2 DATE 22 SEP 2012
+0 @I40@ INDI
+1 NAME Надежда Владимировна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 22 MAY 1910
+1 DEAT
+2 DATE 07 MAR 1985
+0 @I41@ INDI
+1 NAME Максим Иванович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 11 JUL 1921
+1 DEAT
+2 DATE 21 OCT 2008
+0 @I42@ INDI
+1 NAME Александр Владимирович /Кузнецов/
+1 SEX M
+1 BIRT
+2 DATE 21 MAR 1929
+1 DEAT
+2 DATE 04 FEB 2017
+0 @I43@ INDI
+1 NAME Евгений Михайлович /Кузнецов/
+1 SEX M
+1 BIRT
+2 DATE 25 DEC 1924
+1 DEAT
+2 DATE 17 MAY 2005
+0 @I44@ INDI
+1 NAME Екатерина Александровна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 06 APR 1926
+1 DEAT
+2 DATE 03 SEP 2015
+0 @I45@ INDI
+1 NAME Екатерина Андреевна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 09 OCT 1915
+1 DEAT
+2 DATE 24 AUG 1984
+0 @I46@ INDI
+1 NAME Дарья Сергеевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 17 SEP 1933
+1 DEAT
+2 DATE 13 MAR 2001
+0 @I47@ INDI
+1 NAME Виктория Николаевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 24 AUG 1924
+1 DEAT
+2 DATE 01 JUN 2012
+0 @I48@ INDI
+1 NAME Александр Павлович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 01 NOV 1929
+1 DEAT
+2 DATE 20 JUN 2015
+0 @I49@ INDI
+1 NAME Ирина Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 16 DEC 1931
+1 DEAT
+2 DATE 17 FEB 2007
+0 @I50@ INDI
+1 NAME Елена Сергеевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 28 JAN 1920
+1 DEAT
+2 DATE 18 JAN 2004
+0 @I51@ INDI
+1 NAME Владимир Андреевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 13 SEP 1929
+1 DEAT
+2 DATE 10 MAY 2017
+0 @I52@ INDI
+1 NAME Дмитрий Павлович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 08 DEC 1935
+1 DEAT
+2 DATE 11 JUN 2011
+0 @I53@ INDI
+1 NAME Виктор Андреевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 28 FEB 1931
+1 DEAT
+2 DATE 01 FEB 2018
+0 @I54@ INDI
+1 NAME Павел Владимирович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 11 MAY 1935
+1 DEAT
+2 DATE 03 MAY 2014
+0 @I55@ INDI
+1 NAME Ольга Андреевна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 17 AUG 1926
+1 DEAT
+2 DATE 19 APR 2001
+0 @I56@ INDI
+1 NAME Сергей Сергеевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 25 DEC 1939
+1 DEAT
+2 DATE 17 APR 2014
+0 @I57@ INDI
+1 NAME Юрий Алексеевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 01 MAR 1933
+1 DEAT
+2 DATE 11 JUL 2025
+0 @I58@ INDI
+1 NAME Алина Павловна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 03 FEB 1931
+1 DEAT
+2 DATE 28 JAN 2021
+0 @I59@ INDI
+1 NAME Роман Дмитриевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 20 MAR 1936
+1 DEAT
+2 DATE 02 NOV 2020
+0 @I60@ INDI
+1 NAME Николай Дмитриевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 18 SEP 1920
+1 DEAT
+2 DATE 10 APR 2002
+0 @I61@ INDI
+1 NAME Дарья Андреевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 25 AUG 1915
+1 DEAT
+2 DATE 28 SEP 1982
+0 @I62@ INDI
+1 NAME Олег Иванович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 14 APR 1924
+1 DEAT
+2 DATE 06 JUL 2016
+0 @I63@ INDI
+1 NAME Валентина Павловна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 27 MAR 1934
+1 DEAT
+2 DATE 17 MAR 2020
+0 @I64@ INDI
+1 NAME Павел Михайлович /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 24 MAY 1925
+1 DEAT
+2 DATE 22 NOV 1992
+0 @I65@ INDI
+1 NAME Людмила Ивановна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 20 JUL 1931
+1 DEAT
+2 DATE 17 FEB 2000
+0 @I66@ INDI
+1 NAME Ксения Сергеевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 20 MAR 1923
+1 DEAT
+2 DATE 07 APR 1995
+0 @I67@ INDI
+1 NAME Юрий Владимирович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 19 APR 1928
+1 DEAT
+2 DATE 27 APR 1999
+0 @I68@ INDI
+1 NAME Сергей Дмитриевич /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 19 DEC 1929
+1 DEAT
+2 DATE 01 MAY 2014
+0 @I69@ INDI
+1 NAME Александр Владимирович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 05 JUL 1922
+1 DEAT
+2 DATE 22 MAY 1999
+0 @I70@ INDI
+1 NAME Надежда Павловна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 21 FEB 1926
+1 DEAT
+2 DATE 05 MAR 2003
+0 @I71@ INDI
+1 NAME Алексей Павлович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 14 FEB 1920
+1 DEAT
+2 DATE 21 JUN 1997
+0 @I72@ INDI
+1 NAME Полина Павловна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 17 JUL 1923
+1 DEAT
+2 DATE 08 SEP 1989
+0 @I73@ INDI
+1 NAME Юлия Алексеевна /Захарова/
+1 SEX F
+1 BIRT
+2 DATE 21 NOV 1925
+1 DEAT
+2 DATE 22 SEP 2011
+0 @I74@ INDI
+1 NAME Игорь Андреевич /Захаров/
+1 SEX M
+1 BIRT
+2 DATE 03 MAY 1921
+1 DEAT
+2 DATE 04 JAN 2006
+0 @I75@ INDI
+1 NAME Надежда Николаевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 11 SEP 1926
+1 DEAT
+2 DATE 07 APR 2003
+0 @I76@ INDI
+1 NAME Дмитрий Михайлович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 12 NOV 1926
+1 DEAT
+2 DATE 25 MAR 2004
+0 @I77@ INDI
+1 NAME Юлия Андреевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 02 JUL 1926
+1 DEAT
+2 DATE 04 JUL 1996
+0 @I78@ INDI
+1 NAME Юрий Сергеевич /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 10 NOV 1926
+1 DEAT
+2 DATE 19 MAY 2005
+0 @I79@ INDI
+1 NAME Юрий Сергеевич /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 12 APR 1918
+1 DEAT
+2 DATE 03 SEP 1984
+0 @I80@ INDI
+1 NAME Алексей Александрович /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 14 DEC 1923
+1 DEAT
+2 DATE 13 JUN 2000
+0 @I81@ INDI
+1 NAME Роман Алексеевич /Соколов/
+1 SEX M
+1 BIRT
+2 DATE 12 JAN 1931
+1 DEAT
+2 DATE 16 JUN 2001
+0 @I82@ INDI
+1 NAME Светлана Александровна /Волкова/
+1 SEX F
+1 BIRT
+2 DATE 12 FEB 1910
+1 DEAT
+2 DATE 18 JUL 1995
+0 @I83@ INDI
+1 NAME Людмила Николаевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 07 APR 1927
+1 DEAT
+2 DATE 28 JUN 2013
+0 @I84@ INDI
+1 NAME Мария Андреевна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 15 JAN 1923
+1 DEAT
+2 DATE 21 SEP 1999
+0 @I85@ INDI
+1 NAME Олег Алексеевич /Орлов/
+1 SEX M
+1 BIRT
+2 DATE 13 AUG 1929
+1 DEAT
+2 DATE 28 MAR 2012
+0 @I86@ INDI
+1 NAME Павел Михайлович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 01 DEC 1928
+1 DEAT
+2 DATE 19 FEB 2002
+0 @I87@ INDI
+1 NAME Виктория Ивановна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 18 APR 1924
+1 DEAT
+2 DATE 25 JUL 2011
+0 @I88@ INDI
+1 NAME Ольга Андреевна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 18 DEC 1924
+1 DEAT
+2 DATE 18 SEP 2005
+0 @I89@ INDI
+1 NAME София Павловна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 01 MAY 1925
+1 DEAT
+2 DATE 09 JUN 1998
+0 @I90@ INDI
+1 NAME Константин Павлович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 25 SEP 1923
+1 DEAT
+2 DATE 09 JAN 2003
+0 @I91@ INDI
+1 NAME Татьяна Дмитриевна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 15 NOV 1923
+1 DEAT
+2 DATE 23 FEB 1996
+0 @I92@ INDI
+1 NAME Иван Алексеевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 07 JUN 1929
+1 DEAT
+2 DATE 25 APR 2014
+0 @I93@ INDI
+1 NAME Полина Александровна /Новикова/
+1 SEX F
+1 BIRT
+2 DATE 04 FEB 1926
+1 DEAT
+2 DATE 28 JUN 1998
+0 @I94@ INDI
+1 NAME Юлия Михайловна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 25 SEP 1938
+1 DEAT
+2 DATE 28 APR 2014
+0 @I95@ INDI
+1 NAME Павел Андреевич /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 08 OCT 1913
+1 DEAT
+2 DATE 20 APR 1997
+0 @I96@ INDI
+1 NAME Надежда Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 04 JUL 1929
+1 DEAT
+2 DATE 17 AUG 2012
+0 @I97@ INDI
+1 NAME Елена Алексеевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 03 MAR 1930
+1 DEAT
+2 DATE 07 MAR 2020
+0 @I98@ INDI
+1 NAME Игорь Иванович /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 07 JUL 1924
+1 DEAT
+2 DATE 14 SEP 2001
+0 @I99@ INDI
+1 NAME Андрей Николаевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 07 DEC 1919
+1 DEAT
+2 DATE 05 MAY 2007
+0 @I100@ INDI
+1 NAME Олег Николаевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 28 NOV 1911
+1 DEAT
+2 DATE 12 JUL 1989
+0 @I101@ INDI
+1 NAME Сергей Иванович /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 20 JAN 1928
+1 DEAT
+2 DATE 18 JUN 2015
+0 @I102@ INDI
+1 NAME Светлана Андреевна /Новикова/
+1 SEX F
+1 BIRT
+2 DATE 18 MAR 1920
+1 DEAT
+2 DATE 17 AUG 2002
+0 @I103@ INDI
+1 NAME Ольга Дмитриевна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 01 DEC 1927
+1 DEAT
+2 DATE 17 JAN 1994
+0 @I104@ INDI
+1 NAME Анастасия Павловна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 28 APR 1923
+1 DEAT
+2 DATE 12 NOV 2006
+0 @I105@ INDI
+1 NAME Сергей Иванович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 20 NOV 1923
+1 DEAT
+2 DATE 12 APR 2011
+0 @I106@ INDI
+1 NAME Максим Александрович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 02 OCT 1928
+1 DEAT
+2 DATE 14 MAY 2005
+0 @I107@ INDI
+1 NAME Алина Павловна /Семенова/
+1 SEX F
+1 BIRT
+2 DATE 17 MAY 1920
+1 DEAT
+2 DATE 12 SEP 1998
+0 @I108@ INDI
+1 NAME Юрий Павлович /Орлов/
+1 SEX M
+1 BIRT
+2 DATE 24 JUL 1930
+1 DEAT
+2 DATE 01 JAN 2007
+0 @I109@ INDI
+1 NAME Елена Павловна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 12 JUL 1928
+1 DEAT
+2 DATE 19 SEP 2014
+0 @I110@ INDI
+1 NAME Михаил Андреевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 06 JUL 1912
+1 DEAT
+2 DATE 24 DEC 1997
+0 @I111@ INDI
+1 NAME Анна Владимировна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 08 NOV 1931
+1 DEAT
+2 DATE 02 AUG 2015
+0 @I112@ INDI
+1 NAME Татьяна Дмитриевна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 19 NOV 1922
+1 DEAT
+2 DATE 17 MAY 2010
+0 @I113@ INDI
+1 NAME Иван Алексеевич /Белов/
+1 SEX M
+1 BIRT
+2 DATE 20 NOV 1935
+1 DEAT
+2 DATE 20 MAY 2008
+0 @I114@ INDI
+1 NAME Людмила Владимировна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 14 JUL 1925
+1 DEAT
+2 DATE 09 DEC 2004
+0 @I115@ INDI
+1 NAME Дарья Дмитриевна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 10 JAN 1931
+1 DEAT
+2 DATE 12 FEB 2018
+0 @I116@ INDI
+1 NAME Екатерина Андреевна /Белова/
+1 SEX F
+1 BIRT
+2 DATE 02 JUN 1926
+1 DEAT
+2 DATE 27 OCT 2015
+0 @I117@ INDI
+1 NAME Сергей Михайлович /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 09 NOV 1916
+1 DEAT
+2 DATE 01 OCT 2004
+0 @I118@ INDI
+1 NAME Владимир Алексеевич /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 04 JUL 1929
+1 DEAT
+2 DATE 06 FEB 2018
+0 @I119@ INDI
+1 NAME Алексей Павлович /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 10 APR 1931
+1 DEAT
+2 DATE 09 JUN 2023
+0 @I120@ INDI
+1 NAME Сергей Михайлович /Белов/
+1 SEX M
+1 BIRT
+2 DATE 09 MAY 1920
+1 DEAT
+2 DATE 22 MAR 1985
+0 @I121@ INDI
+1 NAME Мария Владимировна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 11 MAR 1921
+1 DEAT
+2 DATE 20 MAY 2003
+0 @I122@ INDI
+1 NAME Ольга Павловна /Семенова/
+1 SEX F
+1 BIRT
+2 DATE 09 SEP 1923
+1 DEAT
+2 DATE 10 MAR 2009
+0 @I123@ INDI
+1 NAME София Ивановна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 07 FEB 1937
+1 DEAT
+2 DATE 06 FEB 2008
+0 @I124@ INDI
+1 NAME Татьяна Андреевна /Соколова/
+1 SEX F
+1 BIRT
+2 DATE 02 JAN 1925
+1 DEAT
+2 DATE 27 MAR 2013
+0 @I125@ INDI
+1 NAME Сергей Александрович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 05 APR 1927
+1 DEAT
+2 DATE 26 AUG 1992
+0 @I126@ INDI
+1 NAME Анастасия Николаевна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 25 SEP 1924
+1 DEAT
+2 DATE 27 SEP 1991
+0 @I127@ INDI
+1 NAME Ольга Сергеевна /Соколова/
+1 SEX F
+1 BIRT
+2 DATE 22 FEB 1932
+1 DEAT
+2 DATE 16 OCT 1998
+0 @I128@ INDI
+1 NAME Андрей Павлович /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 24 AUG 1911
+1 DEAT
+2 DATE 12 MAR 2003
+0 @I129@ INDI
+1 NAME Алина Александровна /Соколова/
+1 SEX F
+1 BIRT
+2 DATE 07 OCT 1952
+0 @I130@ INDI
+1 NAME Елена Николаевна /Соколова/
+1 SEX F
+1 BIRT
+2 DATE 17 JAN 1957
+0 @I131@ INDI
+1 NAME Евгений Андреевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 27 DEC 1937
+1 DEAT
+2 DATE 13 JUN 2017
+0 @I132@ INDI
+1 NAME Дарья Ивановна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 15 MAR 1934
+1 DEAT
+2 DATE 21 APR 2007
+0 @I133@ INDI
+1 NAME Светлана Александровна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 04 APR 1939
+1 DEAT
+2 DATE 22 SEP 2014
+0 @I134@ INDI
+1 NAME Михаил Иванович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 05 JUN 1954
+0 @I135@ INDI
+1 NAME Виктория Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 03 DEC 1954
+1 DEAT
+2 DATE 02 APR 2017
+0 @I136@ INDI
+1 NAME Екатерина Павловна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 03 DEC 1954
+0 @I137@ INDI
+1 NAME Ксения Андреевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 05 JUN 1947
+1 DEAT
+2 DATE 24 OCT 2020
+0 @I138@ INDI
+1 NAME Наталья Андреевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 07 MAR 1950
+1 DEAT
+2 DATE 15 FEB 2019
+0 @I139@ INDI
+1 NAME Юрий Павлович /Орлов/
+1 SEX M
+1 BIRT
+2 DATE 17 MAR 1956
+0 @I140@ INDI
+1 NAME Полина Андреевна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 28 DEC 1957
+1 DEAT
+2 DATE 17 JUN 2018
+0 @I141@ INDI
+1 NAME Дарья Ивановна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 25 DEC 1960
+1 DEAT
+2 DATE 19 JUN 2016
+0 @I142@ INDI
+1 NAME Дмитрий Иванович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 26 FEB 1956
+1 DEAT
+2 DATE 26 APR 2024
+0 @I143@ INDI
+1 NAME Юрий Иванович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 22 DEC 1951
+0 @I144@ INDI
+1 NAME Николай Павлович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 22 AUG 1963
+1 DEAT
+2 DATE 02 MAR 2021
+0 @I145@ INDI
+1 NAME Мария Дмитриевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 15 OCT 1955
+0 @I146@ INDI
+1 NAME Иван Сергеевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 10 OCT 1948
+1 DEAT
+2 DATE 06 APR 2023
+0 @I147@ INDI
+1 NAME Максим Николаевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 11 JUL 1944
+1 DEAT
+2 DATE 12 FEB 2018
+0 @I148@ INDI
+1 NAME Максим Сергеевич /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 14 AUG 1953
+1 DEAT
+2 DATE 12 MAY 2019
+0 @I149@ INDI
+1 NAME Екатерина Андреевна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 04 MAR 1953
+1 DEAT
+2 DATE 02 OCT 2016
+0 @I150@ INDI
+1 NAME Михаил Дмитриевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 04 JAN 1952
+1 DEAT
+2 DATE 13 JUL 2018
+0 @I151@ INDI
+1 NAME Иван Сергеевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 15 MAR 1946
+1 DEAT
+2 DATE 14 JAN 2018
+0 @I152@ INDI
+1 NAME Сергей Сергеевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 18 APR 1954
+0 @I153@ INDI
+1 NAME Константин Алексеевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 17 MAY 1958
+1 DEAT
+2 DATE 01 MAR 2019
+0 @I154@ INDI
+1 NAME Алексей Сергеевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 18 APR 1959
+0 @I155@ INDI
+1 NAME Дарья Андреевна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 18 DEC 1950
+1 DEAT
+2 DATE 21 JAN 2021
+0 @I156@ INDI
+1 NAME Роман Николаевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 05 JUN 1954
+1 DEAT
+2 DATE 14 JUL 2023
+0 @I157@ INDI
+1 NAME Владимир Сергеевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 20 FEB 1952
+1 DEAT
+2 DATE 22 NOV 2020
+0 @I158@ INDI
+1 NAME Ольга Дмитриевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 22 MAY 1952
+1 DEAT
+2 DATE 04 JUN 2023
+0 @I159@ INDI
+1 NAME Павел Сергеевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 22 JUN 1954
+1 DEAT
+2 DATE 13 JUN 2020
+0 @I160@ INDI
+1 NAME Юлия Михайловна /Захарова/
+1 SEX F
+1 BIRT
+2 DATE 16 FEB 1947
+1 DEAT
+2 DATE 19 SEP 2022
+0 @I161@ INDI
+1 NAME Иван Николаевич /Захаров/
+1 SEX M
+1 BIRT
+2 DATE 11 SEP 1951
+0 @I162@ INDI
+1 NAME Алина Николаевна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 28 MAY 1959
+0 @I163@ INDI
+1 NAME Дарья Ивановна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 28 MAY 1963
+1 DEAT
+2 DATE 02 JUL 2021
+0 @I164@ INDI
+1 NAME Дарья Алексеевна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 23 APR 1972
+0 @I165@ INDI
+1 NAME Олег Дмитриевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 14 JUN 1960
+0 @I166@ INDI
+1 NAME Иван Иванович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 13 FEB 1938
+1 DEAT
+2 DATE 15 JUL 2003
+0 @I167@ INDI
+1 NAME Валентина Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 01 MAR 1935
+1 DEAT
+2 DATE 18 APR 2021
+0 @I168@ INDI
+1 NAME Валентина Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 26 OCT 1940
+1 DEAT
+2 DATE 23 DEC 2019
+0 @I169@ INDI
+1 NAME Иван Владимирович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 20 SEP 1960
+1 DEAT
+2 DATE 16 DEC 2023
+0 @I170@ INDI
+1 NAME Константин Дмитриевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 03 AUG 1952
+0 @I171@ INDI
+1 NAME Екатерина Алексеевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 25 JUL 1957
+0 @I172@ INDI
+1 NAME Ксения Дмитриевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 24 DEC 1964
+1 DEAT
+2 DATE 06 APR 2025
+0 @I173@ INDI
+1 NAME Павел Павлович /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 06 JUN 1951
+0 @I174@ INDI
+1 NAME София Александровна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 23 JAN 1956
+1 DEAT
+2 DATE 19 MAY 2022
+0 @I175@ INDI
+1 NAME Ирина Александровна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 23 AUG 1949
+1 DEAT
+2 DATE 14 APR 2026
+0 @I176@ INDI
+1 NAME Светлана Сергеевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 07 JUL 1945
+1 DEAT
+2 DATE 14 DEC 2016
+0 @I177@ INDI
+1 NAME Надежда Михайловна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 23 JAN 1935
+1 DEAT
+2 DATE 22 OCT 2009
+0 @I178@ INDI
+1 NAME Николай Андреевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 06 MAY 1940
+1 DEAT
+2 DATE 10 OCT 2006
+0 @I179@ INDI
+1 NAME Мария Сергеевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 16 JUN 1933
+1 DEAT
+2 DATE 11 AUG 2001
+0 @I180@ INDI
+1 NAME Виктор Иванович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 14 AUG 1938
+1 DEAT
+2 DATE 13 OCT 2024
+0 @I181@ INDI
+1 NAME Иван Алексеевич /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 15 FEB 1951
+1 DEAT
+2 DATE 09 DEC 2016
+0 @I182@ INDI
+1 NAME Алина Сергеевна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 18 APR 1952
+0 @I183@ INDI
+1 NAME Наталья Андреевна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 17 MAY 1953
+0 @I184@ INDI
+1 NAME Людмила Дмитриевна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 01 APR 1953
+1 DEAT
+2 DATE 28 JAN 2019
+0 @I185@ INDI
+1 NAME Андрей Андреевич /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 15 OCT 1955
+1 DEAT
+2 DATE 14 SEP 2018
+0 @I186@ INDI
+1 NAME Андрей Андреевич /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 21 DEC 1954
+0 @I187@ INDI
+1 NAME Татьяна Сергеевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 26 NOV 1956
+0 @I188@ INDI
+1 NAME Надежда Николаевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 19 SEP 1947
+1 DEAT
+2 DATE 22 JUN 2019
+0 @I189@ INDI
+1 NAME Константин Дмитриевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 12 MAY 1948
+1 DEAT
+2 DATE 03 APR 2014
+0 @I190@ INDI
+1 NAME Алина Михайловна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 05 JAN 1946
+1 DEAT
+2 DATE 26 FEB 2021
+0 @I191@ INDI
+1 NAME Андрей Дмитриевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 03 APR 1946
+1 DEAT
+2 DATE 28 NOV 2013
+0 @I192@ INDI
+1 NAME Олег Павлович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 17 JUL 1954
+0 @I193@ INDI
+1 NAME Евгений Михайлович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 21 MAR 1950
+1 DEAT
+2 DATE 03 NOV 2015
+0 @I194@ INDI
+1 NAME Анна Павловна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 02 AUG 1953
+0 @I195@ INDI
+1 NAME Антон Сергеевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 26 NOV 1952
+0 @I196@ INDI
+1 NAME Дмитрий Дмитриевич /Кузнецов/
+1 SEX M
+1 BIRT
+2 DATE 19 DEC 1951
+1 DEAT
+2 DATE 15 MAR 2016
+0 @I197@ INDI
+1 NAME Ксения Николаевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 27 FEB 1952
+0 @I198@ INDI
+1 NAME Наталья Николаевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 13 FEB 1949
+1 DEAT
+2 DATE 27 APR 2017
+0 @I199@ INDI
+1 NAME Константин Иванович /Орлов/
+1 SEX M
+1 BIRT
+2 DATE 15 JAN 1951
+1 DEAT
+2 DATE 05 JUL 2022
+0 @I200@ INDI
+1 NAME Игорь Дмитриевич /Орлов/
+1 SEX M
+1 BIRT
+2 DATE 21 JAN 1952
+1 DEAT
+2 DATE 03 FEB 2019
+0 @I201@ INDI
+1 NAME Ольга Ивановна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 12 JUL 1955
+0 @I202@ INDI
+1 NAME Игорь Андреевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 05 DEC 1957
+1 DEAT
+2 DATE 09 MAY 2016
+0 @I203@ INDI
+1 NAME Николай Николаевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 09 JUL 1956
+1 DEAT
+2 DATE 13 AUG 2016
+0 @I204@ INDI
+1 NAME Константин Андреевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 13 OCT 1951
+1 DEAT
+2 DATE 03 SEP 2018
+0 @I205@ INDI
+1 NAME Дмитрий Владимирович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 28 JUN 1937
+1 DEAT
+2 DATE 23 MAR 2009
+0 @I206@ INDI
+1 NAME Ольга Ивановна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 02 APR 1944
+1 DEAT
+2 DATE 02 AUG 2012
+0 @I207@ INDI
+1 NAME Ирина Ивановна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 09 MAR 1940
+1 DEAT
+2 DATE 23 DEC 2015
+0 @I208@ INDI
+1 NAME Павел Павлович /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 03 MAY 1965
+0 @I209@ INDI
+1 NAME Надежда Алексеевна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 05 NOV 1957
+0 @I210@ INDI
+1 NAME Виктория Сергеевна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 01 NOV 1961
+1 DEAT
+2 DATE 28 JAN 2019
+0 @I211@ INDI
+1 NAME Алина Михайловна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 22 FEB 1955
+1 DEAT
+2 DATE 17 JUN 2026
+0 @I212@ INDI
+1 NAME Игорь Александрович /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 06 JAN 1942
+1 DEAT
+2 DATE 21 SEP 2019
+0 @I213@ INDI
+1 NAME Людмила Павловна /Алексеева/
+1 SEX F
+1 BIRT
+2 DATE 05 AUG 1948
+1 DEAT
+2 DATE 05 OCT 2024
+0 @I214@ INDI
+1 NAME Ольга Андреевна /Белова/
+1 SEX F
+1 BIRT
+2 DATE 21 MAR 1958
+1 DEAT
+2 DATE 06 MAR 2022
+0 @I215@ INDI
+1 NAME Алексей Алексеевич /Белов/
+1 SEX M
+1 BIRT
+2 DATE 27 AUG 1961
+0 @I216@ INDI
+1 NAME Татьяна Дмитриевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 21 FEB 1949
+1 DEAT
+2 DATE 10 JUN 2015
+0 @I217@ INDI
+1 NAME Дарья Николаевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 17 SEP 1951
+1 DEAT
+2 DATE 16 JUL 2023
+0 @I218@ INDI
+1 NAME Наталья Дмитриевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 17 FEB 1960
+0 @I219@ INDI
+1 NAME Наталья Николаевна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 02 JUL 1958
+0 @I220@ INDI
+1 NAME Валентина Сергеевна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 03 SEP 1956
+0 @I221@ INDI
+1 NAME Владимир Дмитриевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 23 JAN 1959
+1 DEAT
+2 DATE 25 APR 2025
+0 @I222@ INDI
+1 NAME Юлия Андреевна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 10 AUG 1960
+0 @I223@ INDI
+1 NAME Юрий Николаевич /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 11 JAN 1959
+0 @I224@ INDI
+1 NAME Анна Павловна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 25 MAY 1957
+0 @I225@ INDI
+1 NAME Антон Сергеевич /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 22 FEB 1946
+1 DEAT
+2 DATE 02 APR 2022
+0 @I226@ INDI
+1 NAME Максим Дмитриевич /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 11 DEC 1940
+1 DEAT
+2 DATE 09 JUN 2005
+0 @I227@ INDI
+1 NAME Алексей Николаевич /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 18 NOV 1945
+1 DEAT
+2 DATE 11 FEB 2022
+0 @I228@ INDI
+1 NAME Евгений Михайлович /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 19 SEP 1965
+0 @I229@ INDI
+1 NAME Виктор Алексеевич /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 10 JAN 1958
+0 @I230@ INDI
+1 NAME Татьяна Александровна /Новикова/
+1 SEX F
+1 BIRT
+2 DATE 20 MAR 1963
+0 @I231@ INDI
+1 NAME Евгений Иванович /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 17 SEP 1965
+1 DEAT
+2 DATE 03 AUG 2016
+0 @I232@ INDI
+1 NAME Наталья Андреевна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 03 MAR 1960
+1 DEAT
+2 DATE 08 DEC 2016
+0 @I233@ INDI
+1 NAME Валентина Ивановна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 18 DEC 1957
+0 @I234@ INDI
+1 NAME Николай Владимирович /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 04 AUG 1967
+0 @I235@ INDI
+1 NAME Сергей Сергеевич /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 01 NOV 1959
+0 @I236@ INDI
+1 NAME Антон Андреевич /Белов/
+1 SEX M
+1 BIRT
+2 DATE 07 OCT 1949
+1 DEAT
+2 DATE 06 NOV 2017
+0 @I237@ INDI
+1 NAME Андрей Александрович /Белов/
+1 SEX M
+1 BIRT
+2 DATE 06 MAR 1954
+1 DEAT
+2 DATE 07 JUN 2020
+0 @I238@ INDI
+1 NAME Роман Александрович /Белов/
+1 SEX M
+1 BIRT
+2 DATE 05 JUL 1946
+1 DEAT
+2 DATE 19 APR 2022
+0 @I239@ INDI
+1 NAME Евгений Михайлович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 25 SEP 1942
+1 DEAT
+2 DATE 17 FEB 2022
+0 @I240@ INDI
+1 NAME Полина Сергеевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 26 MAY 1949
+1 DEAT
+2 DATE 22 DEC 2014
+0 @I241@ INDI
+1 NAME Светлана Александровна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 13 OCT 1943
+1 DEAT
+2 DATE 07 JUN 2018
+0 @I242@ INDI
+1 NAME Виктория Алексеевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 05 FEB 1948
+1 DEAT
+2 DATE 01 JUL 2014
+0 @I243@ INDI
+1 NAME Надежда Ивановна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 28 JUL 1953
+0 @I244@ INDI
+1 NAME Олег Андреевич /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 04 FEB 1949
+1 DEAT
+2 DATE 14 MAY 2016
+0 @I245@ INDI
+1 NAME Елена Павловна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 21 JUL 1969
+1 DEAT
+2 DATE 18 APR 2025
+0 @I246@ INDI
+1 NAME Максим Владимирович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 03 FEB 1970
+0 @I247@ INDI
+1 NAME Константин Михайлович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 04 JUL 1961
+1 DEAT
+2 DATE 11 JUN 2018
+0 @I248@ INDI
+1 NAME Валентина Дмитриевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 26 JUL 1956
+0 @I249@ INDI
+1 NAME Дарья Ивановна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 17 MAR 1963
+1 DEAT
+2 DATE 21 NOV 2021
+0 @I250@ INDI
+1 NAME Ирина Александровна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 08 FEB 1961
+1 DEAT
+2 DATE 06 JUN 2024
+0 @I251@ INDI
+1 NAME Екатерина Андреевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 12 JUL 1950
+1 DEAT
+2 DATE 13 AUG 2025
+0 @I252@ INDI
+1 NAME Анна Алексеевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 07 MAR 1950
+1 DEAT
+2 DATE 06 JUL 2016
+0 @I253@ INDI
+1 NAME Наталья Сергеевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 23 JAN 1950
+1 DEAT
+2 DATE 12 JUN 2018
+0 @I254@ INDI
+1 NAME Игорь Александрович /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 22 JUN 1957
+0 @I255@ INDI
+1 NAME Олег Сергеевич /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 13 OCT 1947
+1 DEAT
+2 DATE 14 SEP 2013
+0 @I256@ INDI
+1 NAME Ксения Андреевна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 20 JUL 1949
+1 DEAT
+2 DATE 17 APR 2020
+0 @I257@ INDI
+1 NAME Николай Андреевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 03 AUG 1965
+1 DEAT
+2 DATE 13 AUG 2021
+0 @I258@ INDI
+1 NAME Владимир Владимирович /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 22 SEP 1962
+0 @I259@ INDI
+1 NAME Дмитрий Сергеевич /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 17 AUG 1944
+1 DEAT
+2 DATE 07 NOV 2026
+0 @I260@ INDI
+1 NAME Ольга Сергеевна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 11 MAR 1937
+1 DEAT
+2 DATE 18 MAR 2007
+0 @I261@ INDI
+1 NAME Александр Дмитриевич /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 07 JUN 1936
+1 DEAT
+2 DATE 05 OCT 2021
+0 @I262@ INDI
+1 NAME Максим Иванович /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 01 MAR 1935
+1 DEAT
+2 DATE 18 OCT 2006
+0 @I263@ INDI
+1 NAME Елена Михайловна /Семенова/
+1 SEX F
+1 BIRT
+2 DATE 07 OCT 1950
+1 DEAT
+2 DATE 13 JUN 2024
+0 @I264@ INDI
+1 NAME Иван Владимирович /Соколов/
+1 SEX M
+1 BIRT
+2 DATE 27 JUN 1952
+0 @I265@ INDI
+1 NAME Полина Дмитриевна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 10 AUG 1956
+0 @I266@ INDI
+1 NAME Александр Сергеевич /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 05 JUN 1972
+0 @I267@ INDI
+1 NAME Евгений Николаевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 18 MAY 1966
+1 DEAT
+2 DATE 19 JUL 2017
+0 @I268@ INDI
+1 NAME Ирина Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 07 NOV 1959
+0 @I269@ INDI
+1 NAME Владимир Андреевич /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 28 APR 1947
+1 DEAT
+2 DATE 24 SEP 2024
+0 @I270@ INDI
+1 NAME Виктория Сергеевна /Алексеева/
+1 SEX F
+1 BIRT
+2 DATE 18 JUN 1969
+0 @I271@ INDI
+1 NAME Сергей Дмитриевич /Захаров/
+1 SEX M
+1 BIRT
+2 DATE 03 AUG 1958
+0 @I272@ INDI
+1 NAME Светлана Александровна /Алексеева/
+1 SEX F
+1 BIRT
+2 DATE 18 SEP 1953
+1 DEAT
+2 DATE 17 JAN 2021
+0 @I273@ INDI
+1 NAME Валентина Дмитриевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 14 APR 1956
+1 DEAT
+2 DATE 14 JUN 2017
+0 @I274@ INDI
+1 NAME Дарья Алексеевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 15 JUL 1956
+0 @I275@ INDI
+1 NAME Александр Николаевич /Волков/
+1 SEX M
+1 BIRT
+2 DATE 20 APR 1945
+1 DEAT
+2 DATE 14 DEC 2021
+0 @I276@ INDI
+1 NAME Анастасия Ивановна /Белова/
+1 SEX F
+1 BIRT
+2 DATE 14 MAY 1950
+1 DEAT
+2 DATE 07 OCT 2026
+0 @I277@ INDI
+1 NAME Ирина Михайловна /Волкова/
+1 SEX F
+1 BIRT
+2 DATE 08 JUN 1947
+1 DEAT
+2 DATE 01 JUL 2024
+0 @I278@ INDI
+1 NAME Михаил Павлович /Соколов/
+1 SEX M
+1 BIRT
+2 DATE 15 NOV 1958
+0 @I279@ INDI
+1 NAME Олег Михайлович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 03 NOV 1957
+1 DEAT
+2 DATE 17 APR 2024
+0 @I280@ INDI
+1 NAME Роман Михайлович /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 13 FEB 1957
+1 DEAT
+2 DATE 06 MAY 2018
+0 @I281@ INDI
+1 NAME Михаил Сергеевич /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 06 JUL 1965
+0 @I282@ INDI
+1 NAME Антон Павлович /Семенов/
+1 SEX M
+1 BIRT
+2 DATE 25 SEP 1962
+1 DEAT
+2 DATE 12 FEB 2022
+0 @I283@ INDI
+1 NAME Сергей Дмитриевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 09 FEB 1950
+1 DEAT
+2 DATE 11 APR 2025
+0 @I284@ INDI
+1 NAME Владимир Дмитриевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 18 JUL 1946
+1 DEAT
+2 DATE 02 NOV 2021
+0 @I285@ INDI
+1 NAME Ирина Алексеевна /Соколова/
+1 SEX F
+1 BIRT
+2 DATE 06 MAR 1945
+1 DEAT
+2 DATE 18 SEP 2020
+0 @I286@ INDI
+1 NAME Михаил Михайлович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 09 APR 1965
+0 @I287@ INDI
+1 NAME Михаил Николаевич /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 22 JUN 1958
+1 DEAT
+2 DATE 13 MAR 2016
+0 @I288@ INDI
+1 NAME Людмила Дмитриевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 10 FEB 1944
+1 DEAT
+2 DATE 26 JUL 2013
+0 @I289@ INDI
+1 NAME Елена Владимировна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 02 FEB 1938
+1 DEAT
+2 DATE 26 JAN 2015
+0 @I290@ INDI
+1 NAME Светлана Александровна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 16 JUN 1939
+1 DEAT
+2 DATE 18 DEC 2009
+0 @I291@ INDI
+1 NAME Ксения Алексеевна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 03 SEP 1956
+0 @I292@ INDI
+1 NAME Мария Сергеевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 14 FEB 1942
+1 DEAT
+2 DATE 16 AUG 2025
+0 @I293@ INDI
+1 NAME Евгений Александрович /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 05 JUN 1946
+1 DEAT
+2 DATE 26 JUL 2012
+0 @I294@ INDI
+1 NAME Анна Павловна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 14 AUG 1968
+0 @I295@ INDI
+1 NAME Евгений Михайлович /Волков/
+1 SEX M
+1 BIRT
+2 DATE 21 JUN 1940
+1 DEAT
+2 DATE 21 JUL 2010
+0 @I296@ INDI
+1 NAME Юлия Николаевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 24 AUG 1967
+1 DEAT
+2 DATE 13 AUG 2025
+0 @I297@ INDI
+1 NAME Алина Михайловна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 08 DEC 1960
+1 DEAT
+2 DATE 14 JUN 2017
+0 @I298@ INDI
+1 NAME Светлана Дмитриевна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 19 NOV 1956
+0 @I299@ INDI
+1 NAME Анна Сергеевна /Комарова/
+1 SEX F
+1 BIRT
+2 DATE 18 OCT 1946
+1 DEAT
+2 DATE 27 FEB 2018
+0 @I300@ INDI
+1 NAME Людмила Михайловна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 19 JAN 1941
+1 DEAT
+2 DATE 25 FEB 2019
+0 @I301@ INDI
+1 NAME Дмитрий Иванович /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 18 DEC 1950
+1 DEAT
+2 DATE 14 DEC 2026
+0 @I302@ INDI
+1 NAME Антон Андреевич /Соколов/
+1 SEX M
+1 BIRT
+2 DATE 03 DEC 1956
+0 @I303@ INDI
+1 NAME Константин Владимирович /Попов/
+1 SEX M
+1 BIRT
+2 DATE 10 MAY 1953
+1 DEAT
+2 DATE 18 JUL 2026
+0 @I304@ INDI
+1 NAME Дарья Ивановна /Соколова/
+1 SEX F
+1 BIRT
+2 DATE 03 MAY 1959
+0 @I305@ INDI
+1 NAME Иван Сергеевич /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 24 APR 1964
+0 @I306@ INDI
+1 NAME Виктория Михайловна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 22 FEB 1946
+1 DEAT
+2 DATE 25 MAY 2026
+0 @I307@ INDI
+1 NAME Александр Павлович /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 01 NOV 1939
+1 DEAT
+2 DATE 25 APR 2018
+0 @I308@ INDI
+1 NAME Алина Михайловна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 12 MAR 1953
+1 DEAT
+2 DATE 03 OCT 2026
+0 @I309@ INDI
+1 NAME Надежда Алексеевна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 23 MAR 1956
+0 @I310@ INDI
+1 NAME Максим Дмитриевич /Петров/
+1 SEX M
+1 BIRT
+2 DATE 03 JAN 1947
+1 DEAT
+2 DATE 26 AUG 2012
+0 @I311@ INDI
+1 NAME Алина Андреевна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 02 JUL 1947
+1 DEAT
+2 DATE 01 DEC 2016
+0 @I312@ INDI
+1 NAME Евгений Владимирович /Волков/
+1 SEX M
+1 BIRT
+2 DATE 23 FEB 1959
+1 DEAT
+2 DATE 02 FEB 2023
+0 @I313@ INDI
+1 NAME София Николаевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 02 MAY 1956
+0 @I314@ INDI
+1 NAME Виктор Владимирович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 26 APR 1960
+1 DEAT
+2 DATE 22 JAN 2017
+0 @I315@ INDI
+1 NAME Надежда Сергеевна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 21 APR 1945
+1 DEAT
+2 DATE 20 MAY 2026
+0 @I316@ INDI
+1 NAME Екатерина Николаевна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 12 SEP 1955
+0 @I317@ INDI
+1 NAME Светлана Сергеевна /Семенова/
+1 SEX F
+1 BIRT
+2 DATE 11 APR 1954
+1 DEAT
+2 DATE 23 DEC 2018
+0 @I318@ INDI
+1 NAME Константин Алексеевич /Белов/
+1 SEX M
+1 BIRT
+2 DATE 11 DEC 1963
+0 @I319@ INDI
+1 NAME Мария Павловна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 01 MAR 1947
+1 DEAT
+2 DATE 05 OCT 2020
+0 @I320@ INDI
+1 NAME Михаил Николаевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 28 SEP 1950
+1 DEAT
+2 DATE 15 JUL 2017
+0 @I321@ INDI
+1 NAME Николай Александрович /Белов/
+1 SEX M
+1 BIRT
+2 DATE 01 MAR 1965
+0 @I322@ INDI
+1 NAME Татьяна Николаевна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 18 APR 1955
+0 @I323@ INDI
+1 NAME Юрий Иванович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 15 OCT 1951
+0 @I324@ INDI
+1 NAME Людмила Павловна /Морозова/
+1 SEX F
+1 BIRT
+2 DATE 20 NOV 1944
+1 DEAT
+2 DATE 12 MAY 2009
+0 @I325@ INDI
+1 NAME София Сергеевна /Новикова/
+1 SEX F
+1 BIRT
+2 DATE 26 OCT 1959
+1 DEAT
+2 DATE 21 MAY 2019
+0 @I326@ INDI
+1 NAME Екатерина Михайловна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 15 OCT 1951
+1 DEAT
+2 DATE 28 JAN 2024
+0 @I327@ INDI
+1 NAME Юлия Владимировна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 27 JUL 1957
+1 DEAT
+2 DATE 28 FEB 2025
+0 @I328@ INDI
+1 NAME Антон Владимирович /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 04 MAR 1951
+1 DEAT
+2 DATE 24 NOV 2026
+0 @I329@ INDI
+1 NAME Сергей Владимирович /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 18 JAN 1958
+1 DEAT
+2 DATE 27 NOV 2025
+0 @I330@ INDI
+1 NAME Людмила Андреевна /Захарова/
+1 SEX F
+1 BIRT
+2 DATE 22 DEC 1949
+1 DEAT
+2 DATE 18 MAR 2023
+0 @I331@ INDI
+1 NAME Полина Андреевна /Орлова/
+1 SEX F
+1 BIRT
+2 DATE 14 OCT 1963
+0 @I332@ INDI
+1 NAME Роман Николаевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 21 MAY 1951
+0 @I333@ INDI
+1 NAME Андрей Алексеевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 09 DEC 1951
+1 DEAT
+2 DATE 11 OCT 2025
+0 @I334@ INDI
+1 NAME Юрий Иванович /Алексеев/
+1 SEX M
+1 BIRT
+2 DATE 26 APR 1945
+1 DEAT
+2 DATE 03 SEP 2023
+0 @I335@ INDI
+1 NAME Анастасия Дмитриевна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 20 JUN 1938
+1 DEAT
+2 DATE 11 JUL 2019
+0 @I336@ INDI
+1 NAME Евгений Сергеевич /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 08 JUN 1946
+1 DEAT
+2 DATE 12 SEP 2017
+0 @I337@ INDI
+1 NAME Андрей Сергеевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 12 JUL 1948
+1 DEAT
+2 DATE 09 NOV 2017
+0 @I338@ INDI
+1 NAME Михаил Павлович /Макаров/
+1 SEX M
+1 BIRT
+2 DATE 12 DEC 1951
+0 @I339@ INDI
+1 NAME Светлана Андреевна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 17 AUG 1946
+1 DEAT
+2 DATE 17 MAR 2019
+0 @I340@ INDI
+1 NAME Виктор Алексеевич /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 15 DEC 1957
+0 @I341@ INDI
+1 NAME Юлия Ивановна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 04 JUL 1949
+1 DEAT
+2 DATE 22 FEB 2026
+0 @I342@ INDI
+1 NAME Михаил Алексеевич /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 05 JAN 1956
+0 @I343@ INDI
+1 NAME Юрий Алексеевич /Кузнецов/
+1 SEX M
+1 BIRT
+2 DATE 10 JUN 1939
+1 DEAT
+2 DATE 10 FEB 2025
+0 @I344@ INDI
+1 NAME Евгений Николаевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 21 NOV 1954
+1 DEAT
+2 DATE 11 MAY 2017
+0 @I345@ INDI
+1 NAME Татьяна Михайловна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 20 MAY 1951
+0 @I346@ INDI
+1 NAME Татьяна Александровна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 02 AUG 1951
+1 DEAT
+2 DATE 22 APR 2020
+0 @I347@ INDI
+1 NAME Валентина Михайловна /Волкова/
+1 SEX F
+1 BIRT
+2 DATE 21 OCT 1962
+0 @I348@ INDI
+1 NAME Николай Павлович /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 06 JUL 1957
+0 @I349@ INDI
+1 NAME Наталья Владимировна /Алексеева/
+1 SEX F
+1 BIRT
+2 DATE 04 APR 1946
+1 DEAT
+2 DATE 10 SEP 2017
+0 @I350@ INDI
+1 NAME Елена Александровна /Белова/
+1 SEX F
+1 BIRT
+2 DATE 28 AUG 1941
+1 DEAT
+2 DATE 17 JUL 2020
+0 @I351@ INDI
+1 NAME Виктория Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 19 SEP 1955
+1 DEAT
+2 DATE 22 MAY 2022
+0 @I352@ INDI
+1 NAME Михаил Иванович /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 12 MAY 1955
+1 DEAT
+2 DATE 15 JUN 2020
+0 @I353@ INDI
+1 NAME Антон Николаевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 27 SEP 1952
+0 @I354@ INDI
+1 NAME Евгений Владимирович /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 15 JUL 1946
+1 DEAT
+2 DATE 21 MAR 2024
+0 @I355@ INDI
+1 NAME Татьяна Николаевна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 08 FEB 1948
+1 DEAT
+2 DATE 27 JUN 2015
+0 @I356@ INDI
+1 NAME Полина Ивановна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 25 OCT 1951
+0 @I357@ INDI
+1 NAME Анастасия Дмитриевна /Федорова/
+1 SEX F
+1 BIRT
+2 DATE 05 APR 1949
+1 DEAT
+2 DATE 09 JUL 2023
+0 @I358@ INDI
+1 NAME Игорь Андреевич /Захаров/
+1 SEX M
+1 BIRT
+2 DATE 07 SEP 1959
+0 @I359@ INDI
+1 NAME Людмила Владимировна /Смирнова/
+1 SEX F
+1 BIRT
+2 DATE 06 SEP 1959
+1 DEAT
+2 DATE 15 NOV 2016
+0 @I360@ INDI
+1 NAME Александр Алексеевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 25 SEP 1960
+0 @I361@ INDI
+1 NAME Светлана Александровна /Попова/
+1 SEX F
+1 BIRT
+2 DATE 23 AUG 1963
+0 @I362@ INDI
+1 NAME Людмила Сергеевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 24 OCT 1961
+1 DEAT
+2 DATE 06 MAR 2025
+0 @I363@ INDI
+1 NAME Дмитрий Иванович /Белов/
+1 SEX M
+1 BIRT
+2 DATE 13 MAY 1939
+1 DEAT
+2 DATE 24 FEB 2011
+0 @I364@ INDI
+1 NAME Валентина Ивановна /Петрова/
+1 SEX F
+1 BIRT
+2 DATE 10 JAN 1937
+1 DEAT
+2 DATE 01 OCT 2006
+0 @I365@ INDI
+1 NAME Елена Павловна /Захарова/
+1 SEX F
+1 BIRT
+2 DATE 20 SEP 1964
+0 @I366@ INDI
+1 NAME Татьяна Сергеевна /Кузнецова/
+1 SEX F
+1 BIRT
+2 DATE 03 MAR 1945
+1 DEAT
+2 DATE 27 JAN 2022
+0 @I367@ INDI
+1 NAME Мария Владимировна /Макарова/
+1 SEX F
+1 BIRT
+2 DATE 28 MAR 1947
+1 DEAT
+2 DATE 17 NOV 2019
+0 @I368@ INDI
+1 NAME Виктория Алексеевна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 01 NOV 1952
+1 DEAT
+2 DATE 13 AUG 2020
+0 @I369@ INDI
+1 NAME Юрий Андреевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 04 DEC 1930
+1 DEAT
+2 DATE 06 JUN 2005
+0 @I370@ INDI
+1 NAME Алексей Павлович /Новиков/
+1 SEX M
+1 BIRT
+2 DATE 16 NOV 1953
+0 @I371@ INDI
+1 NAME Дарья Ивановна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 25 AUG 1935
+1 DEAT
+2 DATE 21 JAN 2008
+0 @I372@ INDI
+1 NAME Дмитрий Сергеевич /Комаров/
+1 SEX M
+1 BIRT
+2 DATE 19 NOV 1938
+1 DEAT
+2 DATE 04 DEC 2009
+0 @I373@ INDI
+1 NAME Антон Дмитриевич /Семенов/
+1 SEX M
+1 BIRT
+2 DATE 24 JUL 1971
+0 @I374@ INDI
+1 NAME Юрий Дмитриевич /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 01 MAY 1952
+0 @I375@ INDI
+1 NAME Игорь Андреевич /Федоров/
+1 SEX M
+1 BIRT
+2 DATE 25 SEP 1949
+1 DEAT
+2 DATE 21 APR 2025
+0 @I376@ INDI
+1 NAME Михаил Михайлович /Лебедев/
+1 SEX M
+1 BIRT
+2 DATE 11 FEB 1954
+0 @I377@ INDI
+1 NAME Константин Павлович /Медведев/
+1 SEX M
+1 BIRT
+2 DATE 20 DEC 1956
+0 @I378@ INDI
+1 NAME Евгений Александрович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 27 MAR 1938
+1 DEAT
+2 DATE 21 JUL 2010
+0 @I379@ INDI
+1 NAME Юрий Дмитриевич /Козлов/
+1 SEX M
+1 BIRT
+2 DATE 24 JAN 1956
+0 @I380@ INDI
+1 NAME Андрей Андреевич /Морозов/
+1 SEX M
+1 BIRT
+2 DATE 12 OCT 1963
+1 DEAT
+2 DATE 28 JUL 2017
+0 @I381@ INDI
+1 NAME Алексей Сергеевич /Семенов/
+1 SEX M
+1 BIRT
+2 DATE 27 JUL 1954
+0 @I382@ INDI
+1 NAME Светлана Дмитриевна /Семенова/
+1 SEX F
+1 BIRT
+2 DATE 05 FEB 1954
+1 DEAT
+2 DATE 07 JUL 2024
+0 @I383@ INDI
+1 NAME Людмила Павловна /Лебедева/
+1 SEX F
+1 BIRT
+2 DATE 11 MAY 1959
+0 @I384@ INDI
+1 NAME Игорь Александрович /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 09 OCT 1951
+0 @I385@ INDI
+1 NAME Ксения Андреевна /Белова/
+1 SEX F
+1 BIRT
+2 DATE 08 MAY 1934
+1 DEAT
+2 DATE 28 JUN 2014
+0 @I386@ INDI
+1 NAME Михаил Александрович /Смирнов/
+1 SEX M
+1 BIRT
+2 DATE 25 FEB 1957
+0 @I387@ INDI
+1 NAME Михаил Алексеевич /Орлов/
+1 SEX M
+1 BIRT
+2 DATE 21 DEC 1944
+1 DEAT
+2 DATE 01 MAY 2009
+0 @I388@ INDI
+1 NAME Ольга Дмитриевна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 28 DEC 1960
+0 @I389@ INDI
+1 NAME Людмила Владимировна /Иванова/
+1 SEX F
+1 BIRT
+2 DATE 12 JUN 1965
+1 DEAT
+2 DATE 25 JUN 2020
+0 @I390@ INDI
+1 NAME Татьяна Николаевна /Захарова/
+1 SEX F
+1 BIRT
+2 DATE 23 JAN 1963
+1 DEAT
+2 DATE 17 OCT 2016
+0 @I391@ INDI
+1 NAME Константин Дмитриевич /Иванов/
+1 SEX M
+1 BIRT
+2 DATE 13 AUG 1948
+1 DEAT
+2 DATE 09 NOV 2024
+0 @I392@ INDI
+1 NAME Николай Алексеевич /Попов/
+1 SEX M
+1 BIRT
+2 DATE 06 FEB 1941
+1 DEAT
+2 DATE 06 OCT 2012
+0 @I393@ INDI
+1 NAME София Николаевна /Медведева/
+1 SEX F
+1 BIRT
+2 DATE 07 APR 1965
+1 DEAT
+2 DATE 14 AUG 2016
+0 @I394@ INDI
+1 NAME Виктор Иванович /Петров/
+1 SEX M
+1 BIRT
+2 DATE 22 JAN 1952
+0 @I395@ INDI
+1 NAME Анастасия Андреевна /Волкова/
+1 SEX F
+1 BIRT
+2 DATE 02 APR 1956
+0 @I396@ INDI
+1 NAME Иван Андреевич /Белов/
+1 SEX M
+1 BIRT
+2 DATE 12 JUN 1964
+1 DEAT
+2 DATE 24 AUG 2023
+0 @I397@ INDI
+1 NAME Татьяна Андреевна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 04 MAR 1983
+0 @I398@ INDI
+1 NAME Людмила Николаевна /Козлова/
+1 SEX F
+1 BIRT
+2 DATE 09 JUN 1976
+0 @I399@ INDI
+1 NAME Антон Андреевич /Соколов/
+1 SEX M
+1 BIRT
+2 DATE 16 APR 1974
+0 @I400@ INDI
+1 NAME Алексей Иванович /Соколов/
+1 SEX M
+1 BIRT
+2 DATE 10 AUG 1972
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 01 JAN 1907
+1 CHIL @I3@
+1 CHIL @I5@
+1 CHIL @I7@
+1 CHIL @I9@
+1 CHIL @I11@
+1 CHIL @I13@
+1 CHIL @I15@
+1 CHIL @I17@
+1 CHIL @I19@
+1 CHIL @I21@
+1 CHIL @I23@
+1 CHIL @I25@
+1 CHIL @I27@
+1 CHIL @I29@
+1 CHIL @I31@
+0 @F2@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 03 JUL 1920
+1 CHIL @I33@
+1 CHIL @I34@
+1 CHIL @I35@
+0 @F3@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+1 MARR
+2 DATE 07 JUL 1908
+1 CHIL @I36@
+1 CHIL @I37@
+0 @F4@ FAM
+1 HUSB @I5@
+1 WIFE @I6@
+1 MARR
+2 DATE 25 JAN 1915
+1 CHIL @I38@
+1 CHIL @I39@
+1 CHIL @I40@
+1 CHIL @I41@
+0 @F5@ FAM
+1 HUSB @I7@
+1 WIFE @I8@
+1 MARR
+2 DATE 25 SEP 1927
+1 CHIL @I42@
+1 CHIL @I43@
+0 @F6@ FAM
+1 HUSB @I9@
+1 WIFE @I10@
+1 MARR
+2 DATE 22 FEB 1923
+1 CHIL @I44@
+1 CHIL @I45@
+0 @F7@ FAM
+1 HUSB @I11@
+1 WIFE @I12@
+1 MARR
+2 DATE 16 DEC 1930
+1 CHIL @I46@
+1 CHIL @I47@
+1 CHIL @I48@
+1 CHIL @I49@
+0 @F8@ FAM
+1 HUSB @I13@
+1 WIFE @I14@
+1 MARR
+2 DATE 12 JUN 1923
+1 CHIL @I50@
+1 CHIL @I51@
+0 @F9@ FAM
+1 HUSB @I15@
+1 WIFE @I16@
+1 MARR
+2 DATE 11 OCT 1923
+1 CHIL @I52@
+1 CHIL @I53@
+1 CHIL @I54@
+1 CHIL @I55@
+0 @F10@ FAM
+1 HUSB @I17@
+1 WIFE @I18@
+1 MARR
+2 DATE 26 MAR 1928
+1 CHIL @I56@
+1 CHIL @I57@
+1 CHIL @I58@
+1 CHIL @I59@
+0 @F11@ FAM
+1 HUSB @I19@
+1 WIFE @I20@
+1 MARR
+2 DATE 18 MAY 1920
+1 CHIL @I60@
+1 CHIL @I61@
+1 CHIL @I62@
+0 @F12@ FAM
+1 HUSB @I21@
+1 WIFE @I22@
+1 MARR
+2 DATE 12 NOV 1927
+1 CHIL @I63@
+1 CHIL @I64@
+1 CHIL @I65@
+0 @F13@ FAM
+1 HUSB @I23@
+1 WIFE @I24@
+1 MARR
+2 DATE 26 MAR 1923
+1 CHIL @I66@
+1 CHIL @I67@
+1 CHIL @I68@
+1 CHIL @I69@
+0 @F14@ FAM
+1 HUSB @I25@
+1 WIFE @I26@
+1 MARR
+2 DATE 06 MAY 1924
+1 CHIL @I70@
+1 CHIL @I71@
+1 CHIL @I72@
+0 @F15@ FAM
+1 HUSB @I27@
+1 WIFE @I28@
+1 MARR
+2 DATE 12 APR 1922
+1 CHIL @I73@
+1 CHIL @I74@
+0 @F16@ FAM
+1 HUSB @I29@
+1 WIFE @I30@
+1 MARR
+2 DATE 16 JUL 1932
+1 CHIL @I75@
+1 CHIL @I76@
+1 CHIL @I77@
+1 CHIL @I78@
+0 @F17@ FAM
+1 HUSB @I31@
+1 WIFE @I32@
+1 MARR
+2 DATE 26 JUN 1917
+1 CHIL @I79@
+1 CHIL @I80@
+0 @F18@ FAM
+1 HUSB @I81@
+1 WIFE @I75@
+1 MARR
+2 DATE 26 JUN 1952
+1 CHIL @I129@
+1 CHIL @I130@
+0 @F19@ FAM
+1 HUSB @I37@
+1 WIFE @I82@
+1 MARR
+2 DATE 04 AUG 1929
+1 CHIL @I131@
+1 CHIL @I132@
+1 CHIL @I133@
+0 @F20@ FAM
+1 HUSB @I68@
+1 WIFE @I83@
+1 MARR
+2 DATE 02 OCT 1957
+1 CHIL @I134@
+1 CHIL @I135@
+1 CHIL @I136@
+0 @F21@ FAM
+1 HUSB @I76@
+1 WIFE @I84@
+1 MARR
+2 DATE 15 OCT 1953
+1 CHIL @I137@
+1 CHIL @I138@
+0 @F22@ FAM
+1 HUSB @I85@
+1 WIFE @I77@
+1 MARR
+2 DATE 16 JAN 1956
+1 CHIL @I139@
+1 CHIL @I140@
+1 CHIL @I141@
+0 @F23@ FAM
+1 HUSB @I86@
+1 WIFE @I49@
+1 MARR
+2 DATE 16 APR 1957
+1 CHIL @I142@
+1 CHIL @I143@
+1 CHIL @I144@
+1 CHIL @I145@
+0 @F24@ FAM
+1 HUSB @I62@
+1 WIFE @I87@
+1 MARR
+2 DATE 28 SEP 1945
+1 CHIL @I146@
+1 CHIL @I147@
+0 @F25@ FAM
+1 HUSB @I34@
+1 WIFE @I88@
+1 MARR
+2 DATE 01 OCT 1951
+1 CHIL @I148@
+1 CHIL @I149@
+0 @F26@ FAM
+1 HUSB @I41@
+1 WIFE @I89@
+1 MARR
+2 DATE 13 OCT 1947
+1 CHIL @I150@
+1 CHIL @I151@
+1 CHIL @I152@
+0 @F27@ FAM
+1 HUSB @I90@
+1 WIFE @I73@
+1 MARR
+2 DATE 13 NOV 1951
+1 CHIL @I153@
+1 CHIL @I154@
+1 CHIL @I155@
+0 @F28@ FAM
+1 HUSB @I71@
+1 WIFE @I91@
+1 MARR
+2 DATE 10 MAR 1948
+1 CHIL @I156@
+1 CHIL @I157@
+0 @F29@ FAM
+1 HUSB @I92@
+1 WIFE @I33@
+1 MARR
+2 DATE 28 DEC 1954
+1 CHIL @I158@
+1 CHIL @I159@
+0 @F30@ FAM
+1 HUSB @I74@
+1 WIFE @I93@
+1 MARR
+2 DATE 03 NOV 1949
+1 CHIL @I160@
+1 CHIL @I161@
+0 @F31@ FAM
+1 HUSB @I56@
+1 WIFE @I94@
+1 MARR
+2 DATE 19 JAN 1959
+1 CHIL @I162@
+1 CHIL @I163@
+1 CHIL @I164@
+1 CHIL @I165@
+0 @F32@ FAM
+1 HUSB @I95@
+1 WIFE @I61@
+1 MARR
+2 DATE 24 JAN 1936
+1 CHIL @I166@
+1 CHIL @I167@
+1 CHIL @I168@
+0 @F33@ FAM
+1 HUSB @I53@
+1 WIFE @I96@
+1 MARR
+2 DATE 20 JAN 1958
+1 CHIL @I169@
+1 CHIL @I170@
+0 @F34@ FAM
+1 HUSB @I67@
+1 WIFE @I97@
+1 MARR
+2 DATE 09 AUG 1949
+1 CHIL @I171@
+1 CHIL @I172@
+0 @F35@ FAM
+1 HUSB @I98@
+1 WIFE @I70@
+1 MARR
+2 DATE 09 DEC 1948
+1 CHIL @I173@
+1 CHIL @I174@
+0 @F36@ FAM
+1 HUSB @I99@
+1 WIFE @I72@
+1 MARR
+2 DATE 09 APR 1945
+1 CHIL @I175@
+1 CHIL @I176@
+0 @F37@ FAM
+1 HUSB @I100@
+1 WIFE @I40@
+1 MARR
+2 DATE 23 JAN 1935
+1 CHIL @I177@
+1 CHIL @I178@
+1 CHIL @I179@
+1 CHIL @I180@
+0 @F38@ FAM
+1 HUSB @I101@
+1 WIFE @I65@
+1 MARR
+2 DATE 25 JUN 1959
+1 CHIL @I181@
+1 CHIL @I182@
+0 @F39@ FAM
+1 HUSB @I39@
+1 WIFE @I102@
+1 MARR
+2 DATE 17 SEP 1941
+1 CHIL @I183@
+1 CHIL @I184@
+0 @F40@ FAM
+1 HUSB @I80@
+1 WIFE @I103@
+1 MARR
+2 DATE 28 NOV 1952
+1 CHIL @I185@
+1 CHIL @I186@
+0 @F41@ FAM
+1 HUSB @I78@
+1 WIFE @I104@
+1 MARR
+2 DATE 26 AUG 1946
+1 CHIL @I187@
+1 CHIL @I188@
+0 @F42@ FAM
+1 HUSB @I105@
+1 WIFE @I50@
+1 MARR
+2 DATE 28 MAY 1950
+1 CHIL @I189@
+1 CHIL @I190@
+1 CHIL @I191@
+0 @F43@ FAM
+1 HUSB @I106@
+1 WIFE @I44@
+1 MARR
+2 DATE 19 SEP 1954
+1 CHIL @I192@
+1 CHIL @I193@
+1 CHIL @I194@
+1 CHIL @I195@
+0 @F44@ FAM
+1 HUSB @I43@
+1 WIFE @I107@
+1 MARR
+2 DATE 20 OCT 1950
+1 CHIL @I196@
+1 CHIL @I197@
+1 CHIL @I198@
+0 @F45@ FAM
+1 HUSB @I108@
+1 WIFE @I55@
+1 MARR
+2 DATE 12 APR 1956
+1 CHIL @I199@
+1 CHIL @I200@
+0 @F46@ FAM
+1 HUSB @I51@
+1 WIFE @I109@
+1 MARR
+2 DATE 11 OCT 1952
+1 CHIL @I201@
+1 CHIL @I202@
+1 CHIL @I203@
+1 CHIL @I204@
+0 @F47@ FAM
+1 HUSB @I110@
+1 WIFE @I36@
+1 MARR
+2 DATE 03 JAN 1943
+1 CHIL @I205@
+1 CHIL @I206@
+1 CHIL @I207@
+0 @F48@ FAM
+1 HUSB @I57@
+1 WIFE @I111@
+1 MARR
+2 DATE 01 MAY 1953
+1 CHIL @I208@
+1 CHIL @I209@
+1 CHIL @I210@
+1 CHIL @I211@
+0 @F49@ FAM
+1 HUSB @I79@
+1 WIFE @I112@
+1 MARR
+2 DATE 11 APR 1946
+1 CHIL @I212@
+1 CHIL @I213@
+0 @F50@ FAM
+1 HUSB @I113@
+1 WIFE @I63@
+1 MARR
+2 DATE 16 MAY 1955
+1 CHIL @I214@
+1 CHIL @I215@
+0 @F51@ FAM
+1 HUSB @I42@
+1 WIFE @I114@
+1 MARR
+2 DATE 21 FEB 1949
+1 CHIL @I216@
+1 CHIL @I217@
+1 CHIL @I218@
+0 @F52@ FAM
+1 HUSB @I52@
+1 WIFE @I115@
+1 MARR
+2 DATE 14 FEB 1961
+1 CHIL @I219@
+1 CHIL @I220@
+1 CHIL @I221@
+0 @F53@ FAM
+1 HUSB @I35@
+1 WIFE @I116@
+1 MARR
+2 DATE 19 JAN 1949
+1 CHIL @I222@
+1 CHIL @I223@
+1 CHIL @I224@
+0 @F54@ FAM
+1 HUSB @I117@
+1 WIFE @I45@
+1 MARR
+2 DATE 04 OCT 1942
+1 CHIL @I225@
+1 CHIL @I226@
+1 CHIL @I227@
+0 @F55@ FAM
+1 HUSB @I118@
+1 WIFE @I58@
+1 MARR
+2 DATE 09 JUL 1956
+1 CHIL @I228@
+1 CHIL @I229@
+1 CHIL @I230@
+1 CHIL @I231@
+0 @F56@ FAM
+1 HUSB @I119@
+1 WIFE @I46@
+1 MARR
+2 DATE 15 AUG 1956
+1 CHIL @I232@
+1 CHIL @I233@
+1 CHIL @I234@
+1 CHIL @I235@
+0 @F57@ FAM
+1 HUSB @I120@
+1 WIFE @I66@
+1 MARR
+2 DATE 10 AUG 1943
+1 CHIL @I236@
+1 CHIL @I237@
+1 CHIL @I238@
+0 @F58@ FAM
+1 HUSB @I60@
+1 WIFE @I121@
+1 MARR
+2 DATE 24 JUN 1941
+1 CHIL @I239@
+1 CHIL @I240@
+1 CHIL @I241@
+1 CHIL @I242@
+0 @F59@ FAM
+1 HUSB @I69@
+1 WIFE @I122@
+1 MARR
+2 DATE 04 JUN 1943
+1 CHIL @I243@
+1 CHIL @I244@
+0 @F60@ FAM
+1 HUSB @I54@
+1 WIFE @I123@
+1 MARR
+2 DATE 09 FEB 1956
+1 CHIL @I245@
+1 CHIL @I246@
+1 CHIL @I247@
+0 @F61@ FAM
+1 HUSB @I48@
+1 WIFE @I124@
+1 MARR
+2 DATE 03 OCT 1955
+1 CHIL @I248@
+1 CHIL @I249@
+0 @F62@ FAM
+1 HUSB @I125@
+1 WIFE @I47@
+1 MARR
+2 DATE 04 JUN 1946
+1 CHIL @I250@
+1 CHIL @I251@
+1 CHIL @I252@
+1 CHIL @I253@
+0 @F63@ FAM
+1 HUSB @I64@
+1 WIFE @I126@
+1 MARR
+2 DATE 07 FEB 1953
+1 CHIL @I254@
+1 CHIL @I255@
+1 CHIL @I256@
+0 @F64@ FAM
+1 HUSB @I59@
+1 WIFE @I127@
+1 MARR
+2 DATE 01 MAR 1956
+1 CHIL @I257@
+1 CHIL @I258@
+0 @F65@ FAM
+1 HUSB @I128@
+1 WIFE @I38@
+1 MARR
+2 DATE 02 SEP 1933
+1 CHIL @I259@
+1 CHIL @I260@
+1 CHIL @I261@
+1 CHIL @I262@
+0 @F66@ FAM
+1 HUSB @I255@
+1 WIFE @I263@
+1 MARR
+2 DATE 22 JUN 1974
+1 CHIL @I397@
+1 CHIL @I398@
+0 @F67@ FAM
+1 HUSB @I264@
+1 WIFE @I256@
+1 MARR
+2 DATE 14 FEB 1980
+1 CHIL @I399@
+1 CHIL @I400@
+0 TRLR

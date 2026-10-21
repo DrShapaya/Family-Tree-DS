@@ -32,6 +32,10 @@ public final class TreeFileOpenActivity extends Activity {
 
         if (source != null) {
             Uri uri = source.getData();
+            if (uri == null && Intent.ACTION_SEND.equals(source.getAction())) {
+                Object extra = source.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (extra instanceof Uri) uri = (Uri) extra;
+            }
             String type = source.getType();
             if (type == null) target.setData(uri);
             else target.setDataAndType(uri, type);

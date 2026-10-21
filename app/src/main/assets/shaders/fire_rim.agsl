@@ -1,0 +1,11 @@
+half4 main(float2 p) {
+    float2 c=cardSize*.5;
+    float shimmer=floor(255.*(.92+.08*sin(seconds*2.4+phase))+.5)/255.;
+    float d=roundDistance(p,c,c-1.,10.);
+    float4 result=ink(float3(1.,59./255.,0.),65./255.,cover(abs(d)-6.));
+    d=roundDistance(p,c,c,10.);
+    result=over(result,ink(float3(1.,107./255.,0.),220./255.,cover(abs(d)-3.)));
+    result=over(result,ink(float3(1.,214./255.,33./255.),shimmer,cover(abs(d)-1.45)));
+    d=roundDistance(p,c,c-.8,9.);
+    return half4(over(result,ink(float3(1.,251./255.,166./255.),1.,cover(abs(d)-.55))));
+}

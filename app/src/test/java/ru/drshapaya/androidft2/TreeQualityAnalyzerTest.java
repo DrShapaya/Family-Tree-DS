@@ -121,6 +121,49 @@ public final class TreeQualityAnalyzerTest {
         assertEquals(1, report.countCategory(TreeQualityAnalyzer.CATEGORY_MEMORY));
     }
 
+    @Test
+    public void cyclicParentRelationIsError() {
+        TreeState state = new TreeState();
+        Person first = person("first", "Первый", "1950");
+        Person second = person("second", "Второй", "1970");
+        Person third = person("third", "Третий", "1990");
+        state.people.put(first.id, first);
+        state.people.put(second.id, second);
+        state.people.put(third.id, third);
+        state.rootId = first.id;
+        state.links.add(new Relation("r1", "parent", first.id, second.id));
+        state.links.add(new Relation("r2", "parent", second.id, third.id));
+        state.links.add(new Relation("r3", "parent", third.id, first.id));
+
+        TreeQualityAnalyzer.TreeReport report = TreeQualityAnalyzer.analyze(state);
+
+        assertTrue(report.person(first.id).countCategory(
+            TreeQualityAnalyzer.CATEGORY_RELATIONS) > 0);
+    }
+
+    @Test(timeout = 5_000L)
+    public void deepImportedTreeQualityCheckDoesNotBlockUi() {
+        TreeState state = new TreeState();
+        int peopleCount = 1_000;
+        for (int index = 0; index < peopleCount; index++) {
+            Person current = person("p" + index, "Человек " + index, "");
+            state.people.put(current.id, current);
+            if (index > 0) {
+                state.links.add(new Relation(
+                    "r" + index,
+                    "parent",
+                    "p" + (index - 1),
+                    current.id));
+            }
+        }
+        state.rootId = "p0";
+
+        TreeQualityAnalyzer.TreeReport report = TreeQualityAnalyzer.analyze(state);
+
+        assertEquals(peopleCount, report.people.size());
+        assertEquals(0, report.errors());
+    }
+
     private static Person person(String id, String name, String bornYear) {
         Person person = new Person(id);
         person.name = name;

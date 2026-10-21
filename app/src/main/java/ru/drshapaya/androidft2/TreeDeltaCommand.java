@@ -23,6 +23,7 @@ final class TreeDeltaCommand implements TreeCommand {
     private final List<Guide> afterGuides;
     private final Metadata beforeMetadata;
     private final Metadata afterMetadata;
+    private final TreeAlbumSnapshot beforeAlbums, afterAlbums;
     private final int estimatedBytes;
 
     static TreeDeltaCommand between(TreeState before, TreeState after, String label) {
@@ -68,6 +69,14 @@ final class TreeDeltaCommand implements TreeCommand {
         }
         beforeMetadata = new Metadata(before);
         afterMetadata = new Metadata(after);
+        if (TreeAlbumSnapshot.same(before, after)) {
+            beforeAlbums = afterAlbums = null;
+        } else {
+            beforeAlbums = new TreeAlbumSnapshot(before);
+            afterAlbums = new TreeAlbumSnapshot(after);
+            estimate = (int) Math.min(Integer.MAX_VALUE, (long) estimate
+                + beforeAlbums.estimatedBytes() + afterAlbums.estimatedBytes());
+        }
         estimatedBytes = Math.max(256, estimate);
     }
 
@@ -75,17 +84,20 @@ final class TreeDeltaCommand implements TreeCommand {
         return changedPersonIds.isEmpty()
             && beforeLinks == null
             && beforeGuides == null
+            && beforeAlbums == null
             && beforeMetadata.same(afterMetadata);
     }
 
     @Override
     public void undo(TreeState state) {
         apply(state, beforePeople, beforeLinks, beforeGuides, beforeMetadata);
+        if (beforeAlbums != null) beforeAlbums.apply(state);
     }
 
     @Override
     public void redo(TreeState state) {
         apply(state, afterPeople, afterLinks, afterGuides, afterMetadata);
+        if (afterAlbums != null) afterAlbums.apply(state);
     }
 
     @Override
@@ -166,6 +178,7 @@ final class TreeDeltaCommand implements TreeCommand {
         if (a == null || b == null) return false;
         return Objects.equals(a.id, b.id)
             && Objects.equals(a.name, b.name)
+            && PersonNames.equal(a, b)
             && Objects.equals(a.born, b.born)
             && Objects.equals(a.died, b.died)
             && Objects.equals(a.bornDay, b.bornDay)
@@ -183,6 +196,7 @@ final class TreeDeltaCommand implements TreeCommand {
             && Float.compare(a.avatarOffsetY, b.avatarOffsetY) == 0
             && Objects.equals(a.gender, b.gender)
             && a.genderManual == b.genderManual
+            && Objects.equals(a.lifeStatus, b.lifeStatus)
             && Objects.equals(a.colorMode, b.colorMode)
             && Objects.equals(a.manualColor, b.manualColor)
             && a.color == b.color
@@ -231,6 +245,7 @@ final class TreeDeltaCommand implements TreeCommand {
 
     private static int estimatePerson(Person person) {
         int size = 256;
+        size += length(person.surname) + length(person.givenName) + length(person.patronymic) + length(person.maidenName);
         size += length(person.name) + length(person.born) + length(person.died);
         size += length(person.place) + length(person.notes) + length(person.photoMediaId);
         size += length(person.photo) + length(person.gender) + length(person.manualColor);
@@ -264,12 +279,15 @@ final class TreeDeltaCommand implements TreeCommand {
         final boolean onboardingOffered;
         final boolean guidesVisible;
         final boolean hideCardDetails;
+        final boolean useMaidenNames, showQualityBadge, showLifeStatusBadge;
+        final String lifeStatusAppearance;
         final boolean compactCards;
         final boolean focusTree;
         final boolean autoArrangeOnAdd;
         final int workspaceWidth;
         final int workspaceHeight;
         final String parentLineMode;
+        final String familyLineMode;
 
         Metadata(TreeState state) {
             rootId = state.rootId;
@@ -287,12 +305,17 @@ final class TreeDeltaCommand implements TreeCommand {
             onboardingOffered = state.onboardingOffered;
             guidesVisible = state.guidesVisible;
             hideCardDetails = state.hideCardDetails;
+            useMaidenNames = state.useMaidenNames;
+            showQualityBadge = state.showQualityBadge;
+            showLifeStatusBadge = state.showLifeStatusBadge;
+            lifeStatusAppearance = state.lifeStatusAppearance.encode();
             compactCards = state.compactCards;
             focusTree = state.focusTree;
             autoArrangeOnAdd = state.autoArrangeOnAdd;
             workspaceWidth = state.workspaceWidth;
             workspaceHeight = state.workspaceHeight;
             parentLineMode = state.parentLineMode;
+            familyLineMode = state.familyLineMode;
         }
 
         boolean same(Metadata other) {
@@ -312,12 +335,17 @@ final class TreeDeltaCommand implements TreeCommand {
                 && onboardingOffered == other.onboardingOffered
                 && guidesVisible == other.guidesVisible
                 && hideCardDetails == other.hideCardDetails
+                && useMaidenNames == other.useMaidenNames
+                && showQualityBadge == other.showQualityBadge
+                && showLifeStatusBadge == other.showLifeStatusBadge
+                && Objects.equals(lifeStatusAppearance, other.lifeStatusAppearance)
                 && compactCards == other.compactCards
                 && focusTree == other.focusTree
                 && autoArrangeOnAdd == other.autoArrangeOnAdd
                 && workspaceWidth == other.workspaceWidth
                 && workspaceHeight == other.workspaceHeight
-                && Objects.equals(parentLineMode, other.parentLineMode);
+                && Objects.equals(parentLineMode, other.parentLineMode)
+                && Objects.equals(familyLineMode, other.familyLineMode);
         }
 
         void apply(TreeState state) {
@@ -336,12 +364,17 @@ final class TreeDeltaCommand implements TreeCommand {
             state.onboardingOffered = onboardingOffered;
             state.guidesVisible = guidesVisible;
             state.hideCardDetails = hideCardDetails;
+            state.useMaidenNames = useMaidenNames;
+            state.showQualityBadge = showQualityBadge;
+            state.showLifeStatusBadge = showLifeStatusBadge;
+            state.lifeStatusAppearance = LifeStatusAppearance.decode(lifeStatusAppearance);
             state.compactCards = compactCards;
             state.focusTree = focusTree;
             state.autoArrangeOnAdd = autoArrangeOnAdd;
             state.workspaceWidth = workspaceWidth;
             state.workspaceHeight = workspaceHeight;
             state.parentLineMode = parentLineMode;
+            state.familyLineMode = familyLineMode;
         }
     }
 }

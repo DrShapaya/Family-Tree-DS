@@ -1,0 +1,21 @@
+<resources>
+    <style name="AppLaunchTheme" parent="AppTheme">
+        <item name="android:windowBackground">@color/startup_background</item>
+        <item name="android:statusBarColor">@color/startup_background</item>
+        <item name="android:navigationBarColor">@color/startup_background</item>
+        <item name="android:windowLightStatusBar">@bool/startup_light_bars</item>
+        <item name="android:windowSplashScreenBackground">@color/startup_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/startup_empty_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+    <style name="AppLaunchThemeDark" parent="AppThemeDark">
+        <item name="android:windowBackground">#10171B</item>
+        <item name="android:statusBarColor">#10171B</item>
+        <item name="android:navigationBarColor">#10171B</item>
+        <item name="android:windowSplashScreenBackground">#10171B</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/startup_empty_icon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+</resources>

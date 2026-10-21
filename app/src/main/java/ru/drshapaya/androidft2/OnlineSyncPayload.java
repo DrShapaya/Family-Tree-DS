@@ -15,6 +15,12 @@ final class OnlineSyncPayload {
         JSONObject result = source == null
             ? new JSONObject()
             : new JSONObject(source.toString());
+        return fromOwnedTreeJson(result);
+    }
+
+    /** Takes exclusive ownership; avoids serializing and reparsing a freshly built document. */
+    static JSONObject fromOwnedTreeJson(JSONObject result) {
+        if (result == null) result = new JSONObject();
         result.remove("settings");
         result.remove("selectedId");
         result.remove("exportedAt");
@@ -23,6 +29,6 @@ final class OnlineSyncPayload {
     }
 
     static String fromTreeJson(String source) throws Exception {
-        return fromTreeJson(new JSONObject(source == null ? "{}" : source)).toString();
+        return fromOwnedTreeJson(new JSONObject(source == null ? "{}" : source)).toString();
     }
 }

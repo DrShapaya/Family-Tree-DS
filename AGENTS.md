@@ -1,0 +1,1 @@
+For structural questions about this Android app, use the `codebase_memory` MCP index to find symbols, callers, and affected code. Check index status or coverage when freshness matters, and confirm important results in the source files. Use direct file search for simple, known-file edits.

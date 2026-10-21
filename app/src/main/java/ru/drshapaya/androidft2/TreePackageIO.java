@@ -153,6 +153,11 @@ final class TreePackageIO {
         return state;
     }
 
+    static TreeState readStaged(File archive, TreeStore store) throws Exception {
+        if (archive.length() > MAX_PACKAGE_BYTES) throw new IOException("Файл .ftree превышает 1 ГБ");
+        try (InputStream input = new FileInputStream(archive)) { return readZip(input, store); }
+    }
+
     private static void stagePackage(
         InputStream source,
         File destination,

@@ -55,6 +55,103 @@ public final class LayoutSolverFoundationTest {
     }
 
     @Test
+    public void multiUnionBlocksPlaceFatherBetweenMothers() {
+        TreeState state = new TreeState();
+        person(state, "father", PersonGender.MALE, 720f, 400f);
+        person(state, "motherA", PersonGender.FEMALE, 400f, 400f);
+        person(state, "motherB", PersonGender.FEMALE, 1040f, 400f);
+        person(state, "childA", PersonGender.UNKNOWN, 400f, 880f);
+        person(state, "childB", PersonGender.UNKNOWN, 1040f, 880f);
+        link(state, "partner", "father", "motherA");
+        link(state, "partner", "father", "motherB");
+        link(state, "parent", "father", "childA");
+        link(state, "parent", "motherA", "childA");
+        link(state, "parent", "father", "childB");
+        link(state, "parent", "motherB", "childB");
+        state.rootId = "father";
+
+        FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
+        LayoutSnapshot initial = LayoutSnapshot.capture(state);
+        LayoutScorer scorer = new LayoutScorer(new LayoutConstraints());
+        assertEquals(0d, scorer.score(
+            graph,
+            initial,
+            initial,
+            LayoutWeights.defaults()).wrongSideError, EPSILON);
+
+        java.util.List<LayoutOperation> candidates =
+            new MultiUnionFamilyCandidateGenerator(TreeLayoutEngine.GRID * 5f)
+                .generate(graph, initial);
+        assertEquals(1, candidates.size());
+        LayoutSnapshot repaired = candidates.get(0).apply(initial);
+
+        float fatherX = repaired.positionOf("father").x;
+        assertTrue(repaired.positionOf("motherA").x < fatherX);
+        assertTrue(fatherX < repaired.positionOf("motherB").x);
+        assertEquals(
+            centerOf(Arrays.asList("father", "motherA"), repaired),
+            centerOf(Collections.singleton("childA"), repaired),
+            EPSILON);
+        assertEquals(
+            centerOf(Arrays.asList("father", "motherB"), repaired),
+            centerOf(Collections.singleton("childB"), repaired),
+            EPSILON);
+        BranchContour first = BranchContour.from(
+            repaired,
+            Collections.singleton("childA"));
+        BranchContour second = BranchContour.from(
+            repaired,
+            Collections.singleton("childB"));
+        assertEquals(TreeLayoutEngine.GRID * 5f,
+            second.horizontalGapFrom(first), EPSILON);
+        assertTrue(new LayoutConstraints().validate(graph, repaired).isValid());
+        assertEquals(0d, scorer.score(
+            graph,
+            repaired,
+            initial,
+            LayoutWeights.defaults()).wrongSideError, EPSILON);
+    }
+
+    @Test
+    public void multiUnionBlocksPlaceMotherBetweenFathers() {
+        TreeState state = new TreeState();
+        person(state, "mother", PersonGender.FEMALE, 3000f, 400f);
+        person(state, "fatherA", PersonGender.MALE, 2680f, 400f);
+        person(state, "fatherB", PersonGender.MALE, 3320f, 400f);
+        person(state, "childA", PersonGender.UNKNOWN, 2680f, 880f);
+        person(state, "childB", PersonGender.UNKNOWN, 3320f, 880f);
+        link(state, "partner", "mother", "fatherA");
+        link(state, "partner", "mother", "fatherB");
+        link(state, "parent", "mother", "childA");
+        link(state, "parent", "fatherA", "childA");
+        link(state, "parent", "mother", "childB");
+        link(state, "parent", "fatherB", "childB");
+        state.rootId = "mother";
+
+        FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
+        LayoutSnapshot initial = LayoutSnapshot.capture(state);
+        java.util.List<LayoutOperation> candidates =
+            new MultiUnionFamilyCandidateGenerator(TreeLayoutEngine.GRID * 5f)
+                .generate(graph, initial);
+        assertEquals(1, candidates.size());
+        LayoutSnapshot repaired = candidates.get(0).apply(initial);
+
+        float motherX = repaired.positionOf("mother").x;
+        assertTrue(repaired.positionOf("fatherA").x < motherX);
+        assertTrue(motherX < repaired.positionOf("fatherB").x);
+        assertEquals(
+            centerOf(Arrays.asList("fatherA", "mother"), repaired),
+            centerOf(Collections.singleton("childA"), repaired),
+            EPSILON);
+        assertEquals(
+            centerOf(Arrays.asList("fatherB", "mother"), repaired),
+            centerOf(Collections.singleton("childB"), repaired),
+            EPSILON);
+        assertTrue(new LayoutConstraints().validate(graph, repaired).isValid());
+        assertEquals(0d, LayoutScorer.parentRoleSideError(graph, repaired), EPSILON);
+    }
+
+    @Test
     public void branchContourMatchesEqualStructuresAndComputesRequiredGap() {
         TreeState state = symmetricTree();
         BranchContour left = BranchContour.from(state, Arrays.asList(
@@ -113,6 +210,82 @@ public final class LayoutSolverFoundationTest {
             violation -> "card-overlap".equals(violation.code)));
         assertTrue(validation.violations.stream().anyMatch(
             violation -> "partner-generation".equals(violation.code)));
+    }
+
+    @Test
+    public void hardConstraintsRejectParentMoreThanOneGenerationAway() {
+        TreeState state = new TreeState();
+        person(state, "parent", 1000f, 1000f);
+        person(state, "child", 1000f, 1960f);
+        link(state, "parent", "parent", "child");
+        state.rootId = "child";
+
+        LayoutConstraints.ValidationResult validation = new LayoutConstraints().validate(
+            FamilyLayoutGraph.from(state),
+            LayoutSnapshot.capture(state));
+
+        assertFalse(validation.isValid());
+        assertTrue(validation.violations.stream().anyMatch(
+            violation -> "parent-generation".equals(violation.code)));
+    }
+
+    @Test
+    public void hardConstraintsRejectCardsWithoutMinimumGap() {
+        TreeState state = new TreeState();
+        person(state, "left", 1000f, 1000f);
+        person(state, "right", 1280f, 1000f);
+        state.rootId = "left";
+
+        LayoutConstraints.ValidationResult validation = new LayoutConstraints().validate(
+            FamilyLayoutGraph.from(state),
+            LayoutSnapshot.capture(state));
+
+        assertFalse(validation.isValid());
+        assertTrue(validation.violations.stream().anyMatch(
+            violation -> "card-spacing".equals(violation.code)));
+    }
+
+    @Test
+    public void hardConstraintsRejectCardsOutsideRightOrBottomBoundary() {
+        TreeState state = new TreeState();
+        person(
+            state,
+            "outside",
+            TreeLayoutEngine.MAX_SURFACE_SIZE - TreeLayoutEngine.CARD_W + TreeLayoutEngine.GRID,
+            680f);
+        state.rootId = "outside";
+
+        LayoutConstraints.ValidationResult validation = new LayoutConstraints().validate(
+            FamilyLayoutGraph.from(state),
+            LayoutSnapshot.capture(state));
+
+        assertFalse(validation.isValid());
+        assertTrue(validation.violations.stream().anyMatch(
+            violation -> "outside-workspace".equals(violation.code)));
+    }
+
+    @Test
+    public void semanticGraphReportsGenerationCycleAndIndexesDisconnectedComponents() {
+        TreeState state = new TreeState();
+        person(state, "root", 1000f, 1000f);
+        person(state, "child", 1000f, 1480f);
+        person(state, "grandchild", 1000f, 1960f);
+        person(state, "orphan", 3000f, 1000f);
+        link(state, "parent", "root", "child");
+        link(state, "parent", "child", "grandchild");
+        link(state, "parent", "grandchild", "root");
+        state.rootId = "root";
+
+        FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
+        LayoutConstraints.ValidationResult validation = new LayoutConstraints().validate(
+            graph,
+            LayoutSnapshot.capture(state));
+
+        assertEquals(2, graph.components.size());
+        assertEquals(Integer.valueOf(0), graph.generationByPerson.get("orphan"));
+        assertFalse(graph.generationConflicts.isEmpty());
+        assertTrue(validation.violations.stream().anyMatch(
+            violation -> "generation-conflict".equals(violation.code)));
     }
 
     @Test
@@ -741,6 +914,33 @@ public final class LayoutSolverFoundationTest {
         person.x = x;
         person.y = y;
         state.people.put(id, person);
+    }
+
+    private static void person(
+        TreeState state,
+        String id,
+        String gender,
+        float x,
+        float y
+    ) {
+        person(state, id, x, y);
+        state.people.get(id).gender = gender;
+        state.people.get(id).genderManual = true;
+    }
+
+    private static float centerOf(
+        Iterable<String> ids,
+        LayoutSnapshot snapshot
+    ) {
+        float left = Float.MAX_VALUE;
+        float right = -Float.MAX_VALUE;
+        for (String id : ids) {
+            LayoutSnapshot.Position position = snapshot.positionOf(id);
+            if (position == null) continue;
+            left = Math.min(left, position.x);
+            right = Math.max(right, position.x + TreeLayoutEngine.CARD_W);
+        }
+        return (left + right) / 2f;
     }
 
     private static void set(TreeState state, String id, float x, float y) {

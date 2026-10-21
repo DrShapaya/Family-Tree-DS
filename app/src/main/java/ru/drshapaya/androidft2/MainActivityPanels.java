@@ -10,6 +10,7 @@ final class MainActivityPanels {
     }
 
     void showPanel(String panel) {
+        String previousPanel = activity.activePanel;
         activity.activePanel = panel == null ? "" : panel;
         activity.setHeaderActionsDimmed(
             "more".equals(activity.activePanel)
@@ -54,8 +55,19 @@ final class MainActivityPanels {
         }
         if (activity.morePanel != null) {
             boolean moreVisible = "more".equals(activity.activePanel);
-            activity.setAdaptivePanelVisibility(activity.morePanel, moreVisible);
-            if (moreVisible) activity.bringAdaptivePanelToFront(activity.morePanel);
+            if (moreVisible) {
+                boolean opening = !"more".equals(previousPanel)
+                    || activity.morePanel.getVisibility() != View.VISIBLE;
+                activity.setAdaptivePanelVisibility(activity.morePanel, true);
+                activity.bringAdaptivePanelToFront(activity.morePanel);
+                if (opening) activity.animateMorePanel(true);
+            } else if ("more".equals(previousPanel) && activity.activePanel.isEmpty()) {
+                // Keep it mounted while the sheet glides away; hiding it before
+                // the animation was the source of the old abrupt disappearance.
+                activity.animateMorePanel(false);
+            } else {
+                activity.setAdaptivePanelVisibility(activity.morePanel, false);
+            }
         }
         activity.styleNav(activity.treeNav, "view".equals(activity.activePanel)
             || "branch".equals(activity.activePanel)
@@ -73,6 +85,7 @@ final class MainActivityPanels {
         activity.updateSelectionToolbar();
         activity.updateCanvasModePanel();
         activity.updateDistantCardsWarning();
+        activity.updateAddPersonButtonVisibility();
     }
 
     void togglePanel(String panel) {

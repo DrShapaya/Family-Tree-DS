@@ -15,15 +15,11 @@ final class SmartLayoutSolver {
     private static final int LOCAL_MAX_DEPTH = 4;
     private static final int REBUILD_BEAM_WIDTH = 6;
     private static final int REBUILD_MAX_DEPTH = 2;
+    private static final int MAX_REBUILD_STEP_SOLVER_PEOPLE = 128;
+    private static final int MAX_GLOBAL_COMPACTION_SOLVER_PEOPLE = 256;
     private static final int COMPACTION_BEAM_WIDTH = 8;
     private static final int COMPACTION_MAX_DEPTH = 3;
-    private static volatile LayoutWeights runtimeWeights;
-
     private SmartLayoutSolver() {}
-
-    static void setRuntimeWeights(LayoutWeights weights) {
-        runtimeWeights = weights;
-    }
 
     static ApplyResult improveAfterAddition(
         TreeState state,
@@ -40,7 +36,8 @@ final class SmartLayoutSolver {
                 addedIds,
                 anchorId,
                 LOCAL_BEAM_WIDTH,
-                LOCAL_MAX_DEPTH);
+                LOCAL_MAX_DEPTH,
+                MAX_PRODUCTION_EXPANSION_LEVEL);
             if (!current.applied) return last == null ? current : last;
             last = current;
         }
@@ -58,12 +55,20 @@ final class SmartLayoutSolver {
         Collection<String> addedIds,
         String anchorId
     ) {
+        // Scoring every beam candidate compares all routed parent segments. Doing
+        // that after every replayed card becomes super-linear on 500+ person
+        // trees. The deterministic placement and final layered normalization are
+        // the scalable path; the beam remains useful for smaller irregular trees.
+        if (state != null && state.people.size() > MAX_REBUILD_STEP_SOLVER_PEOPLE) {
+            return ApplyResult.rejected("large-rebuild-step");
+        }
         return improveSinglePass(
             state,
             addedIds,
             anchorId,
             REBUILD_BEAM_WIDTH,
-            REBUILD_MAX_DEPTH);
+            REBUILD_MAX_DEPTH,
+            MAX_PRODUCTION_EXPANSION_LEVEL);
     }
 
     /**
@@ -73,6 +78,10 @@ final class SmartLayoutSolver {
     static ApplyResult compactRebuiltTree(TreeState state) {
         if (state == null || state.people.size() < 2) {
             return ApplyResult.rejected("nothing-to-compact");
+        }
+        boolean normalizedUnions = normalizeRoleOrderedUnions(state);
+        if (state.people.size() > MAX_GLOBAL_COMPACTION_SOLVER_PEOPLE) {
+            return normalizedOrRejected(normalizedUnions, "large-rebuild");
         }
         FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
         LayoutSnapshot before = LayoutSnapshot.capture(state);
@@ -94,10 +103,12 @@ final class SmartLayoutSolver {
             generators,
             COMPACTION_BEAM_WIDTH,
             COMPACTION_MAX_DEPTH).solve(graph, before, null, weights);
-        if (proposal.operations.isEmpty()) return ApplyResult.rejected("no-compaction");
+        if (proposal.operations.isEmpty()) {
+            return normalizedOrRejected(normalizedUnions, "no-compaction");
+        }
         if (!Double.isFinite(proposal.score.total)
             || proposal.score.total >= beforeScore.total) {
-            return ApplyResult.rejected("score-not-better");
+            return normalizedOrRejected(normalizedUnions, "score-not-better");
         }
         boolean smaller = proposal.score.width < beforeScore.width - EPSILON;
         boolean repairedFamilyStructure =
@@ -106,22 +117,62 @@ final class SmartLayoutSolver {
                     < beforeScore.siblingSpacingError
                 || proposal.score.wrongSideError + EPSILON < beforeScore.wrongSideError;
         if (!smaller && !repairedFamilyStructure) {
-            return ApplyResult.rejected("width-not-smaller");
+            return normalizedOrRejected(normalizedUnions, "width-not-smaller");
         }
         if (!constraints.validate(graph, proposal.snapshot).isValid()) {
-            return ApplyResult.rejected("invalid-result");
+            return normalizedOrRejected(normalizedUnions, "invalid-result");
         }
         if (!samePosition(graph.rootId, before, proposal.snapshot)) {
-            return ApplyResult.rejected("root-moved");
+            return normalizedOrRejected(normalizedUnions, "root-moved");
         }
         if (!preservesLockedPositions(locked, before, proposal.snapshot)) {
-            return ApplyResult.rejected("locked-card-moved");
+            return normalizedOrRejected(normalizedUnions, "locked-card-moved");
         }
         if (!preservesSiblingOrder(graph, before, proposal.snapshot)) {
-            return ApplyResult.rejected("sibling-order-changed");
+            return normalizedOrRejected(normalizedUnions, "sibling-order-changed");
         }
         proposal.snapshot.applyTo(state);
         return smaller ? ApplyResult.compacted() : ApplyResult.normalized();
+    }
+
+    /**
+     * Parent roles are structural semantics, not a compactness preference. Run
+     * this normalization before the weighted compaction pass so a wide but
+     * correct multi-union block cannot lose to a narrower reversed layout.
+     */
+    private static boolean normalizeRoleOrderedUnions(TreeState state) {
+        FamilyLayoutGraph graph = FamilyLayoutGraph.from(state);
+        LayoutConstraints constraints = new LayoutConstraints();
+        Collection<String> locked = lockedIds(state, graph.rootId);
+        LayoutSnapshot current = LayoutSnapshot.capture(state);
+        boolean changed = false;
+
+        for (int pass = 0; pass < Math.max(1, graph.people.size()); pass++) {
+            double currentRoleError = LayoutScorer.parentRoleSideError(graph, current);
+            LayoutSnapshot best = null;
+            double bestRoleError = currentRoleError;
+            for (LayoutOperation operation : new MultiUnionFamilyCandidateGenerator(
+                TreeLayoutEngine.GRID * 5f).generate(graph, current)) {
+                LayoutSnapshot candidate = operation.apply(current);
+                if (!constraints.validate(graph, candidate).isValid()) continue;
+                if (!preservesLockedPositions(locked, current, candidate)) continue;
+                double candidateRoleError = LayoutScorer.parentRoleSideError(
+                    graph,
+                    candidate);
+                if (candidateRoleError + EPSILON >= bestRoleError) continue;
+                best = candidate;
+                bestRoleError = candidateRoleError;
+            }
+            if (best == null) break;
+            current = best;
+            changed = true;
+        }
+        if (changed) current.applyTo(state);
+        return changed;
+    }
+
+    private static ApplyResult normalizedOrRejected(boolean normalized, String reason) {
+        return normalized ? ApplyResult.normalized() : ApplyResult.rejected(reason);
     }
 
     private static ApplyResult improveSinglePass(
@@ -129,7 +180,8 @@ final class SmartLayoutSolver {
         Collection<String> addedIds,
         String anchorId,
         int beamWidth,
-        int maxDepth
+        int maxDepth,
+        int maxExpansionLevel
     ) {
         if (state == null || state.people.isEmpty()) return ApplyResult.rejected("empty-tree");
         LayoutSnapshot before = LayoutSnapshot.capture(state);
@@ -157,7 +209,7 @@ final class SmartLayoutSolver {
             return ApplyResult.rejected("no-improvement", local);
         }
         if (local.usedRegion == null
-            || local.usedRegion.expansionLevel > MAX_PRODUCTION_EXPANSION_LEVEL) {
+            || local.usedRegion.expansionLevel > maxExpansionLevel) {
             return ApplyResult.rejected("scope-too-wide", local);
         }
         if (!Double.isFinite(local.proposal.score.total)
@@ -227,12 +279,12 @@ final class SmartLayoutSolver {
     }
 
     private static LayoutWeights currentWeights() {
-        LayoutWeights weights = runtimeWeights;
-        return weights == null ? LayoutWeights.defaults() : weights;
+        return LayoutWeights.defaults();
     }
 
     static List<LayoutCandidateGenerator> defaultGenerators(LayoutConstraints constraints) {
         return Arrays.asList(
+            new ParentRoleCandidateGenerator(),
             new CollisionBranchCandidateGenerator(constraints, TreeLayoutEngine.GRID),
             new MultiUnionFamilyCandidateGenerator(TreeLayoutEngine.GRID * 5f),
             new FamilyCenterCandidateGenerator(),
@@ -246,6 +298,7 @@ final class SmartLayoutSolver {
         LayoutConstraints constraints
     ) {
         return Arrays.asList(
+            new ParentRoleCandidateGenerator(),
             new CollisionBranchCandidateGenerator(constraints, TreeLayoutEngine.GRID),
             new MultiUnionFamilyCandidateGenerator(TreeLayoutEngine.GRID * 5f),
             new FamilyCenterCandidateGenerator(),
@@ -298,10 +351,22 @@ final class SmartLayoutSolver {
             List<String> ids = new ArrayList<>(group.people);
             for (int first = 0; first < ids.size(); first++) {
                 for (int second = first + 1; second < ids.size(); second++) {
-                    LayoutSnapshot.Position beforeFirst = before.positionOf(ids.get(first));
-                    LayoutSnapshot.Position beforeSecond = before.positionOf(ids.get(second));
-                    LayoutSnapshot.Position afterFirst = after.positionOf(ids.get(first));
-                    LayoutSnapshot.Position afterSecond = after.positionOf(ids.get(second));
+                    String firstId = ids.get(first);
+                    String secondId = ids.get(second);
+                    FamilyLayoutGraph.ParentFamily firstFamily = graph.parentFamilyOf(firstId);
+                    FamilyLayoutGraph.ParentFamily secondFamily = graph.parentFamilyOf(secondId);
+                    boolean sameUnion = firstFamily != null && firstFamily == secondFamily;
+                    boolean explicitSiblings = graph.siblingsByPerson
+                        .getOrDefault(firstId, Collections.emptySet())
+                        .contains(secondId);
+                    // Half-sibling families are independent virtual union blocks.
+                    // Their blocks may trade places to put every father/mother on
+                    // the correct side; order inside one union remains protected.
+                    if (!sameUnion && !explicitSiblings) continue;
+                    LayoutSnapshot.Position beforeFirst = before.positionOf(firstId);
+                    LayoutSnapshot.Position beforeSecond = before.positionOf(secondId);
+                    LayoutSnapshot.Position afterFirst = after.positionOf(firstId);
+                    LayoutSnapshot.Position afterSecond = after.positionOf(secondId);
                     if (beforeFirst == null || beforeSecond == null
                         || afterFirst == null || afterSecond == null) continue;
                     float beforeDelta = beforeFirst.x - beforeSecond.x;

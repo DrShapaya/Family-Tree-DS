@@ -1,0 +1,14 @@
+half4 main(float2 p) {
+    float4 result=float4(0.);
+    for(int i=0;i<18;i++) {
+        float life=fract(seconds*(.08+float(i-4*(i/4))*.015)+phase+float(i)*.41);
+        float along=fract(float(i)*.7548776+phase*.02);
+        float4 s=float4(10.+(cardSize.x-20.)*along,i-2*(i/2)==0?7.+life*13.:cardSize.y-7.-life*13.,
+            .85+.35*(1.-life),floor(72.*sin(life*3.141592654)+.5));
+        float2 d=p-s.xy;
+        if(abs(d.x)>5.5+pixel ||abs(d.y)>5.5+pixel)continue;
+        result=over(result,ink(float3(1.,73./255.,0.),floor(s.w/3.)/255.,cover(length(d)-5.5)));
+        result=over(result,ink(float3(1.,(184.+float(i-2*(i/2))*20.)/255.,45./255.),s.w/255.,cover(length(d)-s.z)));
+    }
+    return half4(result);
+}

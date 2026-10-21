@@ -30,7 +30,8 @@ final class CollisionBranchCandidateGenerator implements LayoutCandidateGenerato
         Set<String> fingerprints = new HashSet<>();
         LayoutConstraints.ValidationResult validation = constraints.validate(graph, snapshot);
         for (LayoutConstraints.Violation violation : validation.violations) {
-            if (!"card-overlap".equals(violation.code)) continue;
+            if (!"card-overlap".equals(violation.code)
+                && !"card-spacing".equals(violation.code)) continue;
             addMoves(result, fingerprints, graph, snapshot, violation.firstId, violation.secondId);
             addMoves(result, fingerprints, graph, snapshot, violation.secondId, violation.firstId);
         }

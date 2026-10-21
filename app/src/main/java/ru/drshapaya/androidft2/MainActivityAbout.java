@@ -186,6 +186,8 @@ final class MainActivityAbout {
 
         LinearLayout teamCard = aboutCard();
         teamCard.addView(aboutText("Команда", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
+        LinearLayout teamMembers = new LinearLayout(activity);
+        teamMembers.setOrientation(LinearLayout.HORIZONTAL);
         TextView developer = aboutText("DrShapaya", 13, Color.rgb(8, 122, 115), true, Gravity.LEFT | Gravity.CENTER_VERTICAL);
         developer.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_people, 0, 0, 0);
         developer.setCompoundDrawablePadding(ui.dp(9));
@@ -193,9 +195,22 @@ final class MainActivityAbout {
         installHoldTooltip(developer, "Оригинальный создатель, разработчик и дизайнер приложения");
         developer.setBackground(ui.panelBg(Color.rgb(235, 248, 246), ui.dp(13), Color.argb(52, 24, 169, 153)));
         developer.setPadding(ui.dp(12), 0, ui.dp(12), 0);
-        LinearLayout.LayoutParams developerParams = new LinearLayout.LayoutParams(-1, ui.dp(42));
-        developerParams.setMargins(0, ui.dp(6), 0, 0);
-        teamCard.addView(developer, developerParams);
+        LinearLayout.LayoutParams developerParams = new LinearLayout.LayoutParams(0, ui.dp(42), 1f);
+        developerParams.setMargins(0, 0, ui.dp(3), 0);
+        teamMembers.addView(developer, developerParams);
+        TextView videoEditor = aboutText("Sankorex", 13, Color.rgb(8, 122, 115), true, Gravity.LEFT | Gravity.CENTER_VERTICAL);
+        videoEditor.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_people, 0, 0, 0);
+        videoEditor.setCompoundDrawablePadding(ui.dp(9));
+        ui.tintDrawables(videoEditor, Color.rgb(8, 122, 115));
+        installHoldTooltip(videoEditor, "Специалист по видеомонтажу");
+        videoEditor.setBackground(ui.panelBg(Color.rgb(235, 248, 246), ui.dp(13), Color.argb(52, 24, 169, 153)));
+        videoEditor.setPadding(ui.dp(12), 0, ui.dp(12), 0);
+        LinearLayout.LayoutParams videoEditorParams = new LinearLayout.LayoutParams(0, ui.dp(42), 1f);
+        videoEditorParams.setMargins(ui.dp(3), 0, 0, 0);
+        teamMembers.addView(videoEditor, videoEditorParams);
+        LinearLayout.LayoutParams teamMembersParams = new LinearLayout.LayoutParams(-1, -2);
+        teamMembersParams.setMargins(0, ui.dp(6), 0, 0);
+        teamCard.addView(teamMembers, teamMembersParams);
         body.addView(teamCard, aboutCardParams());
 
         SupporterCatalog.RemoteData initialData = loadSupporterData();
@@ -548,7 +563,7 @@ final class MainActivityAbout {
 
     private GradientDrawable roundFill(int color, int radius) {
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
+        drawable.setColor(AppThemePalette.surface(color));
         drawable.setCornerRadius(radius);
         return drawable;
     }
@@ -669,7 +684,7 @@ final class MainActivityAbout {
         button.setImageResource(icon);
         button.setContentDescription(description);
         button.setPadding(ui.dp(9), ui.dp(9), ui.dp(9), ui.dp(9));
-        button.setColorFilter(ACCENT_PURPLE);
+        button.setColorFilter(AppThemePalette.text(ACCENT_PURPLE));
         button.setBackground(ui.panelBg(Color.TRANSPARENT, ui.dp(999), Color.argb(150, 106, 74, 177)));
         button.setElevation(0f);
         button.setOnClickListener(v -> openExternalUrl(url));

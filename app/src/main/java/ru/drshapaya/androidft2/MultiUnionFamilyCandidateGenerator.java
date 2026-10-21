@@ -3,8 +3,10 @@ package ru.drshapaya.androidft2;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -30,29 +32,15 @@ final class MultiUnionFamilyCandidateGenerator implements LayoutCandidateGenerat
             LayoutSnapshot.Position shared = snapshot.positionOf(sharedId);
             if (shared == null || !shared.isFinite()) continue;
 
-            branches.sort(Comparator
-                .comparingDouble((UnionBranch branch) -> branch.partnerX)
-                .thenComparing(branch -> branch.unit.id));
-            float[] relativeShifts = packedShifts(branches);
-            float packedLeft = Float.MAX_VALUE;
-            float packedRight = -Float.MAX_VALUE;
-            for (int index = 0; index < branches.size(); index++) {
-                packedLeft = Math.min(
-                    packedLeft,
-                    branches.get(index).contour.left() + relativeShifts[index]);
-                packedRight = Math.max(
-                    packedRight,
-                    branches.get(index).contour.right() + relativeShifts[index]);
-            }
             float sharedCenter = shared.x + TreeLayoutEngine.CARD_W / 2f;
-            float commonShift = snap(sharedCenter - (packedLeft + packedRight) / 2f);
+            Map<UnionBranch, Float> branchShifts = directedPackedShifts(
+                sharedCenter, branches);
 
             List<LayoutOperation> operations = new ArrayList<>();
             LinkedHashSet<String> claimed = new LinkedHashSet<>();
             boolean ambiguous = false;
-            for (int index = 0; index < branches.size(); index++) {
-                UnionBranch branch = branches.get(index);
-                float childShift = snap(relativeShifts[index] + commonShift);
+            for (UnionBranch branch : branches) {
+                float childShift = branchShifts.getOrDefault(branch, 0f);
                 if (!Collections.disjoint(claimed, branch.childBranchIds)) {
                     ambiguous = true;
                     break;
@@ -85,12 +73,127 @@ final class MultiUnionFamilyCandidateGenerator implements LayoutCandidateGenerat
                 }
             }
             if (!ambiguous && !operations.isEmpty()) {
-                result.add(new CompositeLayoutOperation(
-                    operations,
-                    "multi-union-family:" + sharedId));
+                LayoutOperation candidate = new CompositeLayoutOperation(
+                    operations, "multi-union-family:" + sharedId);
+                if (siblingsRemainOutside(graph, candidate.apply(snapshot),
+                    sharedId, branches)) result.add(candidate);
             }
         }
         return result;
+    }
+
+    private static boolean siblingsRemainOutside(
+        FamilyLayoutGraph graph, LayoutSnapshot layout,
+        String sharedId, List<UnionBranch> branches
+    ) {
+        FamilyLayoutGraph.SiblingGroup group = graph.siblingGroupByPerson.get(sharedId);
+        if (group == null) return true;
+        LayoutSnapshot.Position shared = layout.positionOf(sharedId);
+        if (shared == null) return false;
+        for (String siblingId : group.people) {
+            if (sharedId.equals(siblingId)) continue;
+            LayoutSnapshot.Position sibling = layout.positionOf(siblingId);
+            if (sibling == null) continue;
+            for (UnionBranch branch : branches) {
+                LayoutSnapshot.Position partner = layout.positionOf(branch.partnerId);
+                if (partner == null) continue;
+                if (partner.x < shared.x && sibling.x < shared.x - EPSILON) return false;
+                if (partner.x > shared.x && sibling.x > shared.x + EPSILON) return false;
+            }
+        }
+        return true;
+    }
+
+    /** Packs separate unions on both sides of their shared person. */
+    private Map<UnionBranch, Float> directedPackedShifts(
+        float sharedCenter,
+        List<UnionBranch> branches
+    ) {
+        List<UnionBranch> left = new ArrayList<>();
+        List<UnionBranch> right = new ArrayList<>();
+        Comparator<UnionBranch> order = Comparator
+            .comparingDouble((UnionBranch branch) -> branch.directChildCenter)
+            .thenComparing(branch -> branch.unit.id);
+        List<UnionBranch> ordered = new ArrayList<>(branches);
+        ordered.sort(order);
+        for (int index = 0; index < ordered.size(); index++) {
+            if (index < ordered.size() / 2) left.add(ordered.get(index));
+            else right.add(ordered.get(index));
+        }
+
+        Map<UnionBranch, Float> result = new LinkedHashMap<>();
+        putSideShifts(result, left, sharedCenter, -1);
+        putSideShifts(result, right, sharedCenter, 1);
+        if (!left.isEmpty() && !right.isEmpty()) {
+            UnionBranch leftEdge = left.get(left.size() - 1);
+            UnionBranch rightEdge = right.get(0);
+            BranchContour placedLeft = leftEdge.contour.shifted(result.get(leftEdge));
+            BranchContour placedRight = rightEdge.contour.shifted(result.get(rightEdge));
+            float shortage = placedRight.requiredRightShiftFrom(placedLeft, familyGap);
+            if (shortage > EPSILON) {
+                float leftOutward = (float) Math.ceil(shortage / (2f * TreeLayoutEngine.GRID))
+                    * TreeLayoutEngine.GRID;
+                float rightOutward = (float) Math.ceil(
+                    (shortage - leftOutward) / TreeLayoutEngine.GRID)
+                    * TreeLayoutEngine.GRID;
+                for (UnionBranch branch : left) {
+                    result.put(branch, result.get(branch) - leftOutward);
+                }
+                for (UnionBranch branch : right) {
+                    result.put(branch, result.get(branch) + rightOutward);
+                }
+            }
+        }
+        return result;
+    }
+
+    private void putSideShifts(
+        Map<UnionBranch, Float> result,
+        List<UnionBranch> branches,
+        float sharedCenter,
+        int side
+    ) {
+        if (branches.isEmpty()) return;
+        float[] relative = packedShifts(branches);
+        float commonShift;
+        if (side > 0) {
+            float nearest = Float.MAX_VALUE;
+            for (int index = 0; index < branches.size(); index++) {
+                nearest = Math.min(
+                    nearest,
+                    branches.get(index).directChildCenter + relative[index]);
+            }
+            commonShift = snap(
+                sharedCenter + minimumUnionCenterOffset() - nearest);
+        } else if (side < 0) {
+            float nearest = -Float.MAX_VALUE;
+            for (int index = 0; index < branches.size(); index++) {
+                nearest = Math.max(
+                    nearest,
+                    branches.get(index).directChildCenter + relative[index]);
+            }
+            commonShift = snap(
+                sharedCenter - minimumUnionCenterOffset() - nearest);
+        } else {
+            float packedLeft = Float.MAX_VALUE;
+            float packedRight = -Float.MAX_VALUE;
+            for (int index = 0; index < branches.size(); index++) {
+                packedLeft = Math.min(
+                    packedLeft,
+                    branches.get(index).contour.left() + relative[index]);
+                packedRight = Math.max(
+                    packedRight,
+                    branches.get(index).contour.right() + relative[index]);
+            }
+            commonShift = snap(sharedCenter - (packedLeft + packedRight) / 2f);
+        }
+        for (int index = 0; index < branches.size(); index++) {
+            result.put(branches.get(index), snap(relative[index] + commonShift));
+        }
+    }
+
+    private static float minimumUnionCenterOffset() {
+        return (TreeLayoutEngine.CARD_W + TreeLayoutEngine.GRID) / 2f;
     }
 
     private float[] packedShifts(List<UnionBranch> branches) {
@@ -142,6 +245,16 @@ final class MultiUnionFamilyCandidateGenerator implements LayoutCandidateGenerat
         result.addAll(graph.lineageBranch(graph.parentsByChild.getOrDefault(
             partnerId,
             Collections.emptySet())));
+        FamilyLayoutGraph.SiblingGroup siblingGroup =
+            graph.siblingGroupByPerson.get(partnerId);
+        if (siblingGroup != null) {
+            for (String siblingId : siblingGroup.people) {
+                if (!partnerId.equals(siblingId)) {
+                    result.addAll(graph.descendantBranch(
+                        Collections.singleton(siblingId)));
+                }
+            }
+        }
         return result;
     }
 

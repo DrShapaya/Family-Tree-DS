@@ -96,9 +96,26 @@ final class MainActivityEditor {
         heading.addView(eyebrow, new LinearLayout.LayoutParams(-1, dp(18)));
         heading.addView(title, new LinearLayout.LayoutParams(-1, -2));
         header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
-        Button root = iconButton(R.drawable.ic_menu_target, v -> {
-            setRootPerson(person.id);
-            dialog.dismiss();
+        Button pin = iconButton(R.drawable.ic_menu_pin, v -> {}, person.pinned ? Color.rgb(211, 73, 67) : Color.rgb(112, 122, 133));
+        pin.setTag("person.pin");
+        updatePinButton(pin, person);
+        pin.setOnClickListener(v -> {
+            if (!activity.requireEditingEnabled()) return;
+            recordUndo(person.pinned ? "Откреплена карточка: " + person.name : "Закреплена карточка: " + person.name);
+            person.pinned = !person.pinned;
+            saveOnly(); activity.treeView.invalidate();
+            updatePinButton(pin, person);
+            toast(person.pinned ? "Карточка закреплена" : "Карточка откреплена");
+        });
+        header.addView(pin, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        Button root = iconButton(R.drawable.ic_tree_crown_outline, v -> {});
+        root.setTag("person.root");
+        updateRootButton(root, person);
+        root.setOnClickListener(v -> {
+            if (!activity.requireEditingEnabled()) return;
+            if (!person.id.equals(activity.state.rootId)) setRootPerson(person.id);
+            else toast("Эта карточка — центр дерева");
+            updateRootButton(root, person);
         });
         LinearLayout.LayoutParams rootParams = new LinearLayout.LayoutParams(dp(42), dp(42));
         rootParams.setMargins(dp(8), 0, 0, 0);
@@ -263,11 +280,8 @@ final class MainActivityEditor {
         basicHeading.addView(genderChip, genderChipParams);
         profileForm.addView(basicHeading, editorBlockParams());
 
-        EditText name = field("");
-        name.setSingleLine(true);
-        LocalizedViews.setRaw(name, person.name);
-        styleEditorField(name, R.drawable.ic_field_person);
-        profileForm.addView(labeledEditor("Имя", name), editorBlockParams());
+        PersonNameFields nameFields = new PersonNameFields(activity, person);
+        profileForm.addView(nameFields, editorBlockParams());
 
         TextView bornSection = editorText("Родился/родилась", 13, Color.rgb(76, 83, 88), true);
         profileForm.addView(bornSection, editorCaptionParams());
@@ -292,6 +306,11 @@ final class MainActivityEditor {
         EditText diedMonth = numericField("ММ", person.diedMonth, 2);
         EditText diedYear = numericField("ГГГГ", person.diedYear, 4);
         profileForm.addView(dateEditorRow(diedDay, diedMonth, diedYear), editorBlockParams());
+
+        Button lifeStatus = actionButton("", v -> {});
+        updateLifeStatusButton(lifeStatus, person);
+        lifeStatus.setOnClickListener(v -> chooseLifeStatus(person, lifeStatus));
+        profileForm.addView(lifeStatus, editorBlockParams());
 
         EditText place = field("город, страна");
         place.setSingleLine(true);
@@ -403,20 +422,25 @@ final class MainActivityEditor {
         LinearLayout colorDisclosure = new LinearLayout(activity);
         colorDisclosure.setOrientation(LinearLayout.VERTICAL);
         LinearLayout colorPanel = editorSectionPanel("ЦВЕТ КАРТОЧКИ");
+        colorPanel.setBackground(softAccentGradientBg(dp(14)));
         colorPanel.setVisibility(View.GONE);
         LinearLayout colorHeading = new LinearLayout(activity);
         colorHeading.setOrientation(LinearLayout.HORIZONTAL);
         colorHeading.setGravity(Gravity.CENTER_VERTICAL);
         colorHeading.setPadding(0, 0, dp(6), 0);
         colorHeading.addView(editorSectionHeading("ОФОРМЛЕНИЕ", "Цвет карточки"), new LinearLayout.LayoutParams(0, -2, 1));
-        TextView colorArrow = editorText("⌄", 20, AppThemePalette.secondary(), true);
-        colorArrow.setGravity(Gravity.CENTER);
+        DisclosureChevron colorArrow = new DisclosureChevron(activity, AppThemePalette.secondary());
+        colorArrow.setPadding(dp(7), dp(7), dp(7), dp(7));
+        colorArrow.setBackground(panelBg(AppThemePalette.primarySurface(), dp(999), AppThemePalette.alpha(AppThemePalette.primaryBright(), 64)));
         colorHeading.addView(colorArrow, new LinearLayout.LayoutParams(dp(34), dp(56)));
+        colorHeading.setPadding(dp(10), dp(5), dp(6), dp(5));
+        colorHeading.setBackground(panelBg(AppThemePalette.primarySurface(), dp(14), AppThemePalette.alpha(AppThemePalette.primaryBright(), 72)));
         colorDisclosure.addView(colorHeading, new LinearLayout.LayoutParams(-1, -2));
         colorHeading.setOnClickListener(v -> {
             boolean expand = colorPanel.getVisibility() != View.VISIBLE;
             colorPanel.setVisibility(expand ? View.VISIBLE : View.GONE);
-            LocalizedViews.setRaw(colorArrow, expand ? "⌃" : "⌄");
+            colorArrow.expanded(expand);
+            if (expand) PanelTransitions.enter(colorPanel, false, null);
         });
         TextView colorHint = editorText(
             "Передвигайте ползунок — выбранный цвет сразу появится на карточке.",
@@ -427,24 +451,22 @@ final class MainActivityEditor {
 
         LinearLayout colorControl = new LinearLayout(activity);
         colorControl.setOrientation(LinearLayout.HORIZONTAL);
-        colorControl.setGravity(Gravity.CENTER_VERTICAL);
-        HueSliderView cardColorSlider = new HueSliderView(activity);
+        colorControl.setGravity(Gravity.TOP);
+        ColorPickerView cardColorSlider = new ColorPickerView(activity);
+        cardColorSlider.setTag("person.colorPicker");
         cardColorSlider.setColor(TreeState.displayColor(person, activity.state.people.size()));
-        cardColorSlider.setOnTouchListener((view, event) -> {
-            if (!activity.editingBlocked()) return false;
-            if (event.getActionMasked() == android.view.MotionEvent.ACTION_DOWN) {
-                activity.showEditingLockedPrompt();
-            }
-            return true;
-        });
+        cardColorSlider.setInteractionGuard(activity::requireEditingEnabled);
         TextView cardColorPreview = new LocalizedTextView(activity);
         cardColorPreview.setContentDescription(activity.tr("Выбранный цвет карточки"));
         cardColorPreview.setBackground(colorSwatchBg(cardColorSlider.color(), dp(999)));
-        colorControl.addView(cardColorSlider, new LinearLayout.LayoutParams(0, dp(48), 1));
+        colorControl.addView(cardColorSlider, new LinearLayout.LayoutParams(0, -2, 1));
         LinearLayout.LayoutParams colorPreviewParams = new LinearLayout.LayoutParams(dp(38), dp(38));
-        colorPreviewParams.setMargins(dp(8), 0, 0, 0);
+        colorPreviewParams.setMargins(dp(8), dp(20), 0, 0);
         colorControl.addView(cardColorPreview, colorPreviewParams);
-        colorPanel.addView(colorControl, formFieldParams());
+        colorPanel.addView(colorControl, new LinearLayout.LayoutParams(-1,-2));
+        TextView colorCaption = editorText("Текущий цвет карточки", 10, AppThemePalette.secondary(), true);
+        colorCaption.setPadding(0, dp(8), 0, dp(2));
+        colorPanel.addView(colorCaption, new LinearLayout.LayoutParams(-1, dp(22)));
 
         final boolean[] colorUndoRecorded = {false};
         cardColorSlider.setListener((color, fromUser) -> {
@@ -496,18 +518,7 @@ final class MainActivityEditor {
         colorDisclosure.addView(colorPanel, colorPanelParams);
         profileForm.addView(colorDisclosure, editorBlockParams());
 
-        CheckBox pinned = new LocalizedCheckBox(activity);
-        pinned.setText("Закрепить карточку");
-        pinned.setTextSize(13);
-        pinned.setTypeface(uiBold());
-        pinned.setTextColor(Color.rgb(28, 34, 38));
-        pinned.setChecked(person.pinned);
-        pinned.setPadding(dp(10), 0, dp(10), 0);
-        pinned.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_pin, 0, 0, 0);
-        pinned.setCompoundDrawablePadding(dp(9));
-        tintDrawables(pinned, Color.rgb(8, 122, 115));
-        pinned.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
-        profileForm.addView(pinned, editorSwitchParams());
+
 
         relationsForm.addView(editorSectionHeading(
             "СЕМЬЯ И СВЯЗИ",
@@ -593,7 +604,7 @@ final class MainActivityEditor {
                     recordUndo("Изменена карточка", person.name.isEmpty() ? "Без имени" : person.name);
                     undoRecorded[0] = true;
                 }
-                person.name = text(name);
+                nameFields.apply(person);
                 if (!person.genderManual) {
                     person.gender = PersonGender.infer(person.name);
                     updateGenderChip(genderChip, person);
@@ -606,6 +617,7 @@ final class MainActivityEditor {
                 person.diedYear = yearPart(text(diedYear));
                 person.born = humanDate(person.bornDay, person.bornMonth, person.bornYear);
                 person.died = humanDate(person.diedDay, person.diedMonth, person.diedYear);
+                updateLifeStatusButton(lifeStatus, person);
                 person.place = text(place);
                 person.notes = text(notes);
                 person.color = TreeState.displayColor(person, activity.state.people.size());
@@ -629,7 +641,7 @@ final class MainActivityEditor {
             }
             @Override public void afterTextChanged(Editable s) {}
         };
-        name.addTextChangedListener(watcher);
+        nameFields.listen(() -> watcher.onTextChanged("", 0, 0, 0));
         bornDay.addTextChangedListener(watcher);
         bornMonth.addTextChangedListener(watcher);
         bornYear.addTextChangedListener(watcher);
@@ -638,17 +650,7 @@ final class MainActivityEditor {
         diedYear.addTextChangedListener(watcher);
         place.addTextChangedListener(watcher);
         notes.addTextChangedListener(watcher);
-        pinned.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            if (person.pinned == isChecked) return;
-            if (!activity.requireEditingEnabled()) {
-                buttonView.setChecked(person.pinned);
-                return;
-            }
-            recordUndo(isChecked ? "Закреплена карточка: " + person.name : "Откреплена карточка: " + person.name);
-            person.pinned = isChecked;
-            saveOnly();
-            activity.treeView.invalidate();
-        });
+
 
         selectEditorPage(Math.max(0, Math.min(2, currentEditorPage)), pages, tabViews);
 
@@ -699,7 +701,7 @@ final class MainActivityEditor {
             || attachments.isEmpty()) return;
         int before = currentMemoryDraftAttachments.size();
         for (MemoryAttachment attachment : attachments) {
-            if (attachment == null || currentMemoryDraftAttachments.size() >= 24) break;
+            if (attachment == null) continue;
             currentMemoryDraftAttachments.add(attachment);
         }
         int added = currentMemoryDraftAttachments.size() - before;
@@ -707,7 +709,6 @@ final class MainActivityEditor {
         String message = added == 1
             ? "Файл прикреплён к черновику"
             : "Файлы прикреплены к черновику: " + added;
-        if (added < attachments.size()) message += " · максимум 24";
         if (failedCount > 0) message += " · не удалось: " + failedCount;
         toast(message);
     }
@@ -797,6 +798,7 @@ final class MainActivityEditor {
         tab.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
         tab.setCompoundDrawablePadding(dp(7));
         tintDrawables(tab, Color.rgb(76, 83, 88));
+        PressFeedback.install(tab);
         return tab;
     }
 
@@ -816,10 +818,13 @@ final class MainActivityEditor {
     }
 
     private void selectEditorPage(int index, View[] pages, TextView[] tabs) {
+        boolean changing = currentEditorPage != index;
         currentEditorPage = index;
         for (int i = 0; i < pages.length; i++) {
             boolean active = i == index;
-            pages[i].setVisibility(active ? View.VISIBLE : View.GONE);
+            if (!active) PanelTransitions.hide(pages[i], null);
+            else if (changing && pages[i].isLaidOut()) PanelTransitions.enter(pages[i], true, null);
+            else pages[i].setVisibility(View.VISIBLE);
             int tabColor = active ? editorTabAccent(i) : editorTabIdleColor(i);
             tabs[i].setTextColor(tabColor);
             tintDrawables(tabs[i], tabColor);
@@ -878,6 +883,23 @@ final class MainActivityEditor {
         return heading;
     }
 
+    private void updatePinButton(Button button, Person person) {
+        android.graphics.drawable.Drawable icon = activity.getDrawable(R.drawable.ic_menu_pin).mutate();
+        icon.setTint(activity.uiColor(person.pinned ? Color.rgb(211, 73, 67) : Color.rgb(112, 122, 133)));
+        button.setForeground(icon);
+        button.setSelected(person.pinned);
+        button.setContentDescription(activity.tr(person.pinned ? "Открепить карточку" : "Закрепить карточку"));
+    }
+
+    private void updateRootButton(Button button, Person person) {
+        boolean root = person.id.equals(activity.state.rootId);
+        android.graphics.drawable.Drawable icon = activity.getDrawable(root ? R.drawable.ic_tree_crown_filled : R.drawable.ic_tree_crown_outline).mutate();
+        icon.setTintList(null);
+        button.setForeground(icon);
+        button.setSelected(root);
+        button.setContentDescription(activity.tr(root ? "Эта карточка — центр дерева" : "Сделать центром дерева"));
+    }
+
     private TextView genderChip(Person person) {
         TextView chip = editorText("", 12, Color.rgb(8, 122, 115), true);
         chip.setGravity(Gravity.CENTER);
@@ -885,6 +907,61 @@ final class MainActivityEditor {
         chip.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.argb(82, 24, 169, 153)));
         updateGenderChip(chip, person);
         return chip;
+    }
+
+    private void updateLifeStatusButton(Button button, Person person) {
+        button.setText("Статус жизни: " + PersonLifeStatus.label(person));
+        String status = PersonLifeStatus.resolve(person);
+        int icon = PersonLifeStatus.LIVING.equals(status) ? R.drawable.ic_life_heart
+            : PersonLifeStatus.DECEASED.equals(status) ? R.drawable.ic_life_candle : R.drawable.ic_life_unknown;
+        button.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
+        button.setCompoundDrawablePadding(dp(8));
+        tintDrawables(button, LifeStatusBadge.color(status));
+    }
+
+    private void chooseLifeStatus(Person person, Button button) {
+        if (!activity.requireEditingEnabled()) return;
+        Dialog picker = new Dialog(activity);
+        picker.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(activity);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(18), dp(18), dp(18), dp(16));
+        shell.setBackground(panelBg(Color.WHITE, dp(18), Color.argb(56, 63, 82, 94)));
+        shell.addView(editorText("Статус жизни", 21, Color.rgb(28, 34, 38), true), new LinearLayout.LayoutParams(-1, dp(40)));
+        TextView detail = editorText("По датам: рождение без смерти — жив; старше 100 лет — неизвестно; старше 120 — умер. Без даты рождения — неизвестно. Статус также можно выбрать вручную.", 12, Color.rgb(101, 113, 122), false);
+        detail.setSingleLine(false);
+        shell.addView(detail, new LinearLayout.LayoutParams(-1, -2));
+        String[] statuses = {PersonLifeStatus.LIVING, PersonLifeStatus.DECEASED, PersonLifeStatus.UNKNOWN};
+        String[] labels = {"Жив", "Умер", "По датам"};
+        for (int i = 0; i < statuses.length; i++) {
+            String status = statuses[i];
+            Button choice = actionButton(labels[i], v -> {
+                if (!activity.requireEditingEnabled()) return;
+                if (PersonLifeStatus.hasDeathDate(person) && !PersonLifeStatus.DECEASED.equals(status)) {
+                    activity.toast("Чтобы изменить статус, сначала очистите дату смерти");
+                    return;
+                }
+                if (!status.equals(person.lifeStatus)) {
+                    recordUndo("Изменён статус жизни", person.name.isEmpty() ? "Без имени" : person.name);
+                    person.lifeStatus = status;
+                    saveOnly();
+                    activity.treeView.invalidate();
+                    updateStats();
+                }
+                updateLifeStatusButton(button, person);
+                picker.dismiss();
+            });
+            shell.addView(choice, editorBlockParams());
+        }
+        shell.addView(actionButton("Отмена", v -> picker.dismiss()), editorBlockParams());
+        picker.setContentView(shell);
+        picker.setCanceledOnTouchOutside(true);
+        picker.show();
+        Window window = picker.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels - dp(28), dp(480)), -2);
+        }
     }
 
     private void updateGenderChip(TextView chip, Person person) {
@@ -1992,7 +2069,11 @@ final class MainActivityEditor {
     void updateSelectedFromEditor() {
         Person person = activity.state.selectedPerson();
         if (person == null || activity.editingBlocked()) return;
-        person.name = text(activity.nameInput);
+        String nextName = text(activity.nameInput);
+        if (!nextName.equals(person.name)) {
+            person.name = nextName; person.namePartsSet = false;
+            String[] parts = PersonNames.parts(person); PersonNames.set(person,parts[0],parts[1],parts[2]);
+        }
         if (!person.genderManual) person.gender = PersonGender.infer(person.name);
         person.bornYear = text(activity.bornInput);
         person.diedYear = text(activity.diedInput);

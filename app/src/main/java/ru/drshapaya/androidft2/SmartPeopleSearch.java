@@ -18,6 +18,7 @@ final class SmartPeopleSearch {
     }
 
     static final class Query {
+        private PreparedNeedle preparedNeedle;
         final String raw;
         final String normalized;
         final List<String> parts = new ArrayList<>();
@@ -59,16 +60,25 @@ final class SmartPeopleSearch {
     private static final Pattern OLDER_THAN = Pattern.compile("старше\\s+(\\d{1,3})");
     private static final Pattern BEFORE = Pattern.compile("(?:до|раньше)\\s+(\\d{3,4})");
     private static final Pattern AFTER = Pattern.compile("(?:после|позже)\\s+(\\d{3,4})");
+    private static final Pattern RELATION_SCOPE = Pattern.compile(
+        "^(?:(?:покажи|найди|показать|все|всех)\\s+)*(братья и сестры|братьев и сестер|"
+            + "предки|предков|потомки|потомков|родственники|родственников|родня|"
+            + "дети|детей|ребенок|ребенка|родители|родителей|партнеры|партнеров|"
+            + "супруги|супругов|братья|братьев|сестры|сестер)\\s*(.*)$");
 
     private SmartPeopleSearch() {
     }
 
     static Query parse(TreeState state, String raw, String selectedId) {
+        return parse(state, raw, selectedId, false);
+    }
+
+    static Query parse(TreeState state, String raw, String selectedId, boolean terminology) {
         Query query = new Query(raw);
         if (!query.active) return query;
         String n = query.normalized;
 
-        parseKinship(state, query);
+        parseKinship(state, query, terminology);
         if (!query.kinshipFirstId.isEmpty() && !query.kinshipSecondId.isEmpty()) return query;
 
         if (containsAny(n, "без фото", "без фотографии", "нет фото", "нет фотографии")) {
@@ -138,7 +148,7 @@ final class SmartPeopleSearch {
     static boolean matches(TreeState state, Query query, Person person, PhotoResolver photoResolver, Calendar now) {
         if (query == null || !query.active) return true;
         if (person == null) return false;
-        if (!query.scopedIds.isEmpty() && !query.scopedIds.contains(person.id)) return false;
+        if (!query.scope.isEmpty() && !query.scopedIds.contains(person.id)) return false;
         if (query.withoutPhoto && photoResolver != null && photoResolver.hasPhoto(person)) return false;
         if (query.withPhoto && (photoResolver == null || !photoResolver.hasPhoto(person))) return false;
         if (query.withoutBirthDate && hasBirthDate(person)) return false;
@@ -154,7 +164,7 @@ final class SmartPeopleSearch {
         if (query.birthdays && !matchesBirthday(query, person, now)) return false;
         if (query.ageOlderThan > 0 && !isOlderThan(person, query.ageOlderThan, now)) return false;
         if (!query.diedPlace.isEmpty() && !containsNormalized(person.place, query.diedPlace)) return false;
-        if (!query.freeText.isEmpty() && !matchesFreeText(person, query.freeText)) return false;
+        if (!query.freeText.isEmpty() && !matchesFreeText(person, query)) return false;
         return true;
     }
 
@@ -179,8 +189,9 @@ final class SmartPeopleSearch {
         int bestScore = -1;
         for (Person person : state.people.values()) {
             String name = normalizePersonKey(person.name);
-            int score = personMatchScore(name, needle);
-            if (score <= 0) score = fuzzyTokenScore(name, needle);
+            String alternate = normalizePersonKey(PersonNames.alternate(person));
+            int score = Math.max(personMatchScore(name, needle), personMatchScore(alternate, needle));
+            if (score <= 0) score = Math.max(fuzzyTokenScore(name, needle), fuzzyTokenScore(alternate, needle));
             if (score > bestScore) {
                 bestScore = score;
                 best = person;
@@ -194,7 +205,7 @@ final class SmartPeopleSearch {
         return fuzzyTokenScore(normalize(candidate), normalize(query));
     }
 
-    private static void parseKinship(TreeState state, Query query) {
+    private static void parseKinship(TreeState state, Query query, boolean terminology) {
         Matcher matcher = Pattern.compile("как\\s+(.+?)\\s+связан\\S*\\s+с\\s+(.+)").matcher(query.normalized);
         if (!matcher.find()) {
             matcher = Pattern.compile("кто\\s+(.+?)\\s+для\\s+(.+)").matcher(query.normalized);
@@ -203,7 +214,7 @@ final class SmartPeopleSearch {
         Person first = findPerson(state, matcher.group(1));
         Person second = findPerson(state, matcher.group(2));
         if (first == null || second == null) return;
-        KinshipCalculator.Result result = KinshipCalculator.calculate(state, first.id, second.id);
+        KinshipCalculator.Result result = KinshipCalculator.calculate(state, first.id, second.id, terminology);
         query.kinshipFirstId = first.id;
         query.kinshipSecondId = second.id;
         query.kinshipSummary = displayName(first) + " и " + displayName(second) + ": "
@@ -279,31 +290,68 @@ final class SmartPeopleSearch {
             }
             return;
         }
-        String scope = "";
-        String tail = "";
-        if (containsAny(n, "предки", "предков")) {
-            scope = "ancestors";
-            tail = tailAfterAny(n, "предки", "предков");
-        } else if (containsAny(n, "потомки", "потомков")) {
-            scope = "descendants";
-            tail = tailAfterAny(n, "потомки", "потомков");
-        } else if (containsAny(n, "родственники", "родственников", "родня")) {
-            scope = "relatives";
-            tail = tailAfterAny(n, "родственники", "родственников", "родня");
-        }
-        if (scope.isEmpty()) return;
-        Person anchor = findPerson(state, cleanFreeText(tail));
+        Matcher relation = RELATION_SCOPE.matcher(n);
+        if (!relation.matches()) return;
+        String command = relation.group(1);
+        String scope;
+        if (command.startsWith("предк")) scope = "ancestors";
+        else if (command.startsWith("потомк")) scope = "descendants";
+        else if (command.startsWith("родствен") || "родня".equals(command)) scope = "relatives";
+        else if (command.startsWith("дет") || command.startsWith("ребен")) scope = "children";
+        else if (command.startsWith("родител")) scope = "parents";
+        else if (command.startsWith("партнер") || command.startsWith("супруг")) scope = "partners";
+        else if (command.startsWith("брат") || command.startsWith("брать") || command.startsWith("братьев"))
+            scope = command.contains("сестр") ? "siblings" : "brothers";
+        else scope = "sisters";
+        Person anchor = findPerson(state, cleanFreeText(relation.group(2)));
         if (anchor == null) return;
         Set<String> ids;
         if ("ancestors".equals(scope)) ids = new LinkedHashSet<>(state.ancestorsOf(anchor.id));
         else if ("descendants".equals(scope)) ids = new LinkedHashSet<>(state.descendantsOf(anchor.id));
-        else ids = connectedRelatives(state, anchor.id);
+        else if ("relatives".equals(scope)) ids = connectedRelatives(state, anchor.id);
+        else ids = directRelatives(state, anchor.id, scope);
         ids.remove(anchor.id);
         query.scope = scope;
         query.anchorId = anchor.id;
         query.anchorName = displayName(anchor);
         query.scopedIds = ids;
         query.parts.add(scopeLabel(scope) + ": " + query.anchorName);
+    }
+
+    private static Set<String> directRelatives(TreeState state, String anchorId, String scope) {
+        Set<String> result = new LinkedHashSet<>();
+        Set<String> parentIds = new LinkedHashSet<>();
+        for (Relation relation : state.links) {
+            if ("parent".equals(relation.type)) {
+                if (anchorId.equals(relation.to)) parentIds.add(relation.from);
+                if ("children".equals(scope) && anchorId.equals(relation.from)) result.add(relation.to);
+            } else if ("partners".equals(scope)
+                && ("partner".equals(relation.type) || "family".equals(relation.type))) {
+                if (anchorId.equals(relation.from)) result.add(relation.to);
+                if (anchorId.equals(relation.to)) result.add(relation.from);
+            } else if ("sibling".equals(relation.type) && isSiblingScope(scope)) {
+                if (anchorId.equals(relation.from)) result.add(relation.to);
+                if (anchorId.equals(relation.to)) result.add(relation.from);
+            }
+        }
+        if ("parents".equals(scope)) result.addAll(parentIds);
+        if (isSiblingScope(scope)) {
+            for (Relation relation : state.links) {
+                if ("parent".equals(relation.type) && parentIds.contains(relation.from)) result.add(relation.to);
+            }
+            if (!"siblings".equals(scope)) {
+                String gender = "brothers".equals(scope) ? PersonGender.MALE : PersonGender.FEMALE;
+                result.removeIf(id -> !state.people.containsKey(id)
+                    || !gender.equals(PersonGender.resolve(state.people.get(id))));
+            }
+        }
+        result.remove(anchorId);
+        result.removeIf(id -> !state.people.containsKey(id));
+        return result;
+    }
+
+    private static boolean isSiblingScope(String scope) {
+        return "siblings".equals(scope) || "brothers".equals(scope) || "sisters".equals(scope);
     }
 
     private static Set<String> connectedRelatives(TreeState state, String anchorId) {
@@ -368,12 +416,46 @@ final class SmartPeopleSearch {
         return end - born > age;
     }
 
-    private static boolean matchesFreeText(Person person, String freeText) {
-        String normalized = normalize(value(person.name) + " " + value(person.place) + " " + value(person.notes)
-            + " " + value(person.bornYear) + " " + value(person.diedYear));
-        if (containsNormalized(normalized, freeText)) return true;
-        String surnameNeedle = TreeState.surnameOf(freeText);
-        return surnameNeedle.length() > 2 && TreeState.surnameOf(person.name).contains(surnameNeedle);
+    private static boolean matchesFreeText(Person person, Query query) {
+        PreparedText text = person.searchCache.text;
+        if (text == null || !text.matches(person)) person.searchCache.text = text = new PreparedText(person);
+        PreparedNeedle needle = query.preparedNeedle;
+        if (needle == null || !needle.raw.equals(query.freeText))
+            query.preparedNeedle = needle = new PreparedNeedle(query.freeText);
+        if (text.normalized.contains(needle.normalized)
+                || personMatchScore(text.compact, needle.compact) > 0
+                || fuzzyTokenScore(text.normalized, needle.normalized, text.tokens, needle.tokens) > 0) return true;
+        return needle.surname.length() > 2 && text.surnameKey.contains(needle.surname);
+    }
+
+    static final class PreparedText {
+        final String name, surname, given, patronymic, maiden, place, notes, born, died;
+        final boolean parts;
+        final String normalized, compact, surnameKey;
+        final String[] tokens;
+        PreparedText(Person p) {
+            name=p.name; surname=p.surname; given=p.givenName; patronymic=p.patronymic;
+            maiden=p.maidenName; parts=p.namePartsSet; place=p.place; notes=p.notes;
+            born=p.bornYear; died=p.diedYear;
+            normalized=normalize(PersonNames.search(p)+" "+value(place)+" "+value(notes)+" "+value(born)+" "+value(died));
+            compact=normalizePersonKey(normalized); tokens=normalized.split("\\s+"); surnameKey=TreeState.surnameOf(name);
+        }
+        boolean matches(Person p) {
+            return java.util.Objects.equals(name,p.name) && java.util.Objects.equals(surname,p.surname)
+                && java.util.Objects.equals(given,p.givenName) && java.util.Objects.equals(patronymic,p.patronymic)
+                && java.util.Objects.equals(maiden,p.maidenName) && parts==p.namePartsSet
+                && java.util.Objects.equals(place,p.place) && java.util.Objects.equals(notes,p.notes)
+                && java.util.Objects.equals(born,p.bornYear) && java.util.Objects.equals(died,p.diedYear);
+        }
+    }
+
+    private static final class PreparedNeedle {
+        final String raw, normalized, compact, surname;
+        final String[] tokens;
+        PreparedNeedle(String value) {
+            raw=value; normalized=normalize(value); compact=normalizePersonKey(normalized);
+            surname=TreeState.surnameOf(value); tokens=normalized.split("\\s+");
+        }
     }
 
     private static boolean hasBirthDate(Person person) {
@@ -381,7 +463,7 @@ final class SmartPeopleSearch {
     }
 
     private static boolean hasDeathDate(Person person) {
-        return present(person.died) || present(person.diedDay) || present(person.diedMonth) || present(person.diedYear);
+        return PersonLifeStatus.DECEASED.equals(PersonLifeStatus.resolve(person));
     }
 
     private static String cleanFreeText(String value) {
@@ -451,6 +533,21 @@ final class SmartPeopleSearch {
             case "родственники":
             case "родственников":
             case "родня":
+            case "дети":
+            case "детей":
+            case "ребенок":
+            case "ребенка":
+            case "родители":
+            case "родителей":
+            case "партнеры":
+            case "партнеров":
+            case "супруги":
+            case "супругов":
+            case "братья":
+            case "братьев":
+            case "сестры":
+            case "сестер":
+            case "и":
             case "день":
             case "дни":
             case "рождения":
@@ -473,15 +570,8 @@ final class SmartPeopleSearch {
     private static boolean looksLikePlainSearch(String normalized) {
         return !containsAny(normalized,
             "без фото", "без фотографии", "без даты", "нет даты", "живые", "умерш",
-            "родивш", "рожд", "предки", "потомки", "родствен", "день рождения", "дни рождения", "старше");
-    }
-
-    private static String tailAfterAny(String source, String... markers) {
-        for (String marker : markers) {
-            String tail = tailAfter(source, marker);
-            if (!tail.isEmpty()) return tail;
-        }
-        return "";
+            "родивш", "рожд", "предки", "потомки", "родствен", "дети", "детей",
+            "родители", "партнеры", "братья", "сестры", "день рождения", "дни рождения", "старше");
     }
 
     private static String tailAfter(String source, String marker) {
@@ -506,11 +596,13 @@ final class SmartPeopleSearch {
     }
 
     private static int fuzzyTokenScore(String haystack, String needle) {
+        return fuzzyTokenScore(haystack, needle, haystack.split("\\s+"), needle.split("\\s+"));
+    }
+
+    private static int fuzzyTokenScore(String haystack, String needle, String[] candidates, String[] requested) {
         if (haystack.isEmpty() || needle.isEmpty()) return 0;
         if (haystack.equals(needle)) return 1200;
         if (haystack.contains(needle)) return 900 + needle.length();
-        String[] candidates = haystack.split("\\s+");
-        String[] requested = needle.split("\\s+");
         int total = 0;
         for (String wanted : requested) {
             if (wanted.isEmpty()) continue;
@@ -566,6 +658,11 @@ final class SmartPeopleSearch {
     private static int personMatchScore(String name, String needle) {
         if (name.isEmpty() || needle.isEmpty()) return 0;
         if (name.equals(needle)) return 1000;
+        if (!needle.contains(" ")) {
+            for (String token : name.split(" ")) {
+                if (token.equals(needle)) return 850 + needle.length();
+            }
+        }
         if (name.contains(needle)) return 700 + needle.length();
         Set<String> nameTokens = new HashSet<>();
         Collections.addAll(nameTokens, name.split(" "));
@@ -608,9 +705,13 @@ final class SmartPeopleSearch {
     }
 
     private static int monthNumber(String value) {
-        String n = normalize(value);
-        String[] months = {"январ", "феврал", "март", "апрел", "ма", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"};
-        for (int i = 0; i < months.length; i++) if (n.contains(months[i])) return i + 1;
+        String[] months = {"январ", "феврал", "март", "апрел", "", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр"};
+        for (String token : normalize(value).split("\\s+")) {
+            if (token.matches("ма[йяею]")) return 5;
+            for (int i = 0; i < months.length; i++) {
+                if (!months[i].isEmpty() && token.startsWith(months[i])) return i + 1;
+            }
+        }
         return 0;
     }
 
@@ -649,6 +750,12 @@ final class SmartPeopleSearch {
     private static String scopeLabel(String scope) {
         if ("ancestors".equals(scope)) return "предки";
         if ("descendants".equals(scope)) return "потомки";
+        if ("children".equals(scope)) return "дети";
+        if ("parents".equals(scope)) return "родители";
+        if ("partners".equals(scope)) return "партнеры";
+        if ("siblings".equals(scope)) return "братья и сестры";
+        if ("brothers".equals(scope)) return "братья";
+        if ("sisters".equals(scope)) return "сестры";
         return "родственники";
     }
 

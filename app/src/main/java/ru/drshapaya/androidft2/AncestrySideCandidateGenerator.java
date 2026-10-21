@@ -22,9 +22,7 @@ final class AncestrySideCandidateGenerator implements LayoutCandidateGenerator {
         for (FamilyLayoutGraph.PartnerUnit unit : graph.partnerUnits) {
             if (unit.people.size() != 2) continue;
             List<String> members = new ArrayList<>(unit.people);
-            members.sort(Comparator
-                .comparingDouble((String id) -> center(snapshot.positionOf(id)))
-                .thenComparing(id -> id));
+            orderByParentRoleOrPosition(members, graph, snapshot);
             String leftPersonId = members.get(0);
             String rightPersonId = members.get(1);
             FamilyLayoutGraph.ParentFamily leftFamily = graph.parentFamilyOf(leftPersonId);
@@ -106,6 +104,30 @@ final class AncestrySideCandidateGenerator implements LayoutCandidateGenerator {
 
     private static double center(LayoutSnapshot.Position position) {
         return position == null ? Double.POSITIVE_INFINITY : position.x;
+    }
+
+    private static void orderByParentRoleOrPosition(
+        List<String> members,
+        FamilyLayoutGraph graph,
+        LayoutSnapshot snapshot
+    ) {
+        String male = "";
+        String female = "";
+        for (String id : members) {
+            FamilyLayoutGraph.PersonNode node = graph.people.get(id);
+            if (node == null) continue;
+            if (PersonGender.MALE.equals(node.gender)) male = id;
+            else if (PersonGender.FEMALE.equals(node.gender)) female = id;
+        }
+        if (!male.isEmpty() && !female.isEmpty()) {
+            members.clear();
+            members.add(male);
+            members.add(female);
+            return;
+        }
+        members.sort(Comparator
+            .comparingDouble((String id) -> center(snapshot.positionOf(id)))
+            .thenComparing(id -> id));
     }
 
     private static float snapUp(float value) {

@@ -8,9 +8,17 @@ import java.util.Map;
 /** Immutable coordinate state used while comparing solver candidates. */
 final class LayoutSnapshot {
     final Map<String, Position> positions;
+    final float workspaceWidth;
+    final float workspaceHeight;
 
-    private LayoutSnapshot(Map<String, Position> positions) {
+    private LayoutSnapshot(
+        Map<String, Position> positions,
+        float workspaceWidth,
+        float workspaceHeight
+    ) {
         this.positions = Collections.unmodifiableMap(positions);
+        this.workspaceWidth = workspaceWidth;
+        this.workspaceHeight = workspaceHeight;
     }
 
     static LayoutSnapshot capture(TreeState state) {
@@ -20,7 +28,10 @@ final class LayoutSnapshot {
                 positions.put(person.id, new Position(person.x, person.y));
             }
         }
-        return new LayoutSnapshot(positions);
+        return new LayoutSnapshot(
+            positions,
+            TreeLayoutEngine.surfaceWidth(state),
+            TreeLayoutEngine.surfaceHeight(state));
     }
 
     Position positionOf(String id) {
@@ -35,7 +46,7 @@ final class LayoutSnapshot {
                 if (current != null) result.put(id, new Position(current.x + dx, current.y + dy));
             }
         }
-        return new LayoutSnapshot(result);
+        return new LayoutSnapshot(result, workspaceWidth, workspaceHeight);
     }
 
     void applyTo(TreeState state) {

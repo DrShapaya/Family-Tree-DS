@@ -47,6 +47,8 @@ final class TreeMediaStore {
         staging = new File(root, "staging");
     }
 
+    String thumbnailNamespace() { return root.getAbsolutePath(); }
+
     StoredMedia importPhoto(InputStream input, String filename, String mimeType) throws Exception {
         return importStream(input, true, filename, mimeType, MAX_PHOTO_BYTES);
     }
@@ -119,7 +121,7 @@ final class TreeMediaStore {
         options.inSampleSize = sampleSize(
             bounds.outWidth,
             bounds.outHeight,
-            Math.max(64, targetSize));
+            Math.max(16, targetSize));
         return BitmapFactory.decodeFile(file.getAbsolutePath(), options);
     }
 
@@ -172,6 +174,9 @@ final class TreeMediaStore {
             byte[] buffer = new byte[COPY_BUFFER_SIZE];
             int read;
             while ((read = input.read(buffer)) != -1) {
+                if (Thread.currentThread().isInterrupted()) {
+                    throw new java.io.InterruptedIOException("Операция отменена");
+                }
                 size += read;
                 if (size > maxBytes) {
                     throw new IOException(
@@ -231,6 +236,7 @@ final class TreeMediaStore {
         long total = 0L;
         int read;
         while ((read = input.read(buffer)) != -1) {
+            if (Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Операция отменена");
             total += read;
             if (total > maxBytes) throw new IOException("Файл превышает допустимый размер");
             output.write(buffer, 0, read);

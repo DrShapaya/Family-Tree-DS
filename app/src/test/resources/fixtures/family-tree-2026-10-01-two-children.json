@@ -1,0 +1,779 @@
+{
+  "rootId": "p_4c2d0d7f51a0457881bcddabc887d71d",
+  "selectedId": "p_19477bcae5464d8da36b61a578df0f5c",
+  "people": {
+    "p_4c2d0d7f51a0457881bcddabc887d71d": {
+      "id": "p_4c2d0d7f51a0457881bcddabc887d71d",
+      "name": "23. 2",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_07d4881010b14267bd96e628765661c8": {
+      "id": "p_07d4881010b14267bd96e628765661c8",
+      "name": "24. 1",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_6a5c9edacd1e455abfd9cf2f13754441": {
+      "id": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "name": "17. 7",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_438a8b4b50d34a0d948aae2df253fcc8": {
+      "id": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "name": "16. 8",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_8d7456ddc41e4356b11a74c5b75ccf91": {
+      "id": "p_8d7456ddc41e4356b11a74c5b75ccf91",
+      "name": "25. 3",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_1fed9aec62794bcd8bac31d44c6c5d45": {
+      "id": "p_1fed9aec62794bcd8bac31d44c6c5d45",
+      "name": "12. Новый родитель 1",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_6727c662918f473899958f81fbff8256": {
+      "id": "p_6727c662918f473899958f81fbff8256",
+      "name": "13. Новый родитель 2",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_ac1902a5856b4e388f8feed9a3b0ae3e": {
+      "id": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "name": "6. Новый родитель 1",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_b87301982f854b5bae8874f425b8f5a3": {
+      "id": "p_b87301982f854b5bae8874f425b8f5a3",
+      "name": "7. Новый родитель 2",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_1acb6db430214288a050069aaf071843": {
+      "id": "p_1acb6db430214288a050069aaf071843",
+      "name": "19. Новый ребёнок",
+      "gender": "female",
+      "pinned": false
+    },
+    "p_0239f0d3fd254533a923aae5e5bda4ef": {
+      "id": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "name": "14. Новый ребёнок",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_3c0d178bba674c4b922bfc6fdcd42b48": {
+      "id": "p_3c0d178bba674c4b922bfc6fdcd42b48",
+      "name": "15. Новый партнёр",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_ee86a331198f48b3afc587a0c3be7412": {
+      "id": "p_ee86a331198f48b3afc587a0c3be7412",
+      "name": "21. 9",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_5c33f69516734beb998dd95ce2eb3b51": {
+      "id": "p_5c33f69516734beb998dd95ce2eb3b51",
+      "name": "22. 10",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_7c17eb2106614f3d99dcb0c53f8672e6": {
+      "id": "p_7c17eb2106614f3d99dcb0c53f8672e6",
+      "name": "1. Новый родитель 1",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_8003f9297af3440fbce3262ae703636e": {
+      "id": "p_8003f9297af3440fbce3262ae703636e",
+      "name": "2. Новый родитель 2",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_b4b4d9d747b74b15b5cbf46dc1621787": {
+      "id": "p_b4b4d9d747b74b15b5cbf46dc1621787",
+      "name": "3. Брат или сестра 1",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_6b1ec3ba0366467683d98bfa79bb0874": {
+      "id": "p_6b1ec3ba0366467683d98bfa79bb0874",
+      "name": "4. Брат или сестра 2",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_1dcb9b21dd0e4725adee9ac4cb00d039": {
+      "id": "p_1dcb9b21dd0e4725adee9ac4cb00d039",
+      "name": "5. 5",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_97c96f9bcd154a0a978a285c770b6237": {
+      "id": "p_97c96f9bcd154a0a978a285c770b6237",
+      "name": "8. 4",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_82dfa91ee4904df8b84a7121a1faf3af": {
+      "id": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "name": "9. 6",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_e4aab68129214f4fbc665bbefa900950": {
+      "id": "p_e4aab68129214f4fbc665bbefa900950",
+      "name": "20. Брат или сестра",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_073d21aa4886447e855456012de0c685": {
+      "id": "p_073d21aa4886447e855456012de0c685",
+      "name": "18. Новый партнёр",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_43ee28cdc63042dd968b8cd20733e026": {
+      "id": "p_43ee28cdc63042dd968b8cd20733e026",
+      "name": "10. Новый родитель 1",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_807d3b0d34f74775ba1bcb5381917d8a": {
+      "id": "p_807d3b0d34f74775ba1bcb5381917d8a",
+      "name": "11. Новый родитель 2",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_0da9c7acb7944090b04ab4d42d6a8523": {
+      "id": "p_0da9c7acb7944090b04ab4d42d6a8523",
+      "name": "Новый ребёнок",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_2674b7544dad43ecb5a99f94892366a9": {
+      "id": "p_2674b7544dad43ecb5a99f94892366a9",
+      "name": "26",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_673f5494c9ff4adf9bafa4fb7b5c92ed": {
+      "id": "p_673f5494c9ff4adf9bafa4fb7b5c92ed",
+      "name": "27",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_e6d36193dc534718b5a9d47be93a3e2e": {
+      "id": "p_e6d36193dc534718b5a9d47be93a3e2e",
+      "name": "28",
+      "gender": "unknown",
+      "pinned": false
+    },
+    "p_19477bcae5464d8da36b61a578df0f5c": {
+      "id": "p_19477bcae5464d8da36b61a578df0f5c",
+      "name": "Брат или сестра",
+      "gender": "unknown",
+      "pinned": false
+    }
+  },
+  "positions": {
+    "p_4c2d0d7f51a0457881bcddabc887d71d": {
+      "x": 4640,
+      "y": 1600
+    },
+    "p_07d4881010b14267bd96e628765661c8": {
+      "x": 4960,
+      "y": 1600
+    },
+    "p_6a5c9edacd1e455abfd9cf2f13754441": {
+      "x": 5120,
+      "y": 1120
+    },
+    "p_438a8b4b50d34a0d948aae2df253fcc8": {
+      "x": 4800,
+      "y": 1120
+    },
+    "p_8d7456ddc41e4356b11a74c5b75ccf91": {
+      "x": 5280,
+      "y": 1600
+    },
+    "p_1fed9aec62794bcd8bac31d44c6c5d45": {
+      "x": 6440,
+      "y": 640
+    },
+    "p_6727c662918f473899958f81fbff8256": {
+      "x": 6760,
+      "y": 640
+    },
+    "p_ac1902a5856b4e388f8feed9a3b0ae3e": {
+      "x": 1280,
+      "y": 640
+    },
+    "p_b87301982f854b5bae8874f425b8f5a3": {
+      "x": 1600,
+      "y": 640
+    },
+    "p_1acb6db430214288a050069aaf071843": {
+      "x": 6120,
+      "y": 1120
+    },
+    "p_0239f0d3fd254533a923aae5e5bda4ef": {
+      "x": 3840,
+      "y": 1120
+    },
+    "p_3c0d178bba674c4b922bfc6fdcd42b48": {
+      "x": 4160,
+      "y": 1120
+    },
+    "p_ee86a331198f48b3afc587a0c3be7412": {
+      "x": 3840,
+      "y": 1600
+    },
+    "p_5c33f69516734beb998dd95ce2eb3b51": {
+      "x": 4160,
+      "y": 1600
+    },
+    "p_7c17eb2106614f3d99dcb0c53f8672e6": {
+      "x": 560,
+      "y": 160
+    },
+    "p_8003f9297af3440fbce3262ae703636e": {
+      "x": 880,
+      "y": 160
+    },
+    "p_b4b4d9d747b74b15b5cbf46dc1621787": {
+      "x": 160,
+      "y": 640
+    },
+    "p_6b1ec3ba0366467683d98bfa79bb0874": {
+      "x": 480,
+      "y": 640
+    },
+    "p_1dcb9b21dd0e4725adee9ac4cb00d039": {
+      "x": 800,
+      "y": 640
+    },
+    "p_97c96f9bcd154a0a978a285c770b6237": {
+      "x": 2080,
+      "y": 640
+    },
+    "p_82dfa91ee4904df8b84a7121a1faf3af": {
+      "x": 2560,
+      "y": 640
+    },
+    "p_e4aab68129214f4fbc665bbefa900950": {
+      "x": 6600,
+      "y": 1120
+    },
+    "p_073d21aa4886447e855456012de0c685": {
+      "x": 5800,
+      "y": 1120
+    },
+    "p_43ee28cdc63042dd968b8cd20733e026": {
+      "x": 5640,
+      "y": 640
+    },
+    "p_807d3b0d34f74775ba1bcb5381917d8a": {
+      "x": 5960,
+      "y": 640
+    },
+    "p_0da9c7acb7944090b04ab4d42d6a8523": {
+      "x": 3360,
+      "y": 1120
+    },
+    "p_2674b7544dad43ecb5a99f94892366a9": {
+      "x": 3360,
+      "y": 640
+    },
+    "p_673f5494c9ff4adf9bafa4fb7b5c92ed": {
+      "x": 2880,
+      "y": 640
+    },
+    "p_e6d36193dc534718b5a9d47be93a3e2e": {
+      "x": 2560,
+      "y": 1120
+    },
+    "p_19477bcae5464d8da36b61a578df0f5c": {
+      "x": 2880,
+      "y": 1120
+    }
+  },
+  "links": [
+    {
+      "id": "l_75f30f1dba8041de87f56c9bc5e98baa",
+      "type": "sibling",
+      "from": "p_4c2d0d7f51a0457881bcddabc887d71d",
+      "to": "p_07d4881010b14267bd96e628765661c8",
+      "side": "right"
+    },
+    {
+      "id": "l_b2c81101b4d6448f822b33e1de3d17c0",
+      "type": "parent",
+      "from": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "to": "p_07d4881010b14267bd96e628765661c8",
+      "side": "right"
+    },
+    {
+      "id": "l_6be6b26ff15a41ce8579a3330e7247d7",
+      "type": "parent",
+      "from": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "to": "p_4c2d0d7f51a0457881bcddabc887d71d",
+      "side": "right"
+    },
+    {
+      "id": "l_6cdfa89d1a854661bb47c2cec195c735",
+      "type": "parent",
+      "from": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "to": "p_07d4881010b14267bd96e628765661c8",
+      "side": "right"
+    },
+    {
+      "id": "l_142cd53c764d40e7ae87a0db3f5405dc",
+      "type": "parent",
+      "from": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "to": "p_4c2d0d7f51a0457881bcddabc887d71d",
+      "side": "right"
+    },
+    {
+      "id": "l_4cc82b4c0db24b0d9d2032543aedd673",
+      "type": "partner",
+      "from": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "to": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "side": "right"
+    },
+    {
+      "id": "l_eed3cceada294984811fcede5462ddaa",
+      "type": "parent",
+      "from": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "to": "p_8d7456ddc41e4356b11a74c5b75ccf91",
+      "side": "right"
+    },
+    {
+      "id": "l_51def1fe10ea4e8bad2dae5379aa728b",
+      "type": "parent",
+      "from": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "to": "p_8d7456ddc41e4356b11a74c5b75ccf91",
+      "side": "right"
+    },
+    {
+      "id": "l_6e942da766d143089c1012298d37aa63",
+      "type": "sibling",
+      "from": "p_07d4881010b14267bd96e628765661c8",
+      "to": "p_8d7456ddc41e4356b11a74c5b75ccf91",
+      "side": "right"
+    },
+    {
+      "id": "l_422b3d51ad6d42abbfe0b9edade403cf",
+      "type": "sibling",
+      "from": "p_4c2d0d7f51a0457881bcddabc887d71d",
+      "to": "p_8d7456ddc41e4356b11a74c5b75ccf91",
+      "side": "right"
+    },
+    {
+      "id": "l_fdd0efbd586547c4ad467f97bb64b80c",
+      "type": "parent",
+      "from": "p_1fed9aec62794bcd8bac31d44c6c5d45",
+      "to": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "side": "right"
+    },
+    {
+      "id": "l_4f0b5e639b3d49b7890841b147cc7c7a",
+      "type": "parent",
+      "from": "p_6727c662918f473899958f81fbff8256",
+      "to": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "side": "right"
+    },
+    {
+      "id": "l_40b6930157c549799a7b543998c4248e",
+      "type": "partner",
+      "from": "p_1fed9aec62794bcd8bac31d44c6c5d45",
+      "to": "p_6727c662918f473899958f81fbff8256",
+      "side": "right"
+    },
+    {
+      "id": "l_7b6236931fb240a0bdb3a10ec0f79a53",
+      "type": "parent",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "side": "right"
+    },
+    {
+      "id": "l_b4f6a315167546c8bbf7ce2808474d7d",
+      "type": "parent",
+      "from": "p_b87301982f854b5bae8874f425b8f5a3",
+      "to": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "side": "right"
+    },
+    {
+      "id": "l_25565e99405245d9b0c0a4b85923cb89",
+      "type": "partner",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_b87301982f854b5bae8874f425b8f5a3",
+      "side": "right"
+    },
+    {
+      "id": "l_63c1f42b6a6c4114a62f01dba81ff8f0",
+      "type": "parent",
+      "from": "p_1fed9aec62794bcd8bac31d44c6c5d45",
+      "to": "p_1acb6db430214288a050069aaf071843",
+      "side": "right"
+    },
+    {
+      "id": "l_b933a9f8ebb24977859226fcf196c2a1",
+      "type": "parent",
+      "from": "p_6727c662918f473899958f81fbff8256",
+      "to": "p_1acb6db430214288a050069aaf071843",
+      "side": "right"
+    },
+    {
+      "id": "l_12a6143b66604b55bb092c7e577887ce",
+      "type": "sibling",
+      "from": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "to": "p_1acb6db430214288a050069aaf071843",
+      "side": "right"
+    },
+    {
+      "id": "l_fd87beb043da41e28bbf14c1c71ec297",
+      "type": "parent",
+      "from": "p_b87301982f854b5bae8874f425b8f5a3",
+      "to": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "side": "right"
+    },
+    {
+      "id": "l_255aaea41dae4101aa9946fb253fe358",
+      "type": "parent",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "side": "right"
+    },
+    {
+      "id": "l_c0603ca0efef4b6296a52bfb3afc4657",
+      "type": "sibling",
+      "from": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "to": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "side": "right"
+    },
+    {
+      "id": "l_9acd88a9447e4271beb44965f11b1c2e",
+      "type": "partner",
+      "from": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "to": "p_3c0d178bba674c4b922bfc6fdcd42b48",
+      "side": "left"
+    },
+    {
+      "id": "l_1e7240a494134b93bb8af643910e5703",
+      "type": "parent",
+      "from": "p_3c0d178bba674c4b922bfc6fdcd42b48",
+      "to": "p_ee86a331198f48b3afc587a0c3be7412",
+      "side": "right"
+    },
+    {
+      "id": "l_8d6871aa188d472c951c2208c796cfca",
+      "type": "parent",
+      "from": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "to": "p_ee86a331198f48b3afc587a0c3be7412",
+      "side": "right"
+    },
+    {
+      "id": "l_69af96f1c2f046a4b0aa3b3c05419084",
+      "type": "parent",
+      "from": "p_3c0d178bba674c4b922bfc6fdcd42b48",
+      "to": "p_5c33f69516734beb998dd95ce2eb3b51",
+      "side": "right"
+    },
+    {
+      "id": "l_ece7ddc7b71c4fd49a4bfcd3ee9e29d2",
+      "type": "parent",
+      "from": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "to": "p_5c33f69516734beb998dd95ce2eb3b51",
+      "side": "right"
+    },
+    {
+      "id": "l_e69b9d9dc06e48378e3eb97c52f85b35",
+      "type": "sibling",
+      "from": "p_ee86a331198f48b3afc587a0c3be7412",
+      "to": "p_5c33f69516734beb998dd95ce2eb3b51",
+      "side": "right"
+    },
+    {
+      "id": "l_c86db5edea2347c682c6f3492a67f904",
+      "type": "parent",
+      "from": "p_7c17eb2106614f3d99dcb0c53f8672e6",
+      "to": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "side": "right"
+    },
+    {
+      "id": "l_9a7cc9a5d16c4743b67844f81c639feb",
+      "type": "parent",
+      "from": "p_8003f9297af3440fbce3262ae703636e",
+      "to": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "side": "right"
+    },
+    {
+      "id": "l_84a0bc4bb57242039171111311d02e8d",
+      "type": "partner",
+      "from": "p_7c17eb2106614f3d99dcb0c53f8672e6",
+      "to": "p_8003f9297af3440fbce3262ae703636e",
+      "side": "right"
+    },
+    {
+      "id": "l_361bb3ce1a10476bb7c4a795407ae977",
+      "type": "parent",
+      "from": "p_7c17eb2106614f3d99dcb0c53f8672e6",
+      "to": "p_b4b4d9d747b74b15b5cbf46dc1621787",
+      "side": "right"
+    },
+    {
+      "id": "l_da45538a29714a55afa0e9413a75e6ed",
+      "type": "parent",
+      "from": "p_8003f9297af3440fbce3262ae703636e",
+      "to": "p_b4b4d9d747b74b15b5cbf46dc1621787",
+      "side": "right"
+    },
+    {
+      "id": "l_c2625937630d4bf59f4a022147d813e8",
+      "type": "sibling",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_b4b4d9d747b74b15b5cbf46dc1621787",
+      "side": "right"
+    },
+    {
+      "id": "l_9211cd749e944325a8f10d407c0ba931",
+      "type": "parent",
+      "from": "p_7c17eb2106614f3d99dcb0c53f8672e6",
+      "to": "p_6b1ec3ba0366467683d98bfa79bb0874",
+      "side": "right"
+    },
+    {
+      "id": "l_efac20f680fb4bcbb8b220f32483df1a",
+      "type": "parent",
+      "from": "p_8003f9297af3440fbce3262ae703636e",
+      "to": "p_6b1ec3ba0366467683d98bfa79bb0874",
+      "side": "right"
+    },
+    {
+      "id": "l_2761447e3bae408aa194f50e6c376fd8",
+      "type": "sibling",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_6b1ec3ba0366467683d98bfa79bb0874",
+      "side": "right"
+    },
+    {
+      "id": "l_4a70a63217c6471f84610daeb65d1d48",
+      "type": "sibling",
+      "from": "p_b4b4d9d747b74b15b5cbf46dc1621787",
+      "to": "p_6b1ec3ba0366467683d98bfa79bb0874",
+      "side": "right"
+    },
+    {
+      "id": "l_e82afe4343394672aae51f29ac20f3a6",
+      "type": "parent",
+      "from": "p_7c17eb2106614f3d99dcb0c53f8672e6",
+      "to": "p_1dcb9b21dd0e4725adee9ac4cb00d039",
+      "side": "right"
+    },
+    {
+      "id": "l_a40fc545e67e400d9ca2682781620260",
+      "type": "parent",
+      "from": "p_8003f9297af3440fbce3262ae703636e",
+      "to": "p_1dcb9b21dd0e4725adee9ac4cb00d039",
+      "side": "right"
+    },
+    {
+      "id": "l_561f29f4011d4a90975b0fbb4ccbd426",
+      "type": "sibling",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_1dcb9b21dd0e4725adee9ac4cb00d039",
+      "side": "right"
+    },
+    {
+      "id": "l_43ac877157304a1291fb0a15808859b8",
+      "type": "sibling",
+      "from": "p_b4b4d9d747b74b15b5cbf46dc1621787",
+      "to": "p_1dcb9b21dd0e4725adee9ac4cb00d039",
+      "side": "right"
+    },
+    {
+      "id": "l_3dd89a13edf74e6ebf2864b5e48cc802",
+      "type": "sibling",
+      "from": "p_6b1ec3ba0366467683d98bfa79bb0874",
+      "to": "p_1dcb9b21dd0e4725adee9ac4cb00d039",
+      "side": "right"
+    },
+    {
+      "id": "l_675481f4346246b8954b46df899a13d9",
+      "type": "sibling",
+      "from": "p_b87301982f854b5bae8874f425b8f5a3",
+      "to": "p_97c96f9bcd154a0a978a285c770b6237",
+      "side": "right"
+    },
+    {
+      "id": "l_f6972d836e8144ba9b30e190994098dc",
+      "type": "sibling",
+      "from": "p_b87301982f854b5bae8874f425b8f5a3",
+      "to": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "side": "right"
+    },
+    {
+      "id": "l_b5b35388df5d4e21a03114ea94c03e98",
+      "type": "sibling",
+      "from": "p_97c96f9bcd154a0a978a285c770b6237",
+      "to": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "side": "right"
+    },
+    {
+      "id": "l_8b7b19a07b33440ba30ca77de1708de9",
+      "type": "parent",
+      "from": "p_1fed9aec62794bcd8bac31d44c6c5d45",
+      "to": "p_e4aab68129214f4fbc665bbefa900950",
+      "side": "right"
+    },
+    {
+      "id": "l_172c5288beca4202b384fbe6902601f7",
+      "type": "parent",
+      "from": "p_6727c662918f473899958f81fbff8256",
+      "to": "p_e4aab68129214f4fbc665bbefa900950",
+      "side": "right"
+    },
+    {
+      "id": "l_9cb93c63c4214cf7a3b190579383a614",
+      "type": "sibling",
+      "from": "p_6a5c9edacd1e455abfd9cf2f13754441",
+      "to": "p_e4aab68129214f4fbc665bbefa900950",
+      "side": "right"
+    },
+    {
+      "id": "l_6fb42384383f4dac877b4c881c1ebbf3",
+      "type": "sibling",
+      "from": "p_1acb6db430214288a050069aaf071843",
+      "to": "p_e4aab68129214f4fbc665bbefa900950",
+      "side": "right"
+    },
+    {
+      "id": "l_2750a87de89547eeba446fedfb26b057",
+      "type": "partner",
+      "from": "p_1acb6db430214288a050069aaf071843",
+      "to": "p_073d21aa4886447e855456012de0c685",
+      "side": "left"
+    },
+    {
+      "id": "l_612be6286d104149951936c5a3a924c3",
+      "type": "parent",
+      "from": "p_43ee28cdc63042dd968b8cd20733e026",
+      "to": "p_073d21aa4886447e855456012de0c685",
+      "side": "right"
+    },
+    {
+      "id": "l_5f48a11f097e4f5cb44a58e3efb96ee9",
+      "type": "parent",
+      "from": "p_807d3b0d34f74775ba1bcb5381917d8a",
+      "to": "p_073d21aa4886447e855456012de0c685",
+      "side": "right"
+    },
+    {
+      "id": "l_da229c451788457588863bbdd45e1083",
+      "type": "partner",
+      "from": "p_43ee28cdc63042dd968b8cd20733e026",
+      "to": "p_807d3b0d34f74775ba1bcb5381917d8a",
+      "side": "right"
+    },
+    {
+      "id": "l_df5a6737a99b4f3e856e7b7688ca06dd",
+      "type": "parent",
+      "from": "p_ac1902a5856b4e388f8feed9a3b0ae3e",
+      "to": "p_0da9c7acb7944090b04ab4d42d6a8523",
+      "side": "right"
+    },
+    {
+      "id": "l_c2b43a0d2c1a4f33b3357b9dac2a8b0d",
+      "type": "parent",
+      "from": "p_b87301982f854b5bae8874f425b8f5a3",
+      "to": "p_0da9c7acb7944090b04ab4d42d6a8523",
+      "side": "right"
+    },
+    {
+      "id": "l_aa658fbff0c1414c909f4a810729cbe7",
+      "type": "sibling",
+      "from": "p_438a8b4b50d34a0d948aae2df253fcc8",
+      "to": "p_0da9c7acb7944090b04ab4d42d6a8523",
+      "side": "right"
+    },
+    {
+      "id": "l_46879a51946344a798e6bbe1993e1f6e",
+      "type": "sibling",
+      "from": "p_0239f0d3fd254533a923aae5e5bda4ef",
+      "to": "p_0da9c7acb7944090b04ab4d42d6a8523",
+      "side": "right"
+    },
+    {
+      "id": "l_3c8d1896bb4c4ce5aac90edb738e8d56",
+      "type": "sibling",
+      "from": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "to": "p_2674b7544dad43ecb5a99f94892366a9",
+      "side": "right"
+    },
+    {
+      "id": "l_90d6b9a001124b01890080b4a04c9709",
+      "type": "sibling",
+      "from": "p_b87301982f854b5bae8874f425b8f5a3",
+      "to": "p_2674b7544dad43ecb5a99f94892366a9",
+      "side": "right"
+    },
+    {
+      "id": "l_468a1147d12c43fdb906ceb1ade80d4b",
+      "type": "sibling",
+      "from": "p_97c96f9bcd154a0a978a285c770b6237",
+      "to": "p_2674b7544dad43ecb5a99f94892366a9",
+      "side": "right"
+    },
+    {
+      "id": "l_b0dcf74384b74a7dbea34c9355e8d947",
+      "type": "partner",
+      "from": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "to": "p_673f5494c9ff4adf9bafa4fb7b5c92ed",
+      "side": "left"
+    },
+    {
+      "id": "l_62524af8de4c48dca5db29d1081dce42",
+      "type": "parent",
+      "from": "p_673f5494c9ff4adf9bafa4fb7b5c92ed",
+      "to": "p_e6d36193dc534718b5a9d47be93a3e2e",
+      "side": "right"
+    },
+    {
+      "id": "l_a06d37fac8474f33a338fdf2d3ebf04c",
+      "type": "parent",
+      "from": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "to": "p_e6d36193dc534718b5a9d47be93a3e2e",
+      "side": "right"
+    },
+    {
+      "id": "l_6e1a27b682184dd9a00b2dd5b38330b8",
+      "type": "parent",
+      "from": "p_673f5494c9ff4adf9bafa4fb7b5c92ed",
+      "to": "p_19477bcae5464d8da36b61a578df0f5c",
+      "side": "right"
+    },
+    {
+      "id": "l_9258222ebd35495abe471012185dbd7a",
+      "type": "parent",
+      "from": "p_82dfa91ee4904df8b84a7121a1faf3af",
+      "to": "p_19477bcae5464d8da36b61a578df0f5c",
+      "side": "right"
+    },
+    {
+      "id": "l_b1b414e9f47841aba6dfbf474ebb9cc9",
+      "type": "sibling",
+      "from": "p_e6d36193dc534718b5a9d47be93a3e2e",
+      "to": "p_19477bcae5464d8da36b61a578df0f5c",
+      "side": "right"
+    }
+  ]
+}

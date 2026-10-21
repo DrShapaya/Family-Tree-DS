@@ -8,6 +8,14 @@ final class SmokeCardEffect {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final RectF target = new RectF();
     private final Path clip = new Path();
+    private final CachedCardSurface surfaceCache=new CachedCardSurface();
+    private final CachedCardSurface.Renderer surfaceRenderer=this::surface;
+
+    void trim() { surfaceCache.clear(); }
+
+    void surface(Canvas canvas,float width,float height,int seed,float scale) {
+        if(!surfaceCache.draw(canvas,width,height,seed&255,scale,surfaceRenderer))surface(canvas,width,height,seed);
+    }
 
     void behind(Canvas canvas, float width, float height, int seed, float seconds) {
         ensureCloud();

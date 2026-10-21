@@ -34,12 +34,22 @@ final class GitHubApi {
     private static final int MAX_REDIRECTS = 5;
 
     private final ConnectivityManager connectivityManager;
+    private final ConnectionFactory connectionFactory;
+
+    interface ConnectionFactory {
+        HttpURLConnection open(URI uri) throws Exception;
+    }
 
     GitHubApi(Context context) {
+        this(context, null);
+    }
+
+    GitHubApi(Context context, ConnectionFactory connectionFactory) {
         Context app = context == null ? null : context.getApplicationContext();
         connectivityManager = app == null
             ? null
             : (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
+        this.connectionFactory = connectionFactory;
     }
 
     static final class ApiException extends Exception {
@@ -747,8 +757,8 @@ final class GitHubApi {
         if (!"https".equalsIgnoreCase(uri.getScheme())) {
             throw new IllegalArgumentException("Разрешены только HTTPS-запросы");
         }
-        HttpURLConnection connection = null;
-        if (connectivityManager != null) {
+        HttpURLConnection connection = connectionFactory == null ? null : connectionFactory.open(uri);
+        if (connection == null && connectivityManager != null) {
             try {
                 Network activeNetwork = connectivityManager.getActiveNetwork();
                 if (activeNetwork != null) {
@@ -761,56 +771,73 @@ final class GitHubApi {
         if (connection == null) {
             connection = (HttpURLConnection) uri.toURL().openConnection();
         }
-        connection.setRequestMethod(method);
-        connection.setConnectTimeout(CONNECT_TIMEOUT);
-        connection.setReadTimeout(READ_TIMEOUT);
-        connection.setUseCaches(false);
-        connection.setRequestProperty("Connection", "close");
-        connection.setRequestProperty("Accept", "application/vnd.github+json");
-        connection.setRequestProperty("X-GitHub-Api-Version", API_VERSION);
-        connection.setRequestProperty("User-Agent", "AndroidFT/" + MainActivity.VERSION_NAME);
-        if (token != null && !token.isEmpty()) {
-            connection.setRequestProperty("Authorization", "Bearer " + token);
+        try {
+            connection.setRequestMethod(method);
+            connection.setConnectTimeout(CONNECT_TIMEOUT);
+            connection.setReadTimeout(READ_TIMEOUT);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("Accept", "application/vnd.github+json");
+            connection.setRequestProperty("X-GitHub-Api-Version", API_VERSION);
+            connection.setRequestProperty("User-Agent", "AndroidFT/" + MainActivity.VERSION_NAME);
+            if (token != null && !token.isEmpty()) {
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+            }
+            return connection;
+        } catch (Exception error) {
+            connection.disconnect();
+            throw error;
         }
-        return connection;
     }
 
     private static void write(HttpURLConnection connection, byte[] data) throws Exception {
-        connection.setDoOutput(true);
-        connection.setFixedLengthStreamingMode(data.length);
-        try (OutputStream output = connection.getOutputStream()) {
-            output.write(data);
+        try {
+            connection.setDoOutput(true);
+            connection.setFixedLengthStreamingMode(data.length);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(data);
+            }
+        } catch (Exception error) {
+            connection.disconnect();
+            throw error;
         }
     }
 
     private static Response read(HttpURLConnection connection) throws Exception {
-        int status = connection.getResponseCode();
-        String etag = connection.getHeaderField("ETag");
-        if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
-            connection.disconnect();
-            return new Response(status, "", etag);
-        }
-        InputStream source = status >= 200 && status < 400
-            ? connection.getInputStream()
-            : connection.getErrorStream();
-        if (source == null) {
-            connection.disconnect();
-            return new Response(status, "", etag);
-        }
-        try (InputStream input = source; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int read;
-            int total = 0;
-            while ((read = input.read(buffer)) != -1) {
-                total += read;
-                if (total > 16 * 1024 * 1024) {
-                    throw new IllegalStateException("Ответ GitHub слишком большой");
-                }
-                output.write(buffer, 0, read);
+        boolean consumed = false;
+        try {
+            int status = connection.getResponseCode();
+            String etag = connection.getHeaderField("ETag");
+            if (status == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                consumed = true; // HTTP 304 has no response body.
+                return new Response(status, "", etag);
             }
-            return new Response(status, output.toString("UTF-8"), etag);
+            InputStream source = status >= 200 && status < 400
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+            if (source == null) {
+                consumed = true;
+                return new Response(status, "", etag);
+            }
+            String body;
+            try (InputStream input = source; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int read;
+                int total = 0;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > 16 * 1024 * 1024) {
+                        throw new IllegalStateException("Ответ GitHub слишком большой");
+                    }
+                    output.write(buffer, 0, read);
+                }
+                body = output.toString("UTF-8");
+            }
+            // Closing a fully consumed body returns its socket to Android's pool.
+            // disconnect() would prevent reuse between manifest/API requests.
+            consumed = true;
+            return new Response(status, body, etag);
         } finally {
-            connection.disconnect();
+            if (!consumed) connection.disconnect();
         }
     }
 
@@ -845,11 +872,33 @@ final class GitHubApi {
         return new ApiException(response.status, message(error, response.body));
     }
 
-    private static String message(JSONObject json, String fallback) {
+    static String message(JSONObject json, String fallback) {
         String value = json == null ? "" : json.optString("message", "");
-        if (!value.isEmpty()) return value;
-        if (fallback == null || fallback.isEmpty()) return "Ошибка GitHub";
-        return fallback.length() > 240 ? fallback.substring(0, 240) : fallback;
+        // Validation responses often put the actionable reason in errors[],
+        // leaving only "Validation Failed" in the top-level message.
+        JSONArray errors = json == null ? null : json.optJSONArray("errors");
+        if (errors != null) {
+            for (int index = 0; index < errors.length() && index < 3; index++) {
+                Object item = errors.opt(index);
+                String detail = "";
+                if (item instanceof JSONObject) {
+                    JSONObject error = (JSONObject) item;
+                    detail = error.optString("message", "");
+                    if (detail.isEmpty()) {
+                        String field = error.optString("field", "");
+                        String code = error.optString("code", "");
+                        detail = field.isEmpty() ? code : field + (code.isEmpty() ? "" : ": " + code);
+                    }
+                } else if (item instanceof String) {
+                    detail = (String) item;
+                }
+                if (!detail.isEmpty()) value += (value.isEmpty() ? "" : "; ") + detail;
+            }
+        }
+        if (value.isEmpty()) value = fallback == null ? "" : fallback;
+        value = value.replaceAll("\\s+", " ").trim();
+        if (value.isEmpty()) return "Ошибка GitHub";
+        return value.length() > 480 ? value.substring(0, 480) : value;
     }
 
     private static String encode(String value) throws Exception {

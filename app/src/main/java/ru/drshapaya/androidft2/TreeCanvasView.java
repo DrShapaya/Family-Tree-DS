@@ -56,43 +56,84 @@ final class TreeCanvasView extends View {
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint.FontMetrics fontMetricsScratch = new Paint.FontMetrics();
+    private final Map<String,Float> metaTextWidths=new HashMap<>();
+    private float measuredMetaSize=-1f;
     private final RectF tmp = new RectF();
     private final RectF visibleScratch = new RectF();
     private final RectF linkBoundsScratch = new RectF();
     private final Rect tmpSrc = new Rect();
     private final Path clipPath = new Path();
+    private final LifeStatusBadge lifeStatusBadge = new LifeStatusBadge();
     private final Path linkPathScratch = new Path();
     private final PaperTexture paperTexture = new PaperTexture();
     private final BotanicalCanvasBackground botanicalCanvasBackground;
     private final FireCardEffect fireCardEffect = new FireCardEffect();
+    private final GpuFireCardEffect gpuFireCardEffect;
+    private boolean gpuFireForFrame;
+    private long gpuEffectFrames;
+    private final AnimatedCardAtlas animatedCardAtlas = new AnimatedCardAtlas(this::postInvalidateOnAnimation);
+    private final List<Person> effectPeopleScratch = new ArrayList<>();
+    private final CardRasterCache cardRasterCache=new CardRasterCache();
+    private final CardRasterCache.Renderer cardRasterRenderer=this::renderCardRaster;
+    private long cardRasterStyleSignature;
+    private boolean rasterCardsEnabled;
+    private boolean rasterizingStaticCard;
+    private boolean recordingCardArtwork;
+    private float cardViewportScale;
+    private final Paint photoPaint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
     private final SmokeCardEffect smokeCardEffect = new SmokeCardEffect();
     private final BotanicalEffect botanicalEffect = new BotanicalEffect();
     private float fireFrameSeconds;
+    private final long effectClockOrigin=SystemClock.uptimeMillis();
+    private volatile long[] debugFrameStages;
+    private boolean debugDisableCardRaster;
     private final Path ribbonPathA = new Path();
     private final Path ribbonPathB = new Path();
     private final Path fireFlowPath = new Path();
     private final Matrix worldToScreen = new Matrix();
+    private final Matrix gradientMatrix = new Matrix();
+    private final android.util.SparseArray<Shader> fillGradients = new android.util.SparseArray<>();
+    private final android.util.SparseArray<Shader> overlayGradients = new android.util.SparseArray<>();
+    private Shader canvasFillGradient;
+    private String gradientCanvasStyle,gradientCanvasTheme;
+    private int gradientCanvasWidth,gradientCanvasHeight;
+    private final Rect gridClip = new Rect();
     private Path lastLinkWorldPath;
     private final float[] worldToScreenValues = new float[9];
     private final Map<String, LinkGeometry> linkGeometryCache = new HashMap<>();
+    private FamilyLineRouter.Plan familyLinePlan = FamilyLineRouter.Plan.empty();
+    private final Map<FamilyLineRouter.FamilyRoute, Path> familyRoutePaths = new java.util.IdentityHashMap<>();
+    private final Map<FamilyLineRouter.FamilyRoute, List<ColoredFamilyPath>> coloredFamilyPaths = new java.util.IdentityHashMap<>();
+    private final Map<Path, List<Path[]>> ribbonGeometry = new java.util.WeakHashMap<>();
+    private final Map<Relation, LinkGradient> linkGradients = new java.util.WeakHashMap<>();
+    private final float[] ribbonPoint = new float[2], ribbonTangent = new float[2];
+    private long familyLinePlanSignature = Long.MIN_VALUE;
+    private boolean familyLinePlanDirty = true;
+    private long familyObservedCoordinateRevision=Long.MIN_VALUE;
+    private SceneBoundsIndex<FamilyLineRouter.FamilyRoute> routeBounds;
+    private SceneBoundsIndex<Relation> relationBounds;
+    private final List<FamilyLineRouter.FamilyRoute> routeCandidates=new ArrayList<>();
+    private final List<Relation> relationCandidates=new ArrayList<>();
+    private FamilyLineRouter.Plan indexedPlan;
+    private Set<String> indexedMatches;
+    private long coordinateRevision, indexedCoordinates = -1;
+    private float indexedCardWidth, indexedCardHeight;
     private final Set<Integer> generationRows = new HashSet<>();
     private final DashPathEffect guideDash = new DashPathEffect(new float[] {10f, 8f}, 0f);
     private DashPathEffect siblingDash;
     private float siblingDashScale = -1f;
     private final LruCache<String, Bitmap> photoCache;
-    private final LruCache<String, String[]> nameLinesCache = new LruCache<>(640);
-    private final LruCache<String, String> nameEllipsisCache = new LruCache<>(960);
-    private final LruCache<String, CardMeta> cardMetaCache = new LruCache<>(1200);
+    private final Map<String, CachedName<String[]>> nameLinesCache = new HashMap<>();
+    private final Map<String, CachedName<String>> nameEllipsisCache = new HashMap<>();
+    private final Map<String, CardMeta> cardMetaCache = new HashMap<>();
+    private final Map<Person,ThumbnailLoader.Request> thumbnailRequests=new java.util.WeakHashMap<>();
     private final Map<Long, List<Person>> spatialGrid = new HashMap<>();
     private final List<Person> visiblePeopleScratch = new ArrayList<>();
-    private final Set<String> photoLoads = new HashSet<>();
-    private final Set<String> failedPhotoLoads = new HashSet<>();
+    private boolean visibleCellsCached;
+    private int visibleMinX,visibleMaxX,visibleMinY,visibleMaxY;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService photoDecoder = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "tree-photo-decoder");
-        thread.setPriority(Thread.NORM_PRIORITY - 1);
-        return thread;
-    });
+    private final Runnable thumbnailReady = this::postInvalidateOnAnimation;
     private final Typeface uiRegular;
     private final Typeface uiBold;
     private final ScaleGestureDetector scaleDetector;
@@ -101,12 +142,19 @@ final class TreeCanvasView extends View {
     private Listener listener;
     private String filter = "";
     private SmartPeopleSearch.Query smartFilter;
+    private final ExecutorService filterWorker = Executors.newSingleThreadExecutor();
+    private volatile long filterRevision;
+    private boolean detached;
+    private Set<String> filterMatchIds;
     private Calendar smartFilterNow = Calendar.getInstance();
+    private Set<String> matchingPersonIds;
     private String branchMode = "all";
     private String branchAnchorId = "";
+    private int nearGenerations = 1;
     private String selectionMode = "";
     private String guideMode = "";
     private String parentLineMode = "smart";
+    private String familyLineMode = "centered";
     private String pendingLineFromId = "";
     private String selectedLinkId = "";
     private String guideColor = "#2f7d75";
@@ -114,6 +162,7 @@ final class TreeCanvasView extends View {
     private String theme = "light";
     private String cardEdgeStyle = RewardCatalog.STANDARD;
     private String cardStyle = RewardCatalog.STANDARD;
+    private int activeCardColor = Color.WHITE;
     private String canvasStyle = RewardCatalog.STANDARD;
     private String linkStyle = RewardCatalog.STANDARD;
     private boolean exportRendering;
@@ -143,6 +192,20 @@ final class TreeCanvasView extends View {
     private float zoomTargetOffsetY = 160f;
     private boolean zoomAnimationRunning;
     private final Runnable zoomAnimation = this::advanceZoomAnimation;
+    private long zoomFrameTime;
+    private android.animation.ValueAnimator cameraAnimator;
+    private int continuousZoomDirection;
+    private long continuousZoomTime;
+    private final Runnable continuousZoom = new Runnable() {
+        @Override public void run() {
+            if (continuousZoomDirection == 0 || !isShown()) { stopContinuousZoom(); return; }
+            long now = SystemClock.uptimeMillis();
+            float seconds = Math.min(.05f, (now - continuousZoomTime) / 1000f);
+            continuousZoomTime = now;
+            zoomBy((float) Math.exp(continuousZoomDirection * .85f * seconds));
+            postOnAnimation(this);
+        }
+    };
     private float offsetX = 80f;
     private float offsetY = 160f;
     private float downX;
@@ -181,6 +244,7 @@ final class TreeCanvasView extends View {
         uiRegular = loadTypeface(context, "fonts/NotoSans-Regular.ttf", Typeface.NORMAL);
         uiBold = loadTypeface(context, "fonts/NotoSans-Bold.ttf", Typeface.BOLD);
         botanicalCanvasBackground = new BotanicalCanvasBackground(context);
+        gpuFireCardEffect = new GpuFireCardEffect(context);
         textPaint.setColor(Color.rgb(34, 37, 39));
         textPaint.setTextSize(28f);
         textPaint.setTypeface(uiRegular);
@@ -200,41 +264,60 @@ final class TreeCanvasView extends View {
                 zoom(detector.getScaleFactor(), detector.getFocusX(), detector.getFocusY());
                 return true;
             }
+            @Override public void onScaleEnd(ScaleGestureDetector detector) { postInvalidateOnAnimation(); }
         });
     }
 
     void setState(TreeState state) {
+        // A state can be rebound after an in-place layout/edit.  Bump the
+        // coordinate revision even when the object identity is unchanged so
+        // retained routing does not need to rescan every person every frame.
+        coordinateRevision++;
         if (this.state != state) {
+            cardRasterCache.clear();
+            thumbnailRequests.clear();
             photoCache.evictAll();
-            nameLinesCache.evictAll();
-            nameEllipsisCache.evictAll();
-            cardMetaCache.evictAll();
+            ThumbnailLoader.SHARED.cancel(this);
+            nameLinesCache.clear();
+            nameEllipsisCache.clear();
+            cardMetaCache.clear();
             linkGeometryCache.clear();
-            failedPhotoLoads.clear();
+            familyLinePlan = FamilyLineRouter.Plan.empty();
+            familyLinePlanSignature = Long.MIN_VALUE;
+            ThumbnailLoader.SHARED.clearFailures();
         }
         this.state = state;
-        smartFilter = this.filter.isEmpty() || state == null ? null : SmartPeopleSearch.parse(state, this.filter, state.selectedId);
+        setFilter(this.filter);
         smartFilterNow = Calendar.getInstance();
+        matchingPersonIds = null;
+        familyLinePlanDirty = true;
         visibleBranchIds = null;
         spatialDirty = true;
+        familyLinePlanDirty = true;
         invalidate();
     }
 
     void setMediaStore(TreeMediaStore mediaStore) {
         if (this.mediaStore != mediaStore) {
             photoCache.evictAll();
-            failedPhotoLoads.clear();
+            ThumbnailLoader.SHARED.clearFailures();
+            matchingPersonIds = null;
+        familyLinePlanDirty = true;
         }
         this.mediaStore = mediaStore;
     }
 
     void trimBitmapCache(int level) {
+        if(level>=20) { animatedCardAtlas.release();botanicalEffect.trim();smokeCardEffect.trim();cardRasterCache.clear();gpuFireCardEffect.trim(); }
         if (level >= 80) {
+            animatedCardAtlas.release();
+            ThumbnailLoader.SHARED.trim(true);
             photoCache.evictAll();
-            nameLinesCache.evictAll();
-            nameEllipsisCache.evictAll();
-            cardMetaCache.evictAll();
+            nameLinesCache.clear();
+            nameEllipsisCache.clear();
+            cardMetaCache.clear();
         } else if (level >= 10 && level < 20) {
+            ThumbnailLoader.SHARED.trim(false);
             photoCache.trimToSize(Math.max(1, photoCache.maxSize() / 2));
         }
     }
@@ -245,21 +328,51 @@ final class TreeCanvasView extends View {
 
     void setFilter(String filter) {
         this.filter = filter == null ? "" : filter.trim();
-        this.smartFilter = state == null ? null : SmartPeopleSearch.parse(state, this.filter, state.selectedId);
-        this.smartFilterNow = Calendar.getInstance();
+        long revision = ++filterRevision;
+        filterMatchIds = null; matchingPersonIds = null; familyLinePlanDirty = true;
+        if (this.filter.isEmpty() || state == null || detached) { smartFilter = null; invalidate(); return; }
+        TreeState source = state;
+        TreeState snapshot = TreeStateCopier.copy(source);
+        String query = this.filter;
+        filterWorker.execute(() -> {
+            if (revision != filterRevision) return;
+            SmartPeopleSearch.Query parsed = SmartPeopleSearch.parse(snapshot, query, snapshot.selectedId);
+            Set<String> ids = new HashSet<>(); Calendar now = Calendar.getInstance();
+            for (Person person : snapshot.people.values()) {
+                if (revision != filterRevision || Thread.currentThread().isInterrupted()) return;
+                if (!parsed.kinshipFirstId.isEmpty() && !parsed.kinshipSecondId.isEmpty()) {
+                    if (person.id.equals(parsed.kinshipFirstId) || person.id.equals(parsed.kinshipSecondId)) ids.add(person.id);
+                } else if (SmartPeopleSearch.matches(snapshot,parsed,person,this::hasSearchPhoto,now)) ids.add(person.id);
+            }
+            mainHandler.post(() -> {
+                if (detached || revision != filterRevision || source != state) return;
+                smartFilter=parsed; filterMatchIds=ids; matchingPersonIds=null; familyLinePlanDirty=true; invalidate();
+            });
+        });
         invalidate();
+    }
+
+    void setNearGenerations(int value) {
+        nearGenerations = Math.max(1, Math.min(99, value));
+        visibleBranchIds = null; matchingPersonIds = null; familyLinePlanDirty = true; invalidate();
     }
 
     void setBranchMode(String mode, String anchorId) {
         branchMode = mode == null || mode.isEmpty() ? "all" : mode;
         branchAnchorId = anchorId == null ? "" : anchorId;
         visibleBranchIds = null;
+        matchingPersonIds = null;
+        familyLinePlanDirty = true;
         invalidate();
     }
 
     void invalidateStructureCaches() {
+        coordinateRevision++;
         visibleBranchIds = null;
+        matchingPersonIds = null;
+        familyLinePlanDirty = true;
         spatialDirty = true;
+        familyLinePlanDirty = true;
         if (state == null || linkGeometryCache.size() > state.links.size() * 2 + 32) {
             linkGeometryCache.clear();
         }
@@ -304,8 +417,9 @@ final class TreeCanvasView extends View {
     void setCompactCards(boolean enabled) {
         if (compactCards == enabled) return;
         compactCards = enabled;
-        nameLinesCache.evictAll();
-        nameEllipsisCache.evictAll();
+        familyLinePlanDirty = true;
+        nameLinesCache.clear();
+        nameEllipsisCache.clear();
         invalidate();
     }
 
@@ -313,8 +427,8 @@ final class TreeCanvasView extends View {
         float normalized = MainActivity.normalizeFontScale(value);
         if (Math.abs(fontScale - normalized) < 0.001f) return;
         fontScale = normalized;
-        nameLinesCache.evictAll();
-        nameEllipsisCache.evictAll();
+        nameLinesCache.clear();
+        nameEllipsisCache.clear();
         invalidate();
     }
 
@@ -377,7 +491,14 @@ final class TreeCanvasView extends View {
     }
 
     void setParentLineMode(String mode) {
+        familyRoutePaths.clear();
+        coloredFamilyPaths.clear();
         parentLineMode = "orthogonal".equals(mode) ? "orthogonal" : "smart";
+        invalidate();
+    }
+
+    void setFamilyLineMode(String mode) {
+        familyLineMode = "individual".equals(mode) ? "individual" : "centered";
         invalidate();
     }
 
@@ -392,6 +513,7 @@ final class TreeCanvasView extends View {
         String next = normalizeWorkshopStyle(value);
         if (cardStyle.equals(next)) return;
         cardStyle = next;
+        fillGradients.clear();overlayGradients.clear();
         invalidate();
     }
 
@@ -411,7 +533,7 @@ final class TreeCanvasView extends View {
 
     /** A private export view uses the same drawing code at a fixed logical zoom.
      * Resolution and preview size are applied by Canvas, so details never change
-     * between preview, single PNG and individual tiles. Call on the UI thread. */
+     * between preview, single PNG and individual tiles. The detached export renderer is owned exclusively by its render task. */
     void drawExport(Canvas canvas, RectF bounds, boolean grid, float pixelsPerWorld) {
         float oldScale = scale, oldX = offsetX, oldY = offsetY;
         exportRendering = true;
@@ -437,8 +559,16 @@ final class TreeCanvasView extends View {
     }
 
     void releaseExportResources() {
+        animatedCardAtlas.release();
+        cardRasterCache.clear();gpuFireCardEffect.trim();
+        filterRevision++; filterWorker.shutdownNow();
         photoCache.evictAll();
-        photoDecoder.shutdownNow();
+        ThumbnailLoader.SHARED.cancel(this);
+    }
+
+    void copyExportStylesTo(TreeCanvasView target) {
+        target.setState(state); target.setMediaStore(mediaStore);
+        target.setCardStyle(cardStyle); target.setCardEdgeStyle(cardEdgeStyle); target.setLinkStyle(linkStyle);
     }
 
     void setLinkState(String pendingFromId, String selectedId) {
@@ -452,6 +582,7 @@ final class TreeCanvasView extends View {
     }
 
     void setTheme(String value) {
+        fillGradients.clear();overlayGradients.clear();
         theme = "print".equals(value) ? "clean" : "dark".equals(value) || "clean".equals(value) ? value : "light";
         invalidate();
     }
@@ -466,36 +597,41 @@ final class TreeCanvasView extends View {
         zoom(factor, getWidth() / 2f, getHeight() / 2f);
     }
 
+    void startContinuousZoom(boolean in) {
+        stopContinuousZoom();
+        continuousZoomDirection = in ? 1 : -1;
+        continuousZoomTime = SystemClock.uptimeMillis();
+        postOnAnimation(continuousZoom);
+    }
+
+    void stopContinuousZoom() {
+        continuousZoomDirection = 0;
+        removeCallbacks(continuousZoom);
+    }
+
     void fit() {
         if (state == null || state.people.isEmpty() || getWidth() == 0 || getHeight() == 0) return;
         RectF bounds = treeBounds();
         float sx = (getWidth() - 80f) / Math.max(cardWidthWorld(), bounds.width());
         float sy = (getHeight() - 180f) / Math.max(cardHeightWorld(), bounds.height());
-        scale = clamp(Math.min(sx, sy), 0.08f, 2.2f);
-        offsetX = getWidth() / 2f - bounds.centerX() * scale;
-        offsetY = getHeight() / 2f - bounds.centerY() * scale;
-        syncZoomTarget();
-        notifyZoomChanged();
-        invalidate();
+        float target = clamp(Math.min(sx, sy), 0.08f, 2.2f);
+        animateCamera(target, getWidth() / 2f - bounds.centerX() * target,
+            getHeight() / 2f - bounds.centerY() * target);
     }
 
     void focusWorkspaceCenter() {
         if (getWidth() == 0 || getHeight() == 0) return;
-        offsetX = getWidth() / 2f - workspaceWidth / 2f * scale;
-        offsetY = getHeight() / 2f - workspaceHeight / 2f * scale;
-        syncZoomTarget();
-        invalidate();
+        animateCamera(scale, getWidth() / 2f - workspaceWidth / 2f * scale,
+            getHeight() / 2f - workspaceHeight / 2f * scale);
     }
 
     void focusPerson(String personId) {
         if (state == null || getWidth() == 0 || getHeight() == 0) return;
         Person person = state.people.get(personId);
         if (person == null) return;
-        scale = clamp(Math.max(scale, 0.95f), 0.08f, 2.2f);
-        offsetX = getWidth() / 2f - (person.x + cardWidthWorld() / 2f) * scale;
-        offsetY = getHeight() / 2f - (person.y + cardHeightWorld() / 2f) * scale;
-        syncZoomTarget();
-        notifyZoomChanged();
+        float target = clamp(Math.max(scale, 0.95f), 0.08f, 2.2f);
+        animateCamera(target, getWidth() / 2f - (person.x + cardWidthWorld() / 2f) * target,
+            getHeight() / 2f - (person.y + cardHeightWorld() / 2f) * target);
         focusHighlightId = personId;
         focusHighlightUntil = SystemClock.uptimeMillis() + 1800L;
         invalidate();
@@ -504,6 +640,7 @@ final class TreeCanvasView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        ThumbnailLoader.SHARED.begin(this);
         drawScene(canvas, getWidth(), getHeight(), false);
     }
 
@@ -592,23 +729,32 @@ final class TreeCanvasView extends View {
     }
 
     private void drawScene(Canvas canvas, int width, int height, boolean exportMode) {
-        fireFrameSeconds = exportMode ? 2.4f : SystemClock.uptimeMillis() / 1000f;
+        long profileStart=BuildConfig.DEBUG?System.nanoTime():0;
+        fireFrameSeconds = exportMode ? 2.4f : (SystemClock.uptimeMillis()-effectClockOrigin) / 1000f;
         canvas.drawColor(canvasBackground());
         drawCanvasStyle(canvas, width, height);
         if ((!exportMode || exportGrid) && shouldDrawDefaultGrid()) drawGrid(canvas, width, height);
         if (state == null) return;
         refreshToday();
         prepareBranchCache();
-        visibleScratch.set(
-            wx(0) - 520f / scale,
-            wy(0) - 520f / scale,
-            wx(width) + 520f / scale,
-            wy(height) + 520f / scale);
+        float visualPad = Math.max(80f, 20f / scale);
+        if (canvas.getClipBounds(tmpSrc)) {
+            visibleScratch.set(wx(tmpSrc.left) - visualPad, wy(tmpSrc.top) - visualPad,
+                wx(tmpSrc.right) + visualPad, wy(tmpSrc.bottom) + visualPad);
+        } else visibleScratch.set(wx(0) - visualPad, wy(0) - visualPad,
+            wx(width) + visualPad, wy(height) + visualPad);
         RectF visible = visibleScratch;
         if (generationLines) drawGenerationLines(canvas, visible, width, height);
         if (state.guidesVisible && (!exportMode || generationLines)) drawGuides(canvas, visible);
+        long profileLinks=BuildConfig.DEBUG?System.nanoTime():0;
         drawLinks(canvas, visible);
+        long profileCards=BuildConfig.DEBUG?System.nanoTime():0;
+        cardRasterCache.beginFrame();
         drawCards(canvas, visible, exportMode);
+        if(gpuFireForFrame)gpuEffectFrames++;
+        if(BuildConfig.DEBUG && !exportMode)debugFrameStages=new long[]{profileLinks-profileStart,
+            profileCards-profileLinks,System.nanoTime()-profileCards,animatedCardAtlas.presentedFrames(),gpuEffectFrames,
+            cardRasterCache.buildsForTests(),cardRasterCache.frameBuildsForTests()};
         if (!exportMode) drawSelectionOverlay(canvas);
     }
 
@@ -616,6 +762,9 @@ final class TreeCanvasView extends View {
         float grid = Math.max(1f, TreeLayoutEngine.GRID * scale);
         float startX = positiveModulo(offsetX, grid);
         float startY = positiveModulo(offsetY, grid);
+        canvas.getClipBounds(gridClip);
+        startX += (float) Math.floor((gridClip.left - startX) / grid) * grid;
+        startY += (float) Math.floor((gridClip.top - startY) / grid) * grid;
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
         if ("canvas_background_blueprint".equals(canvasStyle) && !"dark".equals(theme)) {
@@ -633,8 +782,8 @@ final class TreeCanvasView extends View {
         } else {
             paint.setColor(Color.argb(scale < 0.2f ? 20 : 34, 45, 112, 125));
         }
-        for (float x = startX; x < width; x += grid) canvas.drawLine(x, 0, x, height, paint);
-        for (float y = startY; y < height; y += grid) canvas.drawLine(0, y, width, y, paint);
+        for (float x = startX; x < Math.min(width,gridClip.right)+grid; x += grid) canvas.drawLine(x, 0, x, height, paint);
+        for (float y = startY; y < Math.min(height,gridClip.bottom)+grid; y += grid) canvas.drawLine(0, y, width, y, paint);
     }
 
     private int canvasBackground() {
@@ -688,14 +837,8 @@ final class TreeCanvasView extends View {
                 "dark".equals(theme) ? Color.argb(68, 159, 201, 220) : Color.argb(56, 255, 255, 255));
         } else if ("canvas_background_deep_blueprint".equals(canvasStyle)) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(
-                0f,
-                0f,
-                width,
-                height,
-                "dark".equals(theme) ? Color.rgb(7, 47, 115) : Color.rgb(10, 72, 150),
-                "dark".equals(theme) ? Color.rgb(3, 24, 68) : Color.rgb(4, 34, 91),
-                Shader.TileMode.CLAMP));
+            paint.setColor(Color.WHITE);
+            paint.setShader(canvasGradient(width,height));
             canvas.drawRect(0f, 0f, width, height, paint);
             paint.setShader(null);
             drawAnchoredBlueprintGrid(
@@ -707,17 +850,25 @@ final class TreeCanvasView extends View {
                 Color.argb(90, 219, 244, 255));
         } else if ("canvas_background_garden".equals(canvasStyle)) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(
-                0f,
-                0f,
-                width,
-                height,
-                "dark".equals(theme) ? Color.argb(54, 57, 91, 70) : Color.argb(76, 255, 249, 223),
-                "dark".equals(theme) ? Color.argb(62, 18, 62, 49) : Color.argb(66, 177, 217, 196),
-                Shader.TileMode.CLAMP));
+            paint.setColor(Color.WHITE);
+            paint.setShader(canvasGradient(width,height));
             canvas.drawRect(0f, 0f, width, height, paint);
             paint.setShader(null);
         }
+    }
+
+    private Shader canvasGradient(int width,int height) {
+        if(canvasFillGradient==null || gradientCanvasWidth!=width || gradientCanvasHeight!=height
+            || !canvasStyle.equals(gradientCanvasStyle) || !theme.equals(gradientCanvasTheme)) {
+            boolean dark="dark".equals(theme),blue="canvas_background_deep_blueprint".equals(canvasStyle);
+            int from=blue?(dark?Color.rgb(7,47,115):Color.rgb(10,72,150))
+                :(dark?Color.argb(54,57,91,70):Color.argb(76,255,249,223));
+            int to=blue?(dark?Color.rgb(3,24,68):Color.rgb(4,34,91))
+                :(dark?Color.argb(62,18,62,49):Color.argb(66,177,217,196));
+            canvasFillGradient=new LinearGradient(0,0,width,height,from,to,Shader.TileMode.CLAMP);
+            gradientCanvasWidth=width;gradientCanvasHeight=height;gradientCanvasStyle=canvasStyle;gradientCanvasTheme=theme;
+        }
+        return canvasFillGradient;
     }
 
     private void drawPaperRelief(Canvas canvas, int width, int height) {
@@ -769,7 +920,29 @@ final class TreeCanvasView extends View {
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeWidth(Math.max(2.4f, 3.6f * scale));
-        for (Relation link : state.links) {
+        Set<String> routedVisibleIds = matchingPersonIds();
+        FamilyLineRouter.Plan familyPlan = "centered".equals(familyLineMode)
+            ? familyLinePlan(routedVisibleIds)
+            : FamilyLineRouter.Plan.empty();
+        prepareLinkBounds(familyPlan,routedVisibleIds);
+        routeBounds.queryInto(visible.left,visible.top,visible.right,visible.bottom,routeCandidates);
+        for (int routeIndex=0;routeIndex<routeCandidates.size();routeIndex++) {
+            FamilyLineRouter.FamilyRoute route=routeCandidates.get(routeIndex);
+            Relation representative = familyPlan.representative(route);
+            if (representative == null || !familyRouteIntersects(route, visible)) continue;
+            boolean selected = route.containsRelation(selectedLinkId);
+            boolean onPath = pathActive && familyRouteOnPath(route);
+            if (RewardCatalog.LINK_STYLE_CARD_COLORS.equals(linkStyle) && !selected && !onPath) {
+                drawCardColorFamily(canvas, route);
+                continue;
+            }
+            Path path = familyRoutePath(route);
+            drawStyledLink(canvas, path, representative, selected, onPath);
+        }
+        relationBounds.queryInto(visible.left,visible.top,visible.right,visible.bottom,relationCandidates);
+        for (int linkIndex=0;linkIndex<relationCandidates.size();linkIndex++) {
+            Relation link=relationCandidates.get(linkIndex);
+            if (familyPlan.consumes(link)) continue;
             Person from = state.people.get(link.from);
             Person to = state.people.get(link.to);
             if (from == null || to == null || !matches(from) || !matches(to)) continue;
@@ -788,13 +961,317 @@ final class TreeCanvasView extends View {
         if (pathActive) postInvalidateOnAnimation();
     }
 
+    private boolean familyRouteIntersects(
+        FamilyLineRouter.FamilyRoute route,
+        RectF visible
+    ) {
+        for (int i=0;i<route.segments.size();i++) {
+            FamilyLineRouter.Segment segment=route.segments.get(i);
+            linkBoundsScratch.set(
+                Math.min(segment.x1, segment.x2) - 16f,
+                Math.min(segment.y1, segment.y2) - 16f,
+                Math.max(segment.x1, segment.x2) + 16f,
+                Math.max(segment.y1, segment.y2) + 16f);
+            if (RectF.intersects(visible, linkBoundsScratch)) return true;
+        }
+        return false;
+    }
+
+    private void prepareLinkBounds(FamilyLineRouter.Plan plan, Set<String> matches) {
+        if (indexedPlan==plan && indexedMatches==matches && indexedCoordinates==coordinateRevision
+                && indexedCardWidth==cardWidthWorld() && indexedCardHeight==cardHeightWorld()) return;
+        routeBounds=new SceneBoundsIndex<>(); relationBounds=new SceneBoundsIndex<>();
+        for (FamilyLineRouter.FamilyRoute route:plan.routes) {
+            float left=Float.POSITIVE_INFINITY,top=left,right=Float.NEGATIVE_INFINITY,bottom=right;
+            for (FamilyLineRouter.Segment segment:route.segments) {
+                left=Math.min(left,Math.min(segment.x1,segment.x2)-16f); top=Math.min(top,Math.min(segment.y1,segment.y2)-16f);
+                right=Math.max(right,Math.max(segment.x1,segment.x2)+16f); bottom=Math.max(bottom,Math.max(segment.y1,segment.y2)+16f);
+            }
+            routeBounds.add(route,left,top,right,bottom);
+        }
+        for (Relation link:state.links) {
+            if (plan.consumes(link)) continue;
+            Person a=state.people.get(link.from),b=state.people.get(link.to);
+            if (a==null || b==null || !matches.contains(a.id) || !matches.contains(b.id)) continue;
+            relationBounds.add(link,Math.min(a.x,b.x)-280f,Math.min(a.y,b.y)-280f,
+                Math.max(a.x,b.x)+cardWidthWorld()+280f,Math.max(a.y,b.y)+cardHeightWorld()+280f);
+        }
+        indexedPlan=plan; indexedMatches=matches; indexedCoordinates=coordinateRevision;
+        indexedCardWidth=cardWidthWorld(); indexedCardHeight=cardHeightWorld();
+    }
+
+    /**
+     * Family routing is substantially more expensive than transforming its
+     * finished segments for the current viewport.  Keep it stable while the
+     * user pans or zooms, and rebuild only when route-relevant model data or
+     * visibility changes.
+     */
+    private FamilyLineRouter.Plan familyLinePlan(Set<String> visibleIds) {
+        // Coordinates are revised by state binding, structural invalidation,
+        // layout edits, and card dragging.  This keeps pan/zoom frames O(1)
+        // while still invalidating retained routes after in-place edits.
+        if (!familyLinePlanDirty && familyObservedCoordinateRevision==coordinateRevision) {
+            return familyLinePlan;
+        }
+        familyObservedCoordinateRevision=coordinateRevision;
+        familyLinePlanDirty = false;
+        long signature = 0xcbf29ce484222325L;
+        signature = mixFamilySignature(signature, Float.floatToIntBits(cardWidthWorld()));
+        signature = mixFamilySignature(signature, Float.floatToIntBits(cardHeightWorld()));
+        signature = mixFamilySignature(signature, state.people.size());
+        signature = mixFamilySignature(signature, state.links.size());
+        for (Person person : state.people.values()) {
+            if (person == null) {
+                signature = mixFamilySignature(signature, 0);
+                continue;
+            }
+            signature = mixFamilySignature(signature, hash(person.id));
+            signature = mixFamilySignature(signature, Float.floatToIntBits(person.x));
+            signature = mixFamilySignature(signature, Float.floatToIntBits(person.y));
+            signature = mixFamilySignature(signature, hash(PersonGender.resolve(person)));
+            signature = mixFamilySignature(
+                signature,
+                visibleIds != null && visibleIds.contains(person.id) ? 1 : 0);
+        }
+        for (Relation relation : state.links) {
+            if (relation == null) {
+                signature = mixFamilySignature(signature, 0);
+                continue;
+            }
+            signature = mixFamilySignature(signature, hash(relation.id));
+            signature = mixFamilySignature(signature, hash(relation.type));
+            signature = mixFamilySignature(signature, hash(relation.from));
+            signature = mixFamilySignature(signature, hash(relation.to));
+        }
+        if (signature != familyLinePlanSignature) {
+            familyRoutePaths.clear();
+            coloredFamilyPaths.clear();
+            familyLinePlan = FamilyLineRouter.build(
+                state,
+                cardWidthWorld(),
+                cardHeightWorld(),
+                TreeLayoutEngine.GRID,
+                visibleIds);
+            familyLinePlanSignature = signature;
+        }
+        return familyLinePlan;
+    }
+
+    private static long mixFamilySignature(long signature, int value) {
+        return (signature ^ (value & 0xffffffffL)) * 0x100000001b3L;
+    }
+
+    private static int hash(String value) {
+        return value == null ? 0 : value.hashCode();
+    }
+
+    private boolean familyRouteOnPath(FamilyLineRouter.FamilyRoute route) {
+        for (String parentId : route.parentIds) {
+            for (String childId : route.childIds) {
+                if (highlightedPathEdges.contains(edgeKey(parentId, childId))) return true;
+            }
+        }
+        return false;
+    }
+
+    private Path familyRoutePath(FamilyLineRouter.FamilyRoute route) {
+        Path worldPath = familyRoutePaths.get(route);
+        if (worldPath == null) {
+            worldPath = new Path();
+            appendFamilyRoute(worldPath, route, null);
+            familyRoutePaths.put(route, worldPath);
+        }
+        lastLinkWorldPath = worldPath;
+        worldToScreenValues[0] = scale;
+        worldToScreenValues[1] = 0f;
+        worldToScreenValues[2] = offsetX;
+        worldToScreenValues[3] = 0f;
+        worldToScreenValues[4] = scale;
+        worldToScreenValues[5] = offsetY;
+        worldToScreenValues[6] = 0f;
+        worldToScreenValues[7] = 0f;
+        worldToScreenValues[8] = 1f;
+        worldToScreen.setValues(worldToScreenValues);
+        if ("link_style_botanical".equals(linkStyle)) return worldPath;
+        linkPathScratch.reset();
+        worldPath.transform(worldToScreen, linkPathScratch);
+        return linkPathScratch;
+    }
+
+    private void appendFamilyRoute(Path path, FamilyLineRouter.FamilyRoute route, String ownerId) {
+        boolean orthogonal = "orthogonal".equals(parentLineMode);
+        if (!orthogonal) {
+            appendCurvedFamilyRoute(path, route, ownerId);
+        }
+        List<PointF> points = new ArrayList<>();
+        String previousOwner = null;
+        for (FamilyLineRouter.Segment segment : route.segments) {
+            String effectiveOwner = segment.personId == null ? route.childIds.get(0) : segment.personId;
+            if (ownerId != null && !ownerId.equals(effectiveOwner)) continue;
+            if (orthogonal) {
+                path.moveTo(segment.x1, segment.y1);
+                path.lineTo(segment.x2, segment.y2);
+                continue;
+            }
+            if (!route.routedChildIds.contains(segment.personId)) continue;
+            PointF end = points.isEmpty() ? null : points.get(points.size() - 1);
+            // Shared trunk/bus junctions must stay exact: round only within
+            // one person's continuous attachment, never across a family fork.
+            boolean continues = end != null && segment.personId != null
+                && segment.personId.equals(previousOwner)
+                && Math.abs(end.x - segment.x1) < 0.01f
+                && Math.abs(end.y - segment.y1) < 0.01f;
+            if (!continues) {
+                appendSmoothPolyline(path, points);
+                points.clear();
+                points.add(new PointF(segment.x1, segment.y1));
+            }
+            if (points.size() >= 2) {
+                PointF before = points.get(points.size() - 2);
+                PointF last = points.get(points.size() - 1);
+                float ax = last.x - before.x, ay = last.y - before.y;
+                float bx = segment.x2 - last.x, by = segment.y2 - last.y;
+                if (Math.abs(ax * by - ay * bx) < 0.01f && ax * bx + ay * by > 0f) {
+                    points.remove(points.size() - 1);
+                }
+            }
+            points.add(new PointF(segment.x2, segment.y2));
+            previousOwner = segment.personId;
+        }
+        appendSmoothPolyline(path, points);
+    }
+
+    private static void appendSmoothPolyline(Path path, List<PointF> points) {
+        if (points.size() < 2) return;
+        PointF first = points.get(0);
+        path.moveTo(first.x, first.y);
+        for (int i = 1; i + 1 < points.size(); i++) {
+            PointF before = points.get(i - 1), corner = points.get(i), after = points.get(i + 1);
+            float incoming = (float) Math.hypot(corner.x - before.x, corner.y - before.y);
+            float outgoing = (float) Math.hypot(after.x - corner.x, after.y - corner.y);
+            // Stay within the clearance reserved by the obstacle router.
+            float radius = Math.min(TreeLayoutEngine.GRID * 0.45f, Math.min(incoming, outgoing) / 2f);
+            if (radius <= 0.01f) {
+                path.lineTo(corner.x, corner.y);
+                continue;
+            }
+            path.lineTo(corner.x + (before.x - corner.x) * radius / incoming,
+                corner.y + (before.y - corner.y) * radius / incoming);
+            path.quadTo(corner.x, corner.y,
+                corner.x + (after.x - corner.x) * radius / outgoing,
+                corner.y + (after.y - corner.y) * radius / outgoing);
+        }
+        PointF last = points.get(points.size() - 1);
+        path.lineTo(last.x, last.y);
+    }
+
+    private void appendCurvedFamilyRoute(Path worldPath, FamilyLineRouter.FamilyRoute route, String ownerId) {
+        if (state == null || route == null) return;
+        float cardW = cardWidthWorld();
+        float cardH = cardHeightWorld();
+        boolean paired = route.parentIds.size() > 1;
+        for (String parentId : route.parentIds) {
+            if (ownerId != null && !ownerId.equals(parentId)) continue;
+            Person parent = state.people.get(parentId);
+            if (parent == null) continue;
+            float centerX = parent.x + cardW / 2f;
+            boolean unionBesideCard = paired
+                && route.unionY >= parent.y - 1f
+                && route.unionY <= parent.y + cardH + 1f;
+            float startX = unionBesideCard
+                ? (route.unionX >= centerX ? parent.x + cardW : parent.x)
+                : centerX;
+            float startY = unionBesideCard ? parent.y + cardH / 2f : parent.y + cardH;
+            if (Math.abs(startX - route.unionX) < 0.01f
+                && Math.abs(startY - route.unionY) < 0.01f) continue;
+            worldPath.moveTo(startX, startY);
+            float dx = route.unionX - startX;
+            float dy = route.unionY - startY;
+            if (Math.abs(dy) < 0.01f) {
+                worldPath.cubicTo(
+                    startX + dx * 0.38f,
+                    startY,
+                    startX + dx * 0.78f,
+                    route.unionY,
+                    route.unionX,
+                    route.unionY);
+            } else {
+                worldPath.cubicTo(
+                    startX,
+                    startY + dy * 0.52f,
+                    route.unionX,
+                    route.unionY - dy * 0.18f,
+                    route.unionX,
+                    route.unionY);
+            }
+        }
+
+        if ((ownerId == null || ownerId.equals(route.childIds.get(0)))
+            && Math.abs(route.busY - route.unionY) > 0.01f) {
+            worldPath.moveTo(route.unionX, route.unionY);
+            worldPath.lineTo(route.unionX, route.busY);
+        }
+        for (String childId : route.childIds) {
+            if (ownerId != null && !ownerId.equals(childId)) continue;
+            if (route.routedChildIds.contains(childId)) continue;
+            Person child = state.people.get(childId);
+            if (child == null) continue;
+            float childX = child.x + cardW / 2f;
+            float childY = child.y;
+            worldPath.moveTo(route.unionX, route.busY);
+            float dy = childY - route.busY;
+            if (Math.abs(childX - route.unionX) < 0.01f) {
+                worldPath.lineTo(childX, childY);
+            } else {
+                worldPath.cubicTo(
+                    route.unionX,
+                    route.busY + dy * 0.34f,
+                    childX,
+                    childY - dy * 0.34f,
+                    childX,
+                    childY);
+            }
+        }
+    }
+
+    private void drawCardColorFamily(Canvas canvas, FamilyLineRouter.FamilyRoute route) {
+        // Initialise the same viewport transform used by ordinary family paths.
+        familyRoutePath(route);
+        List<ColoredFamilyPath> paths = coloredFamilyPaths.get(route);
+        if (paths == null) {
+            paths = new ArrayList<>();
+            java.util.LinkedHashSet<String> owners = new java.util.LinkedHashSet<>(route.parentIds);
+            owners.addAll(route.childIds);
+            for (String owner : owners) {
+                Path world = new Path();
+                appendFamilyRoute(world, route, owner);
+                paths.add(new ColoredFamilyPath(world, new Relation(route.id, "parent", owner, owner)));
+            }
+            coloredFamilyPaths.put(route, paths);
+        }
+        for (ColoredFamilyPath part : paths) {
+            linkPathScratch.reset();
+            part.world.transform(worldToScreen, linkPathScratch);
+            drawStyledLink(canvas, linkPathScratch, part.relation, false, false);
+        }
+    }
+
+    private static final class ColoredFamilyPath {
+        final Path world;
+        final Relation relation;
+        ColoredFamilyPath(Path world, Relation relation) { this.world=world; this.relation=relation; }
+    }
+
     private void drawStyledLink(Canvas canvas, Path path, Relation link, boolean selected, boolean onPath) {
-        if ("link_style_botanical".equals(linkStyle) && onPath) {
-            // Highlighted paths use the regular screen-space stroke.  The
-            // botanical fast path below keeps ordinary links in world space.
+        boolean botanical = "link_style_botanical".equals(linkStyle);
+        Path screenPath = path;
+        if (botanical && (selected || onPath)) {
+            // Selection and path highlights are always painted in screen
+            // coordinates. Ordinary botanical links remain in world space so
+            // their cached decoration keeps the pinch/pan fast path.
             linkPathScratch.reset();
             path.transform(worldToScreen, linkPathScratch);
-            path = linkPathScratch;
+            screenPath = linkPathScratch;
         }
         int baseColor = onPath
             ? AppThemePalette.blue()
@@ -805,7 +1282,15 @@ final class TreeCanvasView extends View {
         float coreWidth = linkStrokeWidth(selected, onPath);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeCap(Paint.Cap.ROUND);
-        if ("link_style_botanical".equals(linkStyle) && !onPath) {
+        if (selected) {
+            // A broad translucent halo keeps selection unmistakable for every
+            // decorative style as well as for all four routing combinations.
+            paint.setPathEffect(null);
+            paint.setStrokeWidth(coreWidth + Math.max(5f, 7f * scale));
+            paint.setColor(withAlpha(AppThemePalette.text(Color.rgb(197, 83, 75)), 76));
+            canvas.drawPath(screenPath, paint);
+        }
+        if (botanical && !onPath) {
             canvas.save();
             canvas.concat(worldToScreen);
             botanicalEffect.link(
@@ -823,7 +1308,7 @@ final class TreeCanvasView extends View {
             drawFireLink(canvas, path, link, color, selected);
             return;
         } else if ("link_style_ink".equals(linkStyle) && !onPath) {
-            if (scale > 0.24f) {
+            {
                 paint.setPathEffect(null);
                 paint.setStrokeWidth(coreWidth + Math.max(0.6f, 1.2f * scale));
                 paint.setColor(withAlpha(Color.rgb(18, 24, 27), AppThemePalette.isDark() ? 70 : 34));
@@ -837,10 +1322,24 @@ final class TreeCanvasView extends View {
         }
         paint.setStrokeWidth(coreWidth);
         paint.setColor(color);
+        if (RewardCatalog.LINK_STYLE_CARD_COLORS.equals(linkStyle) && !selected && !onPath) {
+            Person from = state == null ? null : state.people.get(link.from);
+            Person to = state == null ? null : state.people.get(link.to);
+            if (from != null && to != null && !from.id.equals(to.id)) {
+                float x1=from.x+cardWidthWorld()/2f,y1=from.y+cardHeightWorld()/2f;
+                float x2=to.x+cardWidthWorld()/2f,y2=to.y+cardHeightWorld()/2f;
+                LinkGradient gradient=linkGradients.get(link);
+                if(gradient==null || !gradient.matches(x1,y1,x2,y2,from.color,to.color)) {
+                    gradient=new LinkGradient(x1,y1,x2,y2,from.color,to.color);linkGradients.put(link,gradient);
+                }
+                gradient.shader.setLocalMatrix(worldToScreen);paint.setShader(gradient.shader);
+            }
+        }
         paint.setPathEffect(linkPathEffect(link, onPath));
-        canvas.drawPath(path, paint);
+        canvas.drawPath(screenPath, paint);
+        paint.setShader(null);
         paint.setPathEffect(null);
-        drawLinkStyleEndpoints(canvas, path, color, onPath);
+        drawLinkStyleEndpoints(canvas, screenPath, color, onPath);
     }
 
     private float linkStrokeWidth(boolean selected, boolean onPath) {
@@ -853,6 +1352,17 @@ final class TreeCanvasView extends View {
         return Math.max(2.4f, 3.6f * scale);
     }
 
+    private static final class LinkGradient {
+        final float x1,y1,x2,y2;final int from,to;final Shader shader;
+        LinkGradient(float x1,float y1,float x2,float y2,int from,int to) {
+            this.x1=x1;this.y1=y1;this.x2=x2;this.y2=y2;this.from=from;this.to=to;
+            shader=new LinearGradient(x1,y1,x2,y2,from,to,Shader.TileMode.CLAMP);
+        }
+        boolean matches(float a,float b,float c,float d,int e,int f) {
+            return x1==a&&y1==b&&x2==c&&y2==d&&from==e&&to==f;
+        }
+    }
+
     private DashPathEffect linkPathEffect(Relation link, boolean onPath) {
         if (onPath) return null;
         return "sibling".equals(link.type) ? siblingDashEffect() : null;
@@ -860,6 +1370,10 @@ final class TreeCanvasView extends View {
 
     private int styledLinkColor(Relation link, int color, boolean selected, boolean onPath) {
         if (selected || onPath) return color;
+        if (RewardCatalog.LINK_STYLE_CARD_COLORS.equals(linkStyle)) {
+            Person person = state == null ? null : state.people.get(link.to);
+            return person == null ? color : person.color;
+        }
         int background = canvasBackground();
         boolean darkCanvas = Color.red(background) * 0.299f + Color.green(background) * 0.587f
             + Color.blue(background) * 0.114f < 128f;
@@ -892,7 +1406,7 @@ final class TreeCanvasView extends View {
     }
 
     private void drawLinkStyleEndpoints(Canvas canvas, Path path, int color, boolean onPath) {
-        if (onPath || scale < 0.22f) return;
+        if (onPath) return;
         if (!"link_style_blueprint".equals(linkStyle)) return;
         PathMeasure measure = new PathMeasure(path, false);
         float length = measure.getLength();
@@ -908,19 +1422,40 @@ final class TreeCanvasView extends View {
     }
 
     private void drawRibbonLink(Canvas canvas, Path path, Relation link, int color, boolean selected) {
-        if (scale < 0.32f) {
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            paint.setStrokeWidth(Math.max(1.2f, 2.2f * scale));
-            paint.setColor(withAlpha(color, selected ? 230 : 190));
-            paint.setPathEffect(linkPathEffect(link, false));
-            canvas.drawPath(path, paint);
-            paint.setPathEffect(null);
+        if (lastLinkWorldPath != null) {
+            List<Path[]> contours = ribbonGeometry.get(lastLinkWorldPath);
+            if (contours == null) {
+                contours = new ArrayList<>();
+                PathMeasure worldMeasure = new PathMeasure(lastLinkWorldPath, false);
+                float screenScale = scale;
+                try {
+                    scale = 1f;
+                    do {
+                        float length = worldMeasure.getLength();
+                        if (length <= 0f) continue;
+                        Path a = new Path(), b = new Path();
+                        if ("sibling".equals(link.type)) {
+                            buildDashedRibbon(a,worldMeasure,length,2.1f,0f);
+                            buildDashedRibbon(b,worldMeasure,length,2.1f,(float)Math.PI);
+                        } else {
+                            buildRibbonStrand(a,worldMeasure,length,2.1f,38f,0f);
+                            buildRibbonStrand(b,worldMeasure,length,2.1f,38f,(float)Math.PI);
+                        }
+                        contours.add(new Path[]{a,b});
+                    } while (worldMeasure.nextContour());
+                } finally { scale = screenScale; }
+                ribbonGeometry.put(lastLinkWorldPath, contours);
+            }
+            canvas.save();
+            canvas.concat(worldToScreen);
+            for (Path[] contour : contours) drawRibbonStrands(canvas,contour[0],contour[1],color,selected,1f);
+            canvas.restore();
             return;
         }
         PathMeasure measure = new PathMeasure(path, false);
+        do {
         float length = measure.getLength();
-        if (length <= 0f) return;
+        if (length <= 0f) continue;
         float amplitude = 2.1f * scale;
         float wavelength = 38f * scale;
         if ("sibling".equals(link.type)) {
@@ -931,19 +1466,24 @@ final class TreeCanvasView extends View {
             buildRibbonStrand(ribbonPathB, measure, length, amplitude, wavelength, (float) Math.PI);
         }
 
+        drawRibbonStrands(canvas,ribbonPathA,ribbonPathB,color,selected,scale);
+        } while (measure.nextContour());
+    }
+
+    private void drawRibbonStrands(Canvas canvas,Path a,Path b,int color,boolean selected,float strokeScale) {
         paint.setStyle(Paint.Style.STROKE);
         paint.setPathEffect(null);
         paint.setStrokeCap(Paint.Cap.ROUND);
-        paint.setStrokeWidth(2.2f * scale);
+        paint.setStrokeWidth(2.2f * strokeScale);
         paint.setColor(withAlpha(blend(color, Color.BLACK, 0.18f), AppThemePalette.isDark() ? 92 : 78));
-        canvas.drawPath(ribbonPathA, paint);
-        canvas.drawPath(ribbonPathB, paint);
+        canvas.drawPath(a, paint);
+        canvas.drawPath(b, paint);
 
-        paint.setStrokeWidth(1.25f * scale);
+        paint.setStrokeWidth(1.25f * strokeScale);
         paint.setColor(withAlpha(blend(color, Color.WHITE, 0.06f), selected ? 238 : 218));
-        canvas.drawPath(ribbonPathA, paint);
+        canvas.drawPath(a, paint);
         paint.setColor(withAlpha(blend(color, Color.WHITE, AppThemePalette.isDark() ? 0.44f : 0.32f), selected ? 230 : 202));
-        canvas.drawPath(ribbonPathB, paint);
+        canvas.drawPath(b, paint);
 
         paint.setPathEffect(null);
     }
@@ -974,11 +1514,12 @@ final class TreeCanvasView extends View {
         paint.setPathEffect(null);
 
         PathMeasure measure = new PathMeasure(path, false);
-        float length = measure.getLength();
-        if (length <= 0f) return;
         // Keep the glow on the connection itself. Detached flame slivers looked
         // like broken strokes, and animated flow must not fill sibling gaps.
-        if (effect == null) drawFireFlow(canvas, measure, length, selected);
+        do {
+            float length = measure.getLength();
+            if (length > 0f && effect == null) drawFireFlow(canvas, measure, length, selected);
+        } while (measure.nextContour());
         if (!exportRendering && effect == null) postInvalidateOnAnimation();
     }
 
@@ -1026,8 +1567,8 @@ final class TreeCanvasView extends View {
         float phase
     ) {
         target.reset();
-        float[] point = new float[2];
-        float[] tangent = new float[2];
+        float[] point = ribbonPoint;
+        float[] tangent = ribbonTangent;
         float step = Math.max(3.5f, wavelength / 9f);
         boolean started = false;
         for (float distance = 0f; distance <= length; distance += step) {
@@ -1040,7 +1581,7 @@ final class TreeCanvasView extends View {
 
     private void buildDashedRibbon(Path target, PathMeasure measure, float length, float amplitude, float phase) {
         target.reset();
-        float[] point = new float[2], tangent = new float[2];
+        float[] point = ribbonPoint, tangent = ribbonTangent;
         float dash = 18f * scale, gap = 10f * scale;
         for (float start = 0; start < length; start += dash + gap) {
             float end = Math.min(length, start + dash);
@@ -1144,20 +1685,74 @@ final class TreeCanvasView extends View {
         Iterable<Person> people = dragPersonIds.isEmpty()
             ? visiblePeople(visible)
             : state.people.values();
+        effectPeopleScratch.clear();
+        long effectPeopleSignature=0xcbf29ce484222325L;
+        int effectPeopleCount=0;
         for (Person person : people) {
             if (!matches(person)) continue;
             tmp.set(person.x - 64f, person.y - 64f, person.x + cardWidthWorld() + 64f, person.y + cardHeightWorld() + 64f);
             if (!RectF.intersects(visible, tmp)) continue;
+            effectPeopleScratch.add(person);
+            int seed=person.id==null?0:person.id.hashCode();
+            effectPeopleSignature += ((long)seed*0x9e3779b97f4a7c15L);
+            effectPeopleSignature ^= Long.rotateLeft(seed*0x85ebca6bL, seed&31);
+            effectPeopleCount++;
+        }
+        effectPeopleSignature += ((long)effectPeopleCount*0xc2b2ae3d27d4eb4fL);
+        rasterCardsEnabled=!exportMode &&canvas.isHardwareAccelerated() &&effectPeopleScratch.size()>=24
+            &&!(BuildConfig.DEBUG &&debugDisableCardRaster);
+        cardRasterStyleSignature=cardRasterStyleSignature();
+        boolean fireShaderCandidate=!exportMode
+            &&("card_edge_fire".equals(cardEdgeStyle)||"card_theme_fire".equals(cardStyle));
+        // A shader pass is efficient for a few cards, but three full card
+        // passes across a 500-person tree overload the RenderThread. The
+        // complete animated atlas keeps every particle and path while making
+        // the large-scene frame cost independent of the card count.
+        boolean largeFireScene=effectPeopleScratch.size()>=96;
+        gpuFireForFrame=fireShaderCandidate&&!largeFireScene
+            &&gpuFireCardEffect.prepare(canvas,cardWidthWorld(),cardHeightWorld());
+        animatedCardAtlas.begin(canvas,effectPeopleScratch,cardWidthWorld(),cardHeightWorld(),scale,fireFrameSeconds,
+            "card_edge_fire".equals(cardEdgeStyle)&&!gpuFireForFrame,"card_edge_smoke".equals(cardEdgeStyle),
+            "card_theme_fire".equals(cardStyle)&&!gpuFireForFrame,effectPeopleSignature);
+        for(Person person:effectPeopleScratch) {
             drawCard(canvas, person, exportMode);
             drewFire |= "card_edge_fire".equals(cardEdgeStyle)
                 || "card_edge_smoke".equals(cardEdgeStyle)
                 || "card_theme_fire".equals(cardStyle);
         }
-        if (drewFire && !exportMode && isShown() && getWindowVisibility() == VISIBLE)
-            postInvalidateDelayed(33L);
+        if(!exportMode &&cardRasterCache.needsAnotherFrame() &&isShown() &&getWindowVisibility()==VISIBLE)postInvalidateOnAnimation();
+        if (drewFire && !exportMode && isShown() && getWindowVisibility() == VISIBLE
+                && (gpuFireForFrame || !animatedCardAtlas.hasActiveFrame()))postInvalidateOnAnimation();
     }
 
     private void drawCard(Canvas canvas, Person person, boolean exportMode) {
+        boolean animated="card_edge_fire".equals(cardEdgeStyle)||"card_edge_smoke".equals(cardEdgeStyle)
+            ||"card_theme_fire".equals(cardStyle);
+        if(android.os.Build.VERSION.SDK_INT<29||exportMode||recordingCardArtwork||animated
+            ||!canvas.isHardwareAccelerated()) {
+            drawCardAtScale(canvas,person,exportMode);return;
+        }
+        // Record and replay vector commands in card/world coordinates. RenderNode
+        // has no bitmap layer: GPU rasterizes text and paths at the live matrix.
+        // The same commands are used at rest and during pinch, with no LOD switch.
+        float oldScale=scale,oldX=offsetX,oldY=offsetY,oldViewport=cardViewportScale;
+        float left=sx(person.x),top=sy(person.y);
+        int save=canvas.save();canvas.translate(left,top);canvas.scale(oldScale,oldScale);
+        try {
+            cardViewportScale=oldScale;scale=1;offsetX=-person.x;offsetY=-person.y;
+            drawCardAtScale(canvas,person,exportMode);
+        } finally {
+            scale=oldScale;offsetX=oldX;offsetY=oldY;cardViewportScale=oldViewport;canvas.restoreToCount(save);
+        }
+    }
+
+    private void drawCardAtScale(Canvas canvas, Person person, boolean exportMode) {
+        CardMeta cardMeta=cardMeta(person);
+        boolean animated=!rasterizingStaticCard && ("card_edge_fire".equals(cardEdgeStyle)||"card_edge_smoke".equals(cardEdgeStyle)||"card_theme_fire".equals(cardStyle));
+        long now=SystemClock.uptimeMillis();
+        boolean transientHighlight=(now<highlightedPathUntil &&highlightedPathIds.contains(person.id))
+            ||(now<focusHighlightUntil &&person.id.equals(focusHighlightId));
+        if(!rasterizingStaticCard&&!animated&&!transientHighlight&&drawCardRaster(canvas,person,cardMeta,0,exportMode))return;
         float left = sx(person.x);
         float top = sy(person.y);
         float width = cardWidthWorld() * scale;
@@ -1165,13 +1760,19 @@ final class TreeCanvasView extends View {
         boolean fire = "card_edge_fire".equals(cardEdgeStyle);
         boolean smoke = "card_edge_smoke".equals(cardEdgeStyle);
         boolean botanical = "card_edge_botanical".equals(cardEdgeStyle);
-        boolean decorated = fire || smoke || botanical;
+        boolean decorated = botanical || (!rasterizingStaticCard && (fire || smoke));
         float radius = (decorated || "card_theme_smoke".equals(cardStyle) ? 10f : 8f) * scale;
         int fireSeed = person.id == null ? 0 : person.id.hashCode();
+        if(decorated)animatedCardAtlas.prepare(fireSeed,fireFrameSeconds);
+        boolean atlas = !rasterizingStaticCard && animatedCardAtlas.contains(fireSeed);
         if (decorated) {
             canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
-            if (fire) fireCardEffect.behind(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
-            if (smoke) smokeCardEffect.behind(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
+            if (atlas) animatedCardAtlas.behind(canvas,fireSeed);
+            if (fire && !atlas) {
+                if(gpuFireForFrame)gpuFireCardEffect.behind(canvas,cardWidthWorld(),cardHeightWorld(),fireSeed,fireFrameSeconds,scale);
+                else fireCardEffect.behind(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
+            }
+            if (smoke && !atlas) smokeCardEffect.behind(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
             if (botanical) {
                 botanicalEffect.behind(
                     canvas,
@@ -1183,8 +1784,23 @@ final class TreeCanvasView extends View {
             canvas.restore();
         }
 
+        // Animated edges still need the moving effect behind and in front of
+        // the card, while the complete static card can be reused as one tile.
+        if(animated&&!transientHighlight&&drawCardRaster(canvas,person,cardMeta,0,exportMode)) {
+            canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
+            if (atlas) animatedCardAtlas.front(canvas,fireSeed);
+            if (fire && !atlas) {
+                if(gpuFireForFrame)gpuFireCardEffect.rim(canvas,cardWidthWorld(),cardHeightWorld(),fireSeed,fireFrameSeconds,scale);
+                else fireCardEffect.rim(canvas,cardWidthWorld(),cardHeightWorld(),fireSeed,fireFrameSeconds);
+            }
+            if (smoke && !atlas) smokeCardEffect.rim(canvas,cardWidthWorld(),cardHeightWorld());
+            if (botanical) botanicalEffect.rim(canvas,cardWidthWorld(),cardHeightWorld());
+            canvas.restore();
+            return;
+        }
+
         paint.setStyle(Paint.Style.FILL);
-        if (scale > 0.24f) {
+        {
             paint.setColor(Color.argb(28, 30, 42, 52));
             float shadowY = Math.max(1f, 5f * scale);
             canvas.drawRoundRect(
@@ -1197,16 +1813,21 @@ final class TreeCanvasView extends View {
                 paint);
         }
         int cardColor = styledCardColor(adjustForSelection(person), person);
+        activeCardColor = cardColor;
         paint.setShader(cardFillGradient(left, top, left + width, top + height, cardColor));
         paint.setColor(cardColor);
         canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
         paint.setShader(null);
         drawCardStyleOverlay(canvas, left, top, width, height, radius, person.color,
             person.id == null ? 0 : person.id.hashCode());
-        if (decorated) {
+        if (decorated || atlas) {
             canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
-            if (fire) fireCardEffect.rim(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
-            if (smoke) smokeCardEffect.rim(canvas, cardWidthWorld(), cardHeightWorld());
+            if (atlas) animatedCardAtlas.front(canvas,fireSeed);
+            if (fire && !atlas) {
+                if(gpuFireForFrame)gpuFireCardEffect.rim(canvas,cardWidthWorld(),cardHeightWorld(),fireSeed,fireFrameSeconds,scale);
+                else fireCardEffect.rim(canvas, cardWidthWorld(), cardHeightWorld(), fireSeed, fireFrameSeconds);
+            }
+            if (smoke && !atlas) smokeCardEffect.rim(canvas, cardWidthWorld(), cardHeightWorld());
             if (botanical) botanicalEffect.rim(canvas, cardWidthWorld(), cardHeightWorld());
             canvas.restore();
         }
@@ -1287,7 +1908,7 @@ final class TreeCanvasView extends View {
                 focusHighlightId = "";
             }
         }
-        if (multiSelected && scale > 0.16f) {
+        if (multiSelected) {
             float marker = 23f * scale;
             float markerLeft = left - 5f * scale;
             float markerTop = top - 5f * scale;
@@ -1299,11 +1920,16 @@ final class TreeCanvasView extends View {
             textPaint.setTypeface(uiBold);
             textPaint.setFakeBoldText(true);
             textPaint.setTextSize(15f * scale);
-            Paint.FontMetrics checkFm = textPaint.getFontMetrics();
+            Paint.FontMetrics checkFm = fontMetricsScratch;textPaint.getFontMetrics(checkFm);
             canvas.drawText("✓", markerLeft + marker / 2f, markerTop + marker / 2f - (checkFm.ascent + checkFm.descent) / 2f, textPaint);
             textPaint.setTextAlign(Paint.Align.LEFT);
         }
 
+        if(drawCardRaster(canvas,person,cardMeta,1,exportMode))return;
+        drawCardContents(canvas,person,cardMeta,left,top,width,height,exportMode);
+    }
+
+    private void drawCardContents(Canvas canvas,Person person,CardMeta cardMeta,float left,float top,float width,float height,boolean exportMode) {
         float pad = (compactCards ? 10f : 14f) * scale;
         float textLeft = left + pad;
         float textMaxWidth = width - pad * 2;
@@ -1326,7 +1952,7 @@ final class TreeCanvasView extends View {
                 canvas.clipPath(clipPath);
                 drawPhotoCenterCrop(canvas, photo, avatarRect, person);
                 canvas.restore();
-                if (exportMode && !photo.isRecycled()) photo.recycle();
+                // The export cache owns this bitmap across tiles.
             }
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3f * scale);
@@ -1347,9 +1973,9 @@ final class TreeCanvasView extends View {
                 textPaint.setFakeBoldText(true);
                 textPaint.setTypeface(uiBold);
                 textPaint.setTextSize(18f * textScale);
-                fm = textPaint.getFontMetrics();
+                fm = fontMetricsScratch;textPaint.getFontMetrics(fm);
                 canvas.drawText(
-                    cardMeta(person).initials,
+                    cardMeta.initials,
                     cx,
                     cy - (fm.ascent + fm.descent) / 2f,
                     textPaint);
@@ -1358,7 +1984,7 @@ final class TreeCanvasView extends View {
             textLeft = left + pad + avatar + (compactCards ? 9f : 12f) * scale;
             textMaxWidth = Math.max(1f, width - (textLeft - left) - pad);
 
-            if (!exportMode && scale > 0.11f) {
+            if (!exportMode) {
                 float menu = (compactCards ? 23f : 28f) * scale;
                 float menuLeft = left + width - 7f * scale - menu;
                 float menuTop = top + 7f * scale;
@@ -1367,7 +1993,7 @@ final class TreeCanvasView extends View {
                 textPaint.setTextAlign(Paint.Align.CENTER);
                 textPaint.setColor(cardMenuTextColor());
                 textPaint.setTextSize(17f * textScale);
-                fm = textPaint.getFontMetrics();
+                fm = fontMetricsScratch;textPaint.getFontMetrics(fm);
                 canvas.drawText("⋮", menuLeft + menu / 2f, menuTop + menu / 2f - (fm.ascent + fm.descent) / 2f, textPaint);
                 textPaint.setTextAlign(Paint.Align.LEFT);
             }
@@ -1379,28 +2005,29 @@ final class TreeCanvasView extends View {
         textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * textScale);
         drawNameLines(
             canvas,
-            person.name.isEmpty()
+            cardMeta.displayName.isEmpty()
                 ? AppLanguage.text(getContext(), "Без имени")
-                : person.name,
+                : cardMeta.displayName,
             textLeft,
             top + pad + textPaint.getTextSize(),
             textMaxWidth,
             textScale);
 
-        if (!hideDetails && scale > 0.18f) {
+        if (!hideDetails) {
             textPaint.setFakeBoldText(false);
             textPaint.setTypeface(uiRegular);
             textPaint.setColor(cardSecondaryTextColor());
             textPaint.setTextSize((compactCards ? 13f : 15f) * textScale);
-            CardMeta meta = cardMeta(person);
+            CardMeta meta = cardMeta;
             String date = meta.date;
             String place = meta.place;
             float metaLeft = left + pad;
-            float qualityReserve = qualityReports.containsKey(person.id)
+            float qualityReserve = !exportMode && (state.showLifeStatusBadge
+                || (state.showQualityBadge && qualityReports.containsKey(person.id)))
                 ? 28f * scale
                 : 0f;
             float metaWidth = Math.max(1f, width - pad * 2f - qualityReserve);
-            float bottomBaseline = top + height - pad - 2f;
+            float bottomBaseline = top + height - pad - 2f * scale;
             float iconSize = (compactCards ? 10.5f : 12.5f) * textScale;
             float iconGap = 5f * textScale;
             float metaTextLeft = metaLeft + iconSize + iconGap;
@@ -1419,7 +2046,69 @@ final class TreeCanvasView extends View {
                 drawFittedSingleLine(canvas, place, metaTextLeft, bottomBaseline, metaTextWidth);
             }
         }
-        if (!exportMode) drawQualityIndicator(canvas, person, left, top, width, height);
+        if (!exportMode) {
+            drawQualityIndicator(canvas, person, left, top, width, height);
+            drawLifeStatusIndicator(canvas, person, left, top, width, height);
+        }
+    }
+
+    private boolean drawCardRaster(Canvas canvas,Person person,CardMeta meta,int layer,boolean exportMode) {
+        if(recordingCardArtwork ||!rasterCardsEnabled ||exportMode ||!canvas.isHardwareAccelerated())return false;
+        // Animated artwork must remain live; cache only its static contents.
+        if(layer==0 &&("card_edge_fire".equals(cardEdgeStyle)||"card_edge_smoke".equals(cardEdgeStyle)
+            ||"card_theme_fire".equals(cardStyle)))return false;
+        long signature=mixFamilySignature(cardRasterStyleSignature,meta.signature);
+        signature=mixFamilySignature(signature,System.identityHashCode(meta));
+        signature=mixFamilySignature(signature,person.color);
+        signature=mixFamilySignature(signature,(person.pinned?1:0)|(person.id.equals(state.selectedId)?2:0)
+            |(selectedIds.contains(person.id)?4:0)|(person.id.equals(pendingLineFromId)?8:0));
+        signature=mixFamilySignature(signature,Float.floatToIntBits(person.avatarScale));
+        signature=mixFamilySignature(signature,Float.floatToIntBits(person.avatarOffsetX));
+        signature=mixFamilySignature(signature,Float.floatToIntBits(person.avatarOffsetY));
+        signature=mixFamilySignature(signature,System.identityHashCode(photoBitmap(person,false)));
+        signature=mixFamilySignature(signature,stringHash(person.lifeStatus));
+        signature=mixFamilySignature(signature,stringHash(person.born));signature=mixFamilySignature(signature,stringHash(person.died));
+        TreeQualityAnalyzer.PersonReport report=qualityReports.get(person.id);
+        signature=mixFamilySignature(signature,report==null?-1:report.topSeverity());
+        return cardRasterCache.draw(canvas,person,layer,signature,cardWidthWorld(),cardHeightWorld(),scale,sx(person.x),sy(person.y),
+            !zoomAnimationRunning && (cameraAnimator == null || !cameraAnimator.isRunning())
+                && !scaleDetector.isInProgress(),cardRasterRenderer);
+    }
+
+    private long cardRasterStyleSignature() {
+        long signature=0xcbf29ce484222325L;
+        signature=mixFamilySignature(signature,stringHash(theme));signature=mixFamilySignature(signature,stringHash(cardStyle));
+        signature=mixFamilySignature(signature,stringHash(cardEdgeStyle));signature=mixFamilySignature(signature,Float.floatToIntBits(fontScale));
+        signature=mixFamilySignature(signature,(compactCards?1:0)|(hideDetails?2:0)|(state.showQualityBadge?4:0)|(state.showLifeStatusBadge?8:0));
+        if(state.showLifeStatusBadge &&state.lifeStatusAppearance!=null) {
+            LifeStatusAppearance appearance=state.lifeStatusAppearance;
+            signature=mixFamilySignature(signature,stringHash(appearance.livingIcon));signature=mixFamilySignature(signature,stringHash(appearance.deceasedIcon));
+            signature=mixFamilySignature(signature,stringHash(appearance.unknownIcon));signature=mixFamilySignature(signature,stringHash(appearance.livingColor));
+            signature=mixFamilySignature(signature,stringHash(appearance.deceasedColor));signature=mixFamilySignature(signature,stringHash(appearance.unknownColor));
+            signature=mixFamilySignature(signature,stringHash(appearance.style));
+        }
+        return signature;
+    }
+
+    private void renderCardRaster(Canvas canvas,Person person,int layer) {
+        float oldX=offsetX,oldY=offsetY;
+        offsetX=-person.x*scale;offsetY=-person.y*scale;
+        boolean oldStatic=rasterizingStaticCard,oldRecording=recordingCardArtwork;
+        try {
+            recordingCardArtwork=true;
+            rasterizingStaticCard=layer==0;
+            if(layer==0)drawCard(canvas,person,false);
+            else drawCardContents(canvas,person,cardMeta(person),0,0,cardWidthWorld()*scale,cardHeightWorld()*scale,false);
+        } finally {offsetX=oldX;offsetY=oldY;rasterizingStaticCard=oldStatic;recordingCardArtwork=oldRecording;}
+    }
+
+    private void drawLifeStatusIndicator(Canvas canvas, Person person, float left, float top, float width, float height) {
+        if (!state.showLifeStatusBadge) return;
+        float diameter = Math.max(1f, 22f * scale);
+        float cx = left + width - 10f * scale - diameter / 2f;
+        boolean qualityVisible = state.showQualityBadge && qualityReports.containsKey(person.id);
+        float cy = LifeStatusBadge.centerY(top, height, scale, qualityVisible);
+        lifeStatusBadge.draw(canvas, PersonLifeStatus.resolve(person), state.lifeStatusAppearance, cx, cy, diameter, scale);
     }
 
     private void drawQualityIndicator(
@@ -1431,7 +2120,7 @@ final class TreeCanvasView extends View {
         float height
     ) {
         TreeQualityAnalyzer.PersonReport report = qualityReports.get(person.id);
-        if (report == null) return;
+        if (report == null || !state.showQualityBadge) return;
         int severity = report.topSeverity();
         int color = severity == TreeQualityAnalyzer.ERROR
             ? Color.rgb(211, 73, 67)
@@ -1472,11 +2161,10 @@ final class TreeCanvasView extends View {
     private void drawCalendarMetaIcon(Canvas canvas, float left, float baseline, float size) {
         float top = baseline - size * 0.86f;
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(1f, size * 0.12f));
+        paint.setStrokeWidth(size * 0.12f);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setColor(textPaint.getColor());
-        RectF body = new RectF(left, top + size * 0.16f, left + size, top + size);
-        canvas.drawRoundRect(body, size * 0.15f, size * 0.15f, paint);
+        canvas.drawRoundRect(left,top+size*.16f,left+size,top+size,size*.15f,size*.15f,paint);
         canvas.drawLine(left + size * 0.24f, top, left + size * 0.24f, top + size * 0.34f, paint);
         canvas.drawLine(left + size * 0.76f, top, left + size * 0.76f, top + size * 0.34f, paint);
         canvas.drawLine(left, top + size * 0.43f, left + size, top + size * 0.43f, paint);
@@ -1487,7 +2175,7 @@ final class TreeCanvasView extends View {
         float cx = left + size / 2f;
         float top = baseline - size * 0.96f;
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(1f, size * 0.12f));
+        paint.setStrokeWidth(size * 0.12f);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setColor(textPaint.getColor());
@@ -1571,6 +2259,14 @@ final class TreeCanvasView extends View {
     private CardMeta cardMeta(Person person) {
         int signature = 17;
         signature = 31 * signature + stringHash(person.name);
+        signature = 31 * signature + stringHash(person.surname);
+        signature = 31 * signature + stringHash(person.givenName);
+        signature = 31 * signature + stringHash(person.patronymic);
+        signature = 31 * signature + stringHash(person.maidenName);
+        signature = 31 * signature + stringHash(person.surnameDisplay);
+        signature = 31 * signature + (person.namePartsSet ? 1 : 0);
+        signature = 31 * signature + (person.maidenNameEnabled ? 1 : 0);
+        signature = 31 * signature + (state.useMaidenNames ? 1 : 0);
         signature = 31 * signature + stringHash(person.bornDay);
         signature = 31 * signature + stringHash(person.bornMonth);
         signature = 31 * signature + stringHash(person.bornYear);
@@ -1585,14 +2281,15 @@ final class TreeCanvasView extends View {
         CardMeta cached = cardMetaCache.get(person.id);
         if (cached != null && cached.signature == signature) return cached;
         String place = person.place == null ? "" : person.place.trim();
-        String search = ((person.name == null ? "" : person.name)
+        String search = (PersonNames.search(person)
             + " " + safe(person.bornYear)
             + " " + safe(person.diedYear)
             + " " + place
             + " " + safe(person.notes)).toLowerCase(Locale.ROOT);
         CardMeta meta = new CardMeta(
             signature,
-            initials(person.name),
+            PersonNames.display(person, state.useMaidenNames),
+            initials(PersonNames.display(person, state.useMaidenNames)),
             dateMeta(person),
             place,
             search);
@@ -1608,7 +2305,7 @@ final class TreeCanvasView extends View {
         int month = calendar.get(Calendar.MONTH) + 1;
         int day = calendar.get(Calendar.DAY_OF_MONTH);
         if (todayYear != year || todayMonth != month || todayDay != day) {
-            cardMetaCache.evictAll();
+            cardMetaCache.clear();
         }
         todayYear = year;
         todayMonth = month;
@@ -1637,7 +2334,13 @@ final class TreeCanvasView extends View {
                     Math.round((compactCards ? 56f : 80f) * Math.max(1f,
                         exportRendering ? exportPhotoScale : scale))));
             if (!mediaId.isEmpty() && mediaStore != null) {
-                return mediaStore.decodeBitmap(mediaId, targetSize);
+                String exportKey = "export:" + mediaId + ":" + targetSize;
+                Bitmap decoded = photoCache.get(exportKey);
+                if (decoded == null) {
+                    decoded = mediaStore.decodeBitmap(mediaId, targetSize);
+                    if (decoded != null) photoCache.put(exportKey, decoded);
+                }
+                return decoded;
             }
             int separator = inlinePhoto.indexOf(',');
             try {
@@ -1657,63 +2360,30 @@ final class TreeCanvasView extends View {
             }
             return null;
         }
-        String key = person.id + ":" + (mediaId.isEmpty()
-            ? "inline-" + inlinePhoto.hashCode()
-            : mediaId);
-        Bitmap cached = photoCache.get(key);
-        if (cached != null) return cached;
-        Bitmap bitmap = null;
-        int comma = inlinePhoto.indexOf(',');
-        if (!mediaId.isEmpty() && mediaStore != null) {
-            schedulePhotoDecode(key, mediaId);
-            return null;
-        } else if (inlinePhoto.toLowerCase(Locale.ROOT).startsWith("data:image") && comma > 0) {
-            try {
-                byte[] bytes = Base64.decode(inlinePhoto.substring(comma + 1), Base64.DEFAULT);
-                bitmap = MainActivity.decodeBitmapBytes(bytes, 512);
-            } catch (Exception ignored) {
-                bitmap = null;
-            }
-        } else if (inlinePhoto.length() > 128 && !inlinePhoto.contains("://")) {
-            try {
-                byte[] bytes = Base64.decode(inlinePhoto, Base64.DEFAULT);
-                bitmap = MainActivity.decodeBitmapBytes(bytes, 512);
-            } catch (Exception ignored) {
-                bitmap = null;
-            }
-        }
-        if (bitmap != null) photoCache.put(key, bitmap);
-        return bitmap;
-    }
-
-    private void schedulePhotoDecode(String key, String mediaId) {
-        if (failedPhotoLoads.contains(key) || !photoLoads.add(key)) return;
-        TreeMediaStore selectedStore = mediaStore;
-        photoDecoder.execute(() -> {
-            Bitmap decoded = selectedStore == null ? null : selectedStore.decodeBitmap(mediaId, 192);
-            mainHandler.post(() -> {
-                photoLoads.remove(key);
-                if (decoded != null) {
-                    failedPhotoLoads.remove(key);
-                    photoCache.put(key, decoded);
-                } else {
-                    failedPhotoLoads.add(key);
-                }
-                invalidate();
-            });
-        });
+        int targetSize = 64;
+        int requestedSize = Math.round((compactCards ? 56f : 80f) * (cardViewportScale>0?cardViewportScale:scale));
+        while (targetSize < requestedSize && targetSize < 512) targetSize *= 2;
+        ThumbnailLoader.Request request=thumbnailRequests.get(person);
+        if(request==null) {request=new ThumbnailLoader.Request();thumbnailRequests.put(person,request);}
+        return ThumbnailLoader.SHARED.get(this, thumbnailReady, mediaStore, mediaId, inlinePhoto, targetSize, 1,request);
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        photoDecoder.shutdown();
+        stopContinuousZoom();
+        syncZoomTarget();
+        animatedCardAtlas.release();
+        cardRasterCache.clear();gpuFireCardEffect.trim();
+        thumbnailRequests.clear();
+        detached = true; filterRevision++; filterWorker.shutdownNow();
+        ThumbnailLoader.SHARED.cancel(this);
         mainHandler.removeCallbacksAndMessages(null);
         super.onDetachedFromWindow();
     }
 
     private void drawPhotoCenterCrop(Canvas canvas, Bitmap photo, RectF target, Person person) {
         tmpSrc.set(AvatarTransform.sourceRect(photo, person));
-        canvas.drawBitmap(photo, tmpSrc, target, null);
+        canvas.drawBitmap(photo, tmpSrc, target, photoPaint);
     }
 
     private String displayDate(String day, String month, String year) {
@@ -1766,14 +2436,14 @@ final class TreeCanvasView extends View {
         float stableScale = Math.max(0.001f, scale);
         int widthKey = Math.round(maxWidth / stableScale);
         int fontKey = Math.round(fontScale * 100f);
-        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + text + '\u0000' + widthKey + '\u0000' + fontKey;
-        String cached = nameEllipsisCache.get(cacheKey);
-        if (cached != null) return cached;
+        CachedName<String> cached = nameEllipsisCache.get(text);
+        if (cached != null && cached.matches(widthKey,fontKey,compactCards)) return cached.value;
         float originalTextSize = textPaint.getTextSize();
         textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * fontScale);
         String result = ellipsize(text, maxWidth / stableScale);
         textPaint.setTextSize(originalTextSize);
-        nameEllipsisCache.put(cacheKey, result);
+        if (nameEllipsisCache.size() > Math.max(256, state.people.size() * 4)) nameEllipsisCache.clear();
+        nameEllipsisCache.put(text, new CachedName<>(widthKey,fontKey,compactCards,result));
         return result;
     }
 
@@ -1781,7 +2451,17 @@ final class TreeCanvasView extends View {
         String value = text == null ? "" : text.trim();
         if (value.isEmpty()) return;
         float original = textPaint.getTextSize();
-        float measured = Math.max(1f, textPaint.measureText(value));
+        float worldTextSize=(compactCards?13f:15f)*fontScale;
+        if(measuredMetaSize!=worldTextSize) { measuredMetaSize=worldTextSize;metaTextWidths.clear(); }
+        Float cachedWidth=metaTextWidths.get(value);
+        if(cachedWidth==null) {
+            textPaint.setTextSize(worldTextSize);
+            cachedWidth=Math.max(1f,textPaint.measureText(value));
+            textPaint.setTextSize(original);
+            if(metaTextWidths.size()>Math.max(256,state.people.size()*2))metaTextWidths.clear();
+            metaTextWidths.put(value,cachedWidth);
+        }
+        float measured = cachedWidth*scale;
         if (measured > maxWidth && maxWidth > 0f) {
             textPaint.setTextSize(Math.max(1f, original * maxWidth / measured));
         }
@@ -1796,9 +2476,8 @@ final class TreeCanvasView extends View {
     private String[] nameLines(String value, float maxWidth) {
         int widthKey = Math.round(maxWidth / Math.max(0.001f, scale));
         int fontKey = Math.round(fontScale * 100f);
-        String cacheKey = (compactCards ? "c" : "n") + '\u0000' + value + '\u0000' + widthKey + '\u0000' + fontKey;
-        String[] cached = nameLinesCache.get(cacheKey);
-        if (cached != null) return cached;
+        CachedName<String[]> cached = nameLinesCache.get(value);
+        if (cached != null && cached.matches(widthKey,fontKey,compactCards)) return cached.value;
         float originalTextSize = textPaint.getTextSize();
         textPaint.setTextSize((compactCards ? 15.5f : 18.5f) * fontScale);
         float stableMaxWidth = maxWidth / Math.max(0.001f, scale);
@@ -1825,8 +2504,15 @@ final class TreeCanvasView extends View {
         textPaint.setTextSize(originalTextSize);
         int limit = compactCards ? 3 : 4;
         String[] result = lines.subList(0, Math.min(limit, lines.size())).toArray(new String[0]);
-        nameLinesCache.put(cacheKey, result);
+        if (nameLinesCache.size() > Math.max(256, state.people.size() * 4)) nameLinesCache.clear();
+        nameLinesCache.put(value,new CachedName<>(widthKey,fontKey,compactCards,result));
         return result;
+    }
+
+    private static final class CachedName<T> {
+        final int width,font;final boolean compact;final T value;
+        CachedName(int width,int font,boolean compact,T value){this.width=width;this.font=font;this.compact=compact;this.value=value;}
+        boolean matches(int width,int font,boolean compact){return this.width==width&&this.font==font&&this.compact==compact;}
     }
 
     private List<String> nameParts(String value) {
@@ -2308,11 +2994,28 @@ final class TreeCanvasView extends View {
         float threshold = Math.max(16f, 24f * scale);
         Relation best = null;
         float bestDistance = Float.MAX_VALUE;
+        Set<String> routedVisibleIds = matchingPersonIds();
+        FamilyLineRouter.Plan familyPlan = "centered".equals(familyLineMode)
+            ? familyLinePlan(routedVisibleIds)
+            : FamilyLineRouter.Plan.empty();
+        for (FamilyLineRouter.FamilyRoute route : familyPlan.routes) {
+            Relation representative = familyPlan.representative(route);
+            if (representative == null) continue;
+            float distance = distanceToPath(
+                screenPathForHitTest(familyRoutePath(route)),
+                screenX,
+                screenY);
+            if (distance < bestDistance && distance <= threshold) {
+                bestDistance = distance;
+                best = representative;
+            }
+        }
         for (Relation link : state.links) {
+            if (familyPlan.consumes(link)) continue;
             Person from = state.people.get(link.from);
             Person to = state.people.get(link.to);
             if (from == null || to == null || !matches(from) || !matches(to)) continue;
-            Path path = linkPath(link, from, to);
+            Path path = screenPathForHitTest(linkPath(link, from, to));
             float distance = distanceToPath(path, screenX, screenY);
             if (distance < bestDistance && distance <= threshold) {
                 bestDistance = distance;
@@ -2322,29 +3025,41 @@ final class TreeCanvasView extends View {
         return best;
     }
 
+    private Path screenPathForHitTest(Path path) {
+        if (!"link_style_botanical".equals(linkStyle)) return path;
+        Path screenPath = new Path();
+        path.transform(worldToScreen, screenPath);
+        return screenPath;
+    }
+
     private static float distanceToPath(Path path, float x, float y) {
         PathMeasure measure = new PathMeasure(path, false);
-        float length = measure.getLength();
-        if (length <= 0f) return Float.MAX_VALUE;
-        float step = Math.max(6f, Math.min(28f, length / 40f));
         float[] point = new float[2];
         float best = Float.MAX_VALUE;
-        for (float distance = 0f; distance <= length; distance += step) {
-            measure.getPosTan(distance, point, null);
+        // Centered family routes contain separate contours for the parents,
+        // trunk and child branches. Every visible contour must be tappable.
+        do {
+            float length = measure.getLength();
+            if (length <= 0f) continue;
+            float step = Math.max(6f, Math.min(28f, length / 40f));
+            for (float distance = 0f; distance <= length; distance += step) {
+                measure.getPosTan(distance, point, null);
+                float dx = point[0] - x;
+                float dy = point[1] - y;
+                best = Math.min(best, dx * dx + dy * dy);
+            }
+            measure.getPosTan(length, point, null);
             float dx = point[0] - x;
             float dy = point[1] - y;
             best = Math.min(best, dx * dx + dy * dy);
-        }
-        measure.getPosTan(length, point, null);
-        float dx = point[0] - x;
-        float dy = point[1] - y;
-        best = Math.min(best, dx * dx + dy * dy);
-        return (float) Math.sqrt(best);
+        } while (measure.nextContour());
+        return best == Float.MAX_VALUE ? Float.MAX_VALUE : (float) Math.sqrt(best);
     }
 
     private void startCardDrag(Person hit) {
         if (state == null || hit == null || editLocked) return;
         spatialDirty = true;
+        familyLinePlanDirty = true;
         dragPersonIds.clear();
         dragStartPositions.clear();
         if (selectedIds.contains(hit.id)) {
@@ -2361,6 +3076,8 @@ final class TreeCanvasView extends View {
     }
 
     private void moveDraggedCards(float dx, float dy) {
+        coordinateRevision++;
+        familyLinePlanDirty = true;
         if (state == null || dragPersonIds.isEmpty()) return;
         for (String id : dragPersonIds) {
             PointF start = dragStartPositions.get(id);
@@ -2376,6 +3093,7 @@ final class TreeCanvasView extends View {
     }
 
     private void finishCardDrag(boolean commit) {
+        coordinateRevision++;
         if (state != null && !dragPersonIds.isEmpty()) {
             Map<String, PointF> after = new HashMap<>();
             for (String id : dragPersonIds) {
@@ -2408,19 +3126,30 @@ final class TreeCanvasView extends View {
         draggingCanvas = false;
         moved = false;
         spatialDirty = true;
+        familyLinePlanDirty = true;
         invalidate();
     }
 
     private boolean matches(Person person) {
+        return person != null && matchingPersonIds().contains(person.id);
+    }
+
+    private Set<String> matchingPersonIds() {
+        if (matchingPersonIds != null) return matchingPersonIds;
+        Set<String> result = new HashSet<>();
+        if (state != null) {
+            for (Person person : state.people.values()) {
+                if (person != null && matchesCurrentFilter(person)) result.add(person.id);
+            }
+        }
+        matchingPersonIds = result;
+        return result;
+    }
+
+    private boolean matchesCurrentFilter(Person person) {
         if (!branchAllows(person.id)) return false;
         if (filter.isEmpty()) return true;
-        if (smartFilter != null && smartFilter.active) {
-            if (!smartFilter.kinshipFirstId.isEmpty() && !smartFilter.kinshipSecondId.isEmpty()) {
-                return person.id.equals(smartFilter.kinshipFirstId) || person.id.equals(smartFilter.kinshipSecondId);
-            }
-            return SmartPeopleSearch.matches(state, smartFilter, person, this::hasSearchPhoto, smartFilterNow);
-        }
-        return cardMeta(person).search.contains(filter.toLowerCase(Locale.ROOT));
+        return filterMatchIds == null || filterMatchIds.contains(person.id);
     }
 
     private boolean hasSearchPhoto(Person person) {
@@ -2446,16 +3175,18 @@ final class TreeCanvasView extends View {
         if (anchor == null || anchor.isEmpty()) return;
         if ("ancestors".equals(branchMode)) visibleBranchIds = state.ancestorsOf(anchor);
         else if ("descendants".equals(branchMode)) visibleBranchIds = state.descendantsOf(anchor);
-        else if ("near".equals(branchMode)) visibleBranchIds = state.nearOf(anchor);
+        else if ("near".equals(branchMode)) visibleBranchIds = state.nearOf(anchor, nearGenerations);
     }
 
     private List<Person> visiblePeople(RectF visible) {
         rebuildSpatialIndex();
-        visiblePeopleScratch.clear();
         int minCellX = cell(visible.left - cardWidthWorld() - 64f);
         int maxCellX = cell(visible.right + 64f);
         int minCellY = cell(visible.top - cardHeightWorld() - 64f);
         int maxCellY = cell(visible.bottom + 64f);
+        if(visibleCellsCached &&visibleMinX==minCellX &&visibleMaxX==maxCellX &&visibleMinY==minCellY &&visibleMaxY==maxCellY)return visiblePeopleScratch;
+        visibleCellsCached=true;visibleMinX=minCellX;visibleMaxX=maxCellX;visibleMinY=minCellY;visibleMaxY=maxCellY;
+        visiblePeopleScratch.clear();
         long cellCount = (long) (maxCellX - minCellX + 1)
             * (long) (maxCellY - minCellY + 1);
         if (cellCount <= 0L || cellCount > 2048L) {
@@ -2473,6 +3204,7 @@ final class TreeCanvasView extends View {
 
     private void rebuildSpatialIndex() {
         if (!spatialDirty || state == null) return;
+        visibleCellsCached=false;
         spatialGrid.clear();
         for (Person person : state.people.values()) {
             long key = cellKey(cell(person.x), cell(person.y));
@@ -2533,25 +3265,30 @@ final class TreeCanvasView extends View {
 
     private void zoom(float factor, float focusX, float focusY) {
         if (!Float.isFinite(factor) || factor <= 0f) return;
+        if (cameraAnimator != null) { cameraAnimator.cancel(); cameraAnimator = null; }
         float beforeX = wx(focusX);
         float beforeY = wy(focusY);
-        // Accumulate pinch deltas against the animated destination.  During a
-        // fast gesture the displayed scale intentionally lags behind that
-        // destination; using the displayed value here would repeatedly erase
-        // part of the gesture and make zoom feel stepped.
+        if(scaleDetector.isInProgress() || !PanelTransitions.enabled(this)) {
+            scale=clamp(scale*factor,.05f,3f);
+            offsetX=focusX-beforeX*scale;offsetY=focusY-beforeY*scale;
+            syncZoomTarget();notifyZoomChanged();postInvalidateOnAnimation();return;
+        }
+        // Button zoom keeps its short transition and accumulates repeated clicks.
         float baseScale = zoomAnimationRunning ? zoomTargetScale : scale;
         zoomTargetScale = clamp(baseScale * factor, 0.05f, 3.0f);
         zoomTargetOffsetX = focusX - beforeX * zoomTargetScale;
         zoomTargetOffsetY = focusY - beforeY * zoomTargetScale;
-        notifyZoomChanged(zoomTargetScale);
         if (!zoomAnimationRunning) {
             zoomAnimationRunning = true;
+            zoomFrameTime = SystemClock.uptimeMillis();
             postOnAnimation(zoomAnimation);
         }
     }
 
     private void advanceZoomAnimation() {
-        float interpolation = 0.34f;
+        long now = SystemClock.uptimeMillis();
+        float interpolation = 1f - (float) Math.exp(-Math.min(64L, now - zoomFrameTime) / 65f);
+        zoomFrameTime = now;
         scale += (zoomTargetScale - scale) * interpolation;
         offsetX += (zoomTargetOffsetX - offsetX) * interpolation;
         offsetY += (zoomTargetOffsetY - offsetY) * interpolation;
@@ -2571,11 +3308,34 @@ final class TreeCanvasView extends View {
     }
 
     private void syncZoomTarget() {
+        if (cameraAnimator != null) { cameraAnimator.cancel(); cameraAnimator = null; }
         zoomTargetScale = scale;
         zoomTargetOffsetX = offsetX;
         zoomTargetOffsetY = offsetY;
         zoomAnimationRunning = false;
         removeCallbacks(zoomAnimation);
+    }
+
+    private void animateCamera(float targetScale, float targetX, float targetY) {
+        stopContinuousZoom();
+        syncZoomTarget();
+        if (!isLaidOut() || !isShown() || !PanelTransitions.enabled(this)) {
+            scale = targetScale; offsetX = targetX; offsetY = targetY;
+            syncZoomTarget(); notifyZoomChanged(); invalidate();
+            return;
+        }
+        final float fromScale = scale, fromX = offsetX, fromY = offsetY;
+        cameraAnimator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        cameraAnimator.setDuration(460L);
+        cameraAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator(2f));
+        cameraAnimator.addUpdateListener(animation -> {
+            float t = (float) animation.getAnimatedValue();
+            scale = fromScale + (targetScale - fromScale) * t;
+            offsetX = fromX + (targetX - fromX) * t;
+            offsetY = fromY + (targetY - fromY) * t;
+            notifyZoomChanged(); invalidate();
+        });
+        cameraAnimator.start();
     }
 
     private void notifyZoomChanged() {
@@ -2654,6 +3414,21 @@ final class TreeCanvasView extends View {
     }
 
     private Shader cardFillGradient(float left, float top, float right, float bottom, int color) {
+        int key="card_theme_fire".equals(cardStyle)||"card_theme_smoke".equals(cardStyle)
+            ||"card_theme_botanical".equals(cardStyle)?0:color;
+        Shader shader=fillGradients.get(key);
+        if (shader==null) {
+            shader=createCardFillGradient(0,0,1,1,color);
+            if (fillGradients.size()>=Math.max(512,state==null?512:state.people.size()*2+32)) fillGradients.clear();
+            fillGradients.put(key,shader);
+        }
+        gradientMatrix.setScale(right-left,bottom-top);
+        gradientMatrix.postTranslate(left,top);
+        shader.setLocalMatrix(gradientMatrix);
+        return shader;
+    }
+
+    private Shader createCardFillGradient(float left, float top, float right, float bottom, int color) {
         if ("card_theme_smoke".equals(cardStyle)) return new LinearGradient(left, top, right, bottom,
             new int[] {0xff45525b, 0xff20282f, 0xff343f48}, new float[] {0, .52f, 1}, Shader.TileMode.CLAMP);
         if ("card_theme_botanical".equals(cardStyle)) return new LinearGradient(
@@ -2728,6 +3503,21 @@ final class TreeCanvasView extends View {
         return color;
     }
 
+    private Shader overlayGradient(int key,int kind,int accent,float left,float top,float width,float height) {
+        Shader result=overlayGradients.get(key);
+        if(result==null) {
+            if(kind==0) result=new LinearGradient(0,0,.32f,0,
+                withAlpha(blend(accent,Color.rgb(98,228,216),.16f),132),Color.TRANSPARENT,Shader.TileMode.CLAMP);
+            else if(kind==1)result=new LinearGradient(0,0,0,.55f,
+                Color.argb(122,255,255,255),Color.argb(28,255,255,255),Shader.TileMode.CLAMP);
+            else result=new LinearGradient(0,.18f,1,.82f,Color.TRANSPARENT,Color.argb(76,255,255,255),Shader.TileMode.CLAMP);
+            if(overlayGradients.size()>=Math.max(1024,state==null?1024:state.people.size()*2+32))overlayGradients.clear();
+            overlayGradients.put(key,result);
+        }
+        gradientMatrix.setScale(width,height);gradientMatrix.postTranslate(left,top);result.setLocalMatrix(gradientMatrix);
+        return result;
+    }
+
     private void drawCardStyleOverlay(Canvas canvas, float left, float top, float width, float height, float radius, int accent, int seed) {
         if ("card_theme_archive".equals(cardStyle)) {
             paint.setStyle(Paint.Style.STROKE);
@@ -2739,14 +3529,7 @@ final class TreeCanvasView extends View {
             }
         } else if ("card_theme_midnight".equals(cardStyle)) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(
-                left,
-                top,
-                left + width * 0.32f,
-                top,
-                withAlpha(blend(accent, Color.rgb(98, 228, 216), 0.16f), 132),
-                Color.TRANSPARENT,
-                Shader.TileMode.CLAMP));
+            paint.setShader(overlayGradient(accent,0,accent,left,top,width,height));
             canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
             paint.setShader(null);
             paint.setStyle(Paint.Style.STROKE);
@@ -2765,24 +3548,10 @@ final class TreeCanvasView extends View {
             canvas.drawLine(left + 7f * scale, top + 12f * scale, left + 7f * scale, top + height - 12f * scale, paint);
         } else if ("card_theme_glass".equals(cardStyle)) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(
-                left,
-                top,
-                left,
-                top + height * 0.55f,
-                Color.argb(122, 255, 255, 255),
-                Color.argb(28, 255, 255, 255),
-                Shader.TileMode.CLAMP));
+            paint.setShader(overlayGradient(0,1,accent,left,top,width,height));
             canvas.drawRoundRect(left, top, left + width, top + height, radius, radius, paint);
             paint.setShader(null);
-            paint.setShader(new LinearGradient(
-                left,
-                top + height * 0.18f,
-                left + width,
-                top + height * 0.82f,
-                Color.TRANSPARENT,
-                Color.argb(76, 255, 255, 255),
-                Shader.TileMode.CLAMP));
+            paint.setShader(overlayGradient(1,2,accent,left,top,width,height));
             canvas.drawRoundRect(
                 left + 8f * scale,
                 top + 8f * scale,
@@ -2800,15 +3569,16 @@ final class TreeCanvasView extends View {
             canvas.save();
             canvas.translate(left, top);
             canvas.scale(scale, scale);
-            fireCardEffect.surface(canvas, width / scale, height / scale, seed, fireFrameSeconds);
+            if(gpuFireForFrame)gpuFireCardEffect.surface(canvas,cardWidthWorld(),cardHeightWorld(),seed,fireFrameSeconds,scale);
+            else if (!animatedCardAtlas.contains(seed)) fireCardEffect.surface(canvas, width / scale, height / scale, seed, fireFrameSeconds);
             canvas.restore();
         } else if ("card_theme_smoke".equals(cardStyle)) {
             canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
-            smokeCardEffect.surface(canvas, width / scale, height / scale, seed);
+            smokeCardEffect.surface(canvas, width / scale, height / scale, seed,exportRendering?1f:scale);
             canvas.restore();
         } else if ("card_theme_botanical".equals(cardStyle)) {
             canvas.save(); canvas.translate(left, top); canvas.scale(scale, scale);
-            botanicalEffect.surface(canvas, width / scale, height / scale, seed);
+            botanicalEffect.surface(canvas, width / scale, height / scale, seed,exportRendering?1f:scale);
             canvas.restore();
         }
     }
@@ -2818,7 +3588,7 @@ final class TreeCanvasView extends View {
         if ("card_theme_midnight".equals(cardStyle)) return Color.rgb(236, 244, 246);
         if ("card_theme_archive".equals(cardStyle)) return Color.rgb(58, 44, 30);
         if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 246, 222);
-        return Color.rgb(34, 37, 39);
+        return contrastTextColor(activeCardColor, 255, Color.rgb(34, 37, 39));
     }
 
     private int cardSecondaryTextColor() {
@@ -2826,7 +3596,7 @@ final class TreeCanvasView extends View {
         if ("card_theme_midnight".equals(cardStyle)) return Color.argb(205, 206, 224, 226);
         if ("card_theme_archive".equals(cardStyle)) return Color.argb(208, 101, 75, 46);
         if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 220, 103);
-        return Color.argb(184, 34, 37, 39);
+        return contrastTextColor(activeCardColor, 184, Color.rgb(34, 37, 39));
     }
 
     private int cardInitialsTextColor() {
@@ -2834,7 +3604,7 @@ final class TreeCanvasView extends View {
         if ("card_theme_midnight".equals(cardStyle)) return Color.rgb(238, 248, 248);
         if ("card_theme_archive".equals(cardStyle)) return Color.argb(210, 70, 51, 31);
         if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 238, 185);
-        return Color.argb(190, 34, 37, 39);
+        return contrastTextColor(activeCardColor, 220, Color.rgb(34, 37, 39));
     }
 
     private int cardMenuTextColor() {
@@ -2843,7 +3613,26 @@ final class TreeCanvasView extends View {
         if ("card_theme_midnight".equals(cardStyle)) return Color.rgb(218, 235, 238);
         if ("card_theme_archive".equals(cardStyle)) return Color.rgb(98, 72, 43);
         if ("card_theme_fire".equals(cardStyle)) return Color.rgb(255, 218, 148);
-        return Color.rgb(83, 94, 88);
+        return contrastTextColor(activeCardColor, 220, Color.rgb(83, 94, 88));
+    }
+
+    private int contrastTextColor(int background, int alpha, int darkFallback) {
+        // White only when it actually reads better than the dark text: a fixed
+        // luminance cutoff flipped mid-tone palette colors (blue, pink) to white.
+        double luminance = relativeLuminance(background);
+        double whiteContrast = 1.05 / (luminance + .05);
+        double darkContrast = (luminance + .05) / (relativeLuminance(darkFallback) + .05);
+        return whiteContrast > darkContrast ? Color.argb(alpha, 255, 255, 255) : darkFallback;
+    }
+
+    private static double relativeLuminance(int color) {
+        double r = Color.red(color) / 255.0;
+        double g = Color.green(color) / 255.0;
+        double b = Color.blue(color) / 255.0;
+        r = r <= .03928 ? r / 12.92 : Math.pow((r + .055) / 1.055, 2.4);
+        g = g <= .03928 ? g / 12.92 : Math.pow((g + .055) / 1.055, 2.4);
+        b = b <= .03928 ? b / 12.92 : Math.pow((b + .055) / 1.055, 2.4);
+        return .2126 * r + .7152 * g + .0722 * b;
     }
 
     private static String normalizeWorkshopStyle(String value) {
@@ -2871,13 +3660,15 @@ final class TreeCanvasView extends View {
 
     private static final class CardMeta {
         final int signature;
+        final String displayName;
         final String initials;
         final String date;
         final String place;
         final String search;
 
-        CardMeta(int signature, String initials, String date, String place, String search) {
+        CardMeta(int signature, String displayName, String initials, String date, String place, String search) {
             this.signature = signature;
+            this.displayName = displayName;
             this.initials = initials;
             this.date = date;
             this.place = place;

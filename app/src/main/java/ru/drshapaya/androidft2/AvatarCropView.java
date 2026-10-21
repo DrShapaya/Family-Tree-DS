@@ -41,7 +41,7 @@ final class AvatarPositionView extends View {
                 return true;
             }
         });
-        setBackgroundColor(Color.rgb(226, 234, 237));
+        setBackgroundColor(AppThemePalette.surface(Color.rgb(226, 234, 237)));
     }
 
     void setBitmap(Bitmap value) {

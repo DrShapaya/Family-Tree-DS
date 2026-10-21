@@ -25,6 +25,8 @@ final class TreeState {
     final Map<String, List<String>> familyAlbumMedia = new LinkedHashMap<>();
     final Map<String, List<String>> personAlbumMedia = new LinkedHashMap<>();
     final Set<String> familyAlbums = new LinkedHashSet<>();
+    final transient Set<String> omittedAlbumFields = new HashSet<>();
+    transient long localEditEpoch;
     String rootId = "";
     String selectedId = "";
     String theme = "light";
@@ -40,12 +42,17 @@ final class TreeState {
     boolean onboardingOffered = false;
     boolean guidesVisible = true;
     boolean hideCardDetails = false;
+    boolean useMaidenNames = false;
+    boolean showQualityBadge = true;
+    boolean showLifeStatusBadge = false;
+    LifeStatusAppearance lifeStatusAppearance = new LifeStatusAppearance();
     boolean compactCards = false;
     boolean focusTree = false;
     boolean autoArrangeOnAdd = false;
     int workspaceWidth = 24000;
     int workspaceHeight = 16000;
     String parentLineMode = "smart";
+    String familyLineMode = "centered";
 
     private static final int[] COLORS = {
         Color.rgb(242, 209, 107),
@@ -175,46 +182,58 @@ final class TreeState {
     }
 
     Set<String> ancestorsOf(String id) {
-        Set<String> result = new HashSet<>();
-        collectAncestors(id, result);
-        return result;
+        return traverseParentRelations(id, false);
     }
 
     Set<String> descendantsOf(String id) {
-        Set<String> result = new HashSet<>();
-        collectDescendants(id, result);
+        return traverseParentRelations(id, true);
+    }
+
+    Set<String> nearOf(String id) { return nearOf(id, 1); }
+
+    Set<String> nearOf(String id, int generations) {
+        Set<String> result = new LinkedHashSet<>();
+        if (id == null || !people.containsKey(id)) return result;
+        Map<String, List<String>> adjacent = new LinkedHashMap<>();
+        for (Relation link : links) {
+            if (!people.containsKey(link.from) || !people.containsKey(link.to)) continue;
+            adjacent.computeIfAbsent(link.from, ignored -> new ArrayList<>()).add(link.to);
+            adjacent.computeIfAbsent(link.to, ignored -> new ArrayList<>()).add(link.from);
+        }
+        result.add(id);
+        Set<String> frontier = new LinkedHashSet<>(); frontier.add(id);
+        int depth = Math.max(1, Math.min(99, generations));
+        for (int level = 0; level < depth && !frontier.isEmpty(); level++) {
+            Set<String> next = new LinkedHashSet<>();
+            for (String current : frontier) {
+                for (String neighbor : adjacent.getOrDefault(current, java.util.Collections.emptyList())) {
+                    if (result.add(neighbor)) next.add(neighbor);
+                }
+            }
+            frontier = next;
+        }
         return result;
     }
 
-    Set<String> nearOf(String id) {
+    private Set<String> traverseParentRelations(String id, boolean descendants) {
         Set<String> result = new HashSet<>();
         if (id == null || id.isEmpty()) return result;
-        result.add(id);
+        Map<String, List<String>> adjacent = new LinkedHashMap<>();
         for (Relation link : links) {
-            if (id.equals(link.from)) result.add(link.to);
-            if (id.equals(link.to)) result.add(link.from);
+            if (!"parent".equals(link.type)) continue;
+            String from = descendants ? link.from : link.to;
+            String to = descendants ? link.to : link.from;
+            adjacent.computeIfAbsent(from, ignored -> new ArrayList<>()).add(to);
+        }
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        result.add(id);
+        queue.add(id);
+        while (!queue.isEmpty()) {
+            for (String next : adjacent.getOrDefault(queue.removeFirst(), java.util.Collections.emptyList())) {
+                if (result.add(next)) queue.addLast(next);
+            }
         }
         return result;
-    }
-
-    private void collectAncestors(String id, Set<String> result) {
-        if (id == null || id.isEmpty()) return;
-        result.add(id);
-        for (Relation link : links) {
-            if ("parent".equals(link.type) && id.equals(link.to) && result.add(link.from)) {
-                collectAncestors(link.from, result);
-            }
-        }
-    }
-
-    private void collectDescendants(String id, Set<String> result) {
-        if (id == null || id.isEmpty()) return;
-        result.add(id);
-        for (Relation link : links) {
-            if ("parent".equals(link.type) && id.equals(link.from) && result.add(link.to)) {
-                collectDescendants(link.to, result);
-            }
-        }
     }
 
     static int colorFor(String value, int fallback) {

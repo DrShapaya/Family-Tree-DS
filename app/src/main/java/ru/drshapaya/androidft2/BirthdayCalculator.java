@@ -44,7 +44,7 @@ final class BirthdayCalculator {
         Result nearest = null;
         for (Person person : state.people.values()) {
             if (person == null
-                || hasDeathDate(person)
+                || PersonLifeStatus.DECEASED.equals(PersonLifeStatus.resolve(person,localNow))
                 || (excludedPersonIds != null && excludedPersonIds.contains(person.id))) continue;
             int day = parse(person.bornDay);
             int month = parse(person.bornMonth);
@@ -115,10 +115,7 @@ final class BirthdayCalculator {
     }
 
     private static boolean hasDeathDate(Person person) {
-        return present(person.died)
-            || present(person.diedDay)
-            || present(person.diedMonth)
-            || present(person.diedYear);
+        return PersonLifeStatus.DECEASED.equals(PersonLifeStatus.resolve(person));
     }
 
     private static int parse(String value) {

@@ -28,6 +28,49 @@ public class ExportLayoutTest {
             ExportLayout layout = new ExportLayout(shape[0], shape[1], 16, 2_000_000, 2, 2);
             assertTrue(layout.width <= 28000 && layout.height <= 28000);
             assertTrue((long) ((layout.width + 2) / 3) * ((layout.height + 2) / 3) <= 2_000_000);
+            assertTrue((layout.width + 2) / 3 <= ExportLayout.MAX_BITMAP_SIDE);
+            assertTrue((layout.height + 2) / 3 <= ExportLayout.MAX_BITMAP_SIDE);
+        }
+    }
+
+    @Test public void bitmapBudgetScalesWithHeapAndStaysWithinSafeBounds() {
+        assertEquals(1_000_000L, ExportLayout.safePixelsForHeap(16L * 1024L * 1024L));
+        assertEquals(4_194_304L, ExportLayout.safePixelsForHeap(128L * 1024L * 1024L));
+        assertEquals(8_388_608L, ExportLayout.safePixelsForHeap(256L * 1024L * 1024L));
+        assertEquals(12_000_000L, ExportLayout.safePixelsForHeap(1024L * 1024L * 1024L));
+    }
+
+    @Test public void randomizedLargeLayoutsNeverExceedPerBitmapLimits() {
+        java.util.Random random = new java.util.Random(0x504E47L);
+        for (int iteration = 0; iteration < 10_000; iteration++) {
+            float worldWidth = (float) Math.pow(10d, random.nextDouble() * 6d);
+            float worldHeight = (float) Math.pow(10d, random.nextDouble() * 6d);
+            float requestedScale = 0.05f + random.nextFloat() * 15.95f;
+            long budget = 4_096L + (long) (random.nextDouble() * 11_995_904L);
+            int verticalCuts = random.nextInt(6);
+            int horizontalCuts = random.nextInt(6);
+            ExportLayout layout = new ExportLayout(
+                worldWidth,
+                worldHeight,
+                requestedScale,
+                budget,
+                verticalCuts,
+                horizontalCuts);
+
+            assertTrue(layout.width >= layout.columns && layout.width <= 28_000);
+            assertTrue(layout.height >= layout.rows && layout.height <= 28_000);
+            long covered = 0L;
+            for (int row = 0; row < layout.rows; row++) {
+                for (int column = 0; column < layout.columns; column++) {
+                    int width = layout.x(column + 1) - layout.x(column);
+                    int height = layout.y(row + 1) - layout.y(row);
+                    assertTrue(width > 0 && width <= ExportLayout.MAX_BITMAP_SIDE);
+                    assertTrue(height > 0 && height <= ExportLayout.MAX_BITMAP_SIDE);
+                    assertTrue((long) width * height <= budget);
+                    covered += (long) width * height;
+                }
+            }
+            assertEquals((long) layout.width * layout.height, covered);
         }
     }
 

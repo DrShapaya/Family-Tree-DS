@@ -2,6 +2,7 @@ package ru.drshapaya.androidft2;
 
 /** Pixel partitioning shared by the preview, encoder and ZIP manifest. */
 final class ExportLayout {
+    static final int MAX_BITMAP_SIDE = 8192;
     final int width, height, columns, rows;
 
     ExportLayout(float worldWidth, float worldHeight, float requestedScale,
@@ -11,6 +12,12 @@ final class ExportLayout {
         double w = Math.max(1d, worldWidth), h = Math.max(1d, worldHeight);
         double scale = Math.min(Math.max(0.000001d, requestedScale),
             Math.min(28000d / w, 28000d / h));
+        // Keep every individual bitmap within a dimension supported reliably
+        // by Android software canvases and PNG encoders. Cuts may still raise
+        // the total exported width/height up to the existing 28k limit.
+        scale = Math.min(scale, Math.min(
+            MAX_BITMAP_SIDE * (double) columns / w,
+            MAX_BITMAP_SIDE * (double) rows / h));
         long budget = Math.max(4096L, pixelsPerTile);
         scale = Math.min(scale, Math.sqrt(budget * (double) columns * rows / (w * h)));
         int candidateWidth = Math.max(columns, (int) Math.floor(w * scale));
@@ -23,6 +30,14 @@ final class ExportLayout {
         }
         width = candidateWidth;
         height = candidateHeight;
+    }
+
+    static long safePixelsForHeap(long maxHeapBytes) {
+        // ARGB_8888 uses four bytes per pixel. Reserving no more than one eighth
+        // of the app heap for the bitmap leaves room for the tree model, decoded
+        // photos, drawing caches and the PNG compressor.
+        long byHeap = Math.max(1L, maxHeapBytes) / 32L;
+        return Math.max(1_000_000L, Math.min(12_000_000L, byHeap));
     }
 
     int x(int column) { return (int) ((long) width * column / columns); }

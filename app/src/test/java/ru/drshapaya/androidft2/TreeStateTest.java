@@ -27,6 +27,18 @@ public final class TreeStateTest {
     }
 
     @Test
+    public void copiedStateKeepsIndependentFamilyLineMode() {
+        TreeState state = new TreeState();
+        state.parentLineMode = "orthogonal";
+        state.familyLineMode = "individual";
+
+        TreeState copied = TreeStateCopier.copy(state);
+
+        assertEquals("orthogonal", copied.parentLineMode);
+        assertEquals("individual", copied.familyLineMode);
+    }
+
+    @Test
     public void newPartnerBecomesParentOfAllExistingChildren() {
         TreeState state = new TreeState();
         Person parent = state.addPerson("Родитель", 0f, 0f);

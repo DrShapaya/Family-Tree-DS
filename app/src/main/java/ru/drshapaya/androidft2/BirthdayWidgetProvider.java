@@ -66,11 +66,21 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
     }
 
     static void updateAll(Context context) {
+        updateAll(context, null);
+    }
+
+    static void updateAll(Context context, TreeState savedSnapshot) {
         Context appContext = context.getApplicationContext();
         AppWidgetManager manager = AppWidgetManager.getInstance(appContext);
+        java.util.concurrent.atomic.AtomicReference<TreeState> shared = new java.util.concurrent.atomic.AtomicReference<>(savedSnapshot);
+        java.util.function.Supplier<TreeState> source = () -> {
+            TreeState loaded = shared.get();
+            if (loaded == null) { loaded = new TreeStore(appContext).load(); shared.set(loaded); }
+            return loaded;
+        };
         for (ComponentPreset preset : presets(appContext)) {
             int[] ids = manager.getAppWidgetIds(preset.component);
-            if (ids.length > 0) updateAsync(appContext, manager, ids, null, preset.size);
+            if (ids.length > 0) updateAsync(appContext, manager, ids, null, preset.size, source);
         }
     }
 
@@ -81,6 +91,12 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
         Bundle optionsOverride,
         int presetSize
     ) {
+        updateAsync(context, manager, appWidgetIds, optionsOverride, presetSize,
+            () -> new TreeStore(context.getApplicationContext()).load());
+    }
+
+    private static void updateAsync(Context context, AppWidgetManager manager, int[] appWidgetIds,
+            Bundle optionsOverride, int presetSize, java.util.function.Supplier<TreeState> source) {
         Context appContext = context.getApplicationContext();
         int[] ids = appWidgetIds == null ? new int[0] : appWidgetIds.clone();
         long updateRevision = UPDATE_SEQUENCE.incrementAndGet();
@@ -90,7 +106,7 @@ public class BirthdayWidgetProvider extends AppWidgetProvider {
             if (!hasLatestUpdate(ids, updateRevision)) return;
             TreeState state;
             try {
-                state = new TreeStore(appContext).load();
+                state = source.get();
             } catch (Exception error) {
                 DiagnosticsLogger.handled(appContext, "widget.load", error);
                 state = new TreeState();

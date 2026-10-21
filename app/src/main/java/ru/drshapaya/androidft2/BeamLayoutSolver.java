@@ -89,6 +89,7 @@ final class BeamLayoutSolver {
 
     private static int operationPriority(LayoutOperation operation) {
         if (operation == null) return Integer.MAX_VALUE;
+        if (operation.reason().startsWith("parent-role-order:")) return -3;
         if (operation.reason().startsWith("multi-union-family:")) return -2;
         if (operation.reason().startsWith("collision-")) return -1;
         return 0;

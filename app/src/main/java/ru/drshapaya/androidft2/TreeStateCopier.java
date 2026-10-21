@@ -49,9 +49,12 @@ final class TreeStateCopier {
     static Person copyPerson(Person source) {
         Person target = new Person(source == null ? "" : source.id);
         if (source == null) return target;
+        target.searchCache = source.searchCache;
         target.name = source.name;
+        PersonNames.copy(source, target);
         target.born = source.born;
         target.died = source.died;
+        target.lifeStatus = source.lifeStatus;
         target.bornDay = source.bornDay;
         target.bornMonth = source.bornMonth;
         target.bornYear = source.bornYear;
@@ -125,6 +128,8 @@ final class TreeStateCopier {
     }
 
     static void copyMetadata(TreeState source, TreeState target) {
+        target.localEditEpoch = source.localEditEpoch;
+        target.omittedAlbumFields.addAll(source.omittedAlbumFields);
         target.rootId = source.rootId;
         target.selectedId = source.selectedId;
         target.theme = source.theme;
@@ -140,11 +145,16 @@ final class TreeStateCopier {
         target.onboardingOffered = source.onboardingOffered;
         target.guidesVisible = source.guidesVisible;
         target.hideCardDetails = source.hideCardDetails;
+        target.useMaidenNames = source.useMaidenNames;
+        target.showQualityBadge = source.showQualityBadge;
+        target.showLifeStatusBadge = source.showLifeStatusBadge;
+        target.lifeStatusAppearance = source.lifeStatusAppearance.copy();
         target.compactCards = source.compactCards;
         target.focusTree = source.focusTree;
         target.autoArrangeOnAdd = source.autoArrangeOnAdd;
         target.workspaceWidth = source.workspaceWidth;
         target.workspaceHeight = source.workspaceHeight;
         target.parentLineMode = source.parentLineMode;
+        target.familyLineMode = source.familyLineMode;
     }
 }

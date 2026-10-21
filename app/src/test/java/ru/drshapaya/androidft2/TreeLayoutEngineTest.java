@@ -51,7 +51,7 @@ public final class TreeLayoutEngineTest {
     }
 
     @Test
-    public void siblingFamiliesHaveTwoCellsBetweenExtremeCards() {
+    public void siblingFamiliesHaveFiveCellsBetweenExtremeCards() {
         TreeState state = parentsAndTwoChildren();
         person(state, "partnerA", "Ольга Первая", "1995");
         person(state, "partnerB", "Мария Вторая", "1997");
@@ -64,7 +64,7 @@ public final class TreeLayoutEngineTest {
         float secondMin = minX(state, "childB", "partnerB");
         float secondMax = maxRight(state, "childB", "partnerB");
         float gap = firstMin < secondMin ? secondMin - firstMax : firstMin - secondMax;
-        assertEquals(TreeLayoutEngine.GRID * 2f, gap, EPSILON);
+        assertEquals(TreeLayoutEngine.GRID * 5f, gap, EPSILON);
     }
 
     @Test

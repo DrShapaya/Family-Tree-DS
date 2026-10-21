@@ -11,7 +11,7 @@ import android.graphics.Picture;
 import android.graphics.RectF;
 import android.util.LongSparseArray;
 
-import java.util.IdentityHashMap;
+import java.util.WeakHashMap;
 
 /** Detailed vines drawn as cached compound paths rather than hundreds of Canvas operations. */
 final class BotanicalEffect {
@@ -23,10 +23,10 @@ final class BotanicalEffect {
         final Path petals = new Path();
         final Path centres = new Path();
         final RectF bounds = new RectF();
-        final Bitmap[] normalBitmaps = new Bitmap[3];
-        final Bitmap[] selectedBitmaps = new Bitmap[3];
-        final boolean[] normalBitmapRejected = new boolean[3];
-        final boolean[] selectedBitmapRejected = new boolean[3];
+        final Bitmap[] normalBitmaps = new Bitmap[4];
+        final Bitmap[] selectedBitmaps = new Bitmap[4];
+        final boolean[] normalBitmapRejected = new boolean[4];
+        final boolean[] selectedBitmapRejected = new boolean[4];
         // Very long links can exceed the bitmap cap.  Keep a recorded vector
         // fallback so panning/zooming never redraws every leaf on the UI thread.
         final Picture[] normalPictures = new Picture[1];
@@ -51,10 +51,19 @@ final class BotanicalEffect {
     private final RectF bitmapDestination = new RectF();
     private final LongSparseArray<Decoration> cardCache = new LongSparseArray<>();
     private final LongSparseArray<Decoration> surfaceCache = new LongSparseArray<>();
-    private final IdentityHashMap<Path, Decoration> linkCache = new IdentityHashMap<>();
+    private final WeakHashMap<Path, Decoration> linkCache = new WeakHashMap<>();
     private long bitmapCacheBytes;
+    private long lastBitmapRecount;
     private int linkBuildCount;
     private int cardBuildCount;
+    private final CachedCardSurface surfaceRaster=new CachedCardSurface();
+    private final CachedCardSurface.Renderer surfaceRenderer=this::surface;
+
+    void trim() { clearBitmapCaches();surfaceRaster.clear(); }
+
+    void surface(Canvas canvas,float width,float height,int seed,float scale) {
+        if(!surfaceRaster.draw(canvas,width,height,0,scale,surfaceRenderer))surface(canvas,width,height,seed);
+    }
 
     BotanicalEffect() {
         leaf.moveTo(0, 0);
@@ -91,7 +100,7 @@ final class BotanicalEffect {
     }
 
     void surface(Canvas canvas, float width, float height, int seed) {
-        long key = decorationKey(width, height, seed);
+        long key = decorationKey(width, height, 0);
         Decoration decoration = surfaceCache.get(key);
         if (decoration == null) {
             decoration = new Decoration();
@@ -128,10 +137,6 @@ final class BotanicalEffect {
         Decoration decoration = linkCache.get(worldPath);
         if (decoration == null) {
             decoration = buildLink(worldPath, dashed);
-            if (linkCache.size() >= 1024) {
-                linkCache.clear();
-                clearBitmapCaches();
-            }
             linkCache.put(worldPath, decoration);
             linkBuildCount++;
         }
@@ -170,11 +175,13 @@ final class BotanicalEffect {
     private Decoration buildLink(Path worldPath, boolean dashed) {
         Decoration result = new Decoration();
         measure.setPath(worldPath, false);
+        if (!dashed) result.stem.addPath(worldPath);
+        do {
         float length = measure.getLength();
         if (dashed) {
             for (float distance = 0; distance < length; distance += 32f)
                 measure.getSegment(distance, Math.min(length, distance + 20f), result.stem, true);
-        } else result.stem.addPath(worldPath);
+        }
         for (int i = 0; ; i++) {
             float distance = dashed ? 9f + i * 64f : 24f + i * 45f;
             if (distance > length - 12f) break;
@@ -182,6 +189,7 @@ final class BotanicalEffect {
             addLeaf(result, position[0], position[1],
                 degrees(tangent) + (i % 2 == 0 ? -58 : 58), .85f);
         }
+        } while (measure.nextContour());
         updateBounds(result);
         return result;
     }
@@ -201,6 +209,8 @@ final class BotanicalEffect {
         if (path == null || path.isEmpty()) return;
         RectF value = new RectF();
         path.computeBounds(value, true);
+        // Horizontal/vertical stems have zero-area bounds, but still paint pixels.
+        value.inset(-2f, -2f);
         if (target.isEmpty()) target.set(value); else target.union(value);
     }
 
@@ -215,7 +225,7 @@ final class BotanicalEffect {
         // At close zoom use a recorded vector display list.  It keeps every
         // vein and petal at native precision while avoiding a large bitmap
         // allocation exactly when the user is actively pinching.
-        if (bucket > 1) {
+        if (bucket >= 4) {
             Picture[] pictures = selected ? decoration.selectedPictures : decoration.normalPictures;
             Picture picture = pictures[0];
             if (picture == null) {
@@ -229,11 +239,18 @@ final class BotanicalEffect {
         }
         Bitmap[] cache = selected ? decoration.selectedBitmaps : decoration.normalBitmaps;
         boolean[] rejected = selected ? decoration.selectedBitmapRejected : decoration.normalBitmapRejected;
-        Bitmap bitmap = cache[bucket - 1];
-        if ((bitmap == null || bitmap.isRecycled()) && !rejected[bucket - 1]) {
-            bitmap = createBitmap(decoration, bucket, selected);
+        Bitmap bitmap = cache[bucket];
+        if ((bitmap == null || bitmap.isRecycled()) && !rejected[bucket]) {
+            bitmap = createBitmap(decoration, bitmapDensity(bucket), selected);
             if (bitmap != null) {
                 long bytes = bitmap.getAllocationByteCount();
+                if(bitmapCacheBytes+bytes>MAX_BITMAP_CACHE_BYTES
+                    && android.os.SystemClock.uptimeMillis()-lastBitmapRecount>1000L) {
+                    bitmapCacheBytes=0;
+                    for(int i=0;i<cardCache.size();i++)bitmapCacheBytes+=bitmapBytes(cardCache.valueAt(i));
+                    for(Decoration live:linkCache.values())bitmapCacheBytes+=bitmapBytes(live);
+                    lastBitmapRecount=android.os.SystemClock.uptimeMillis();
+                }
                 if (bitmapCacheBytes + bytes > MAX_BITMAP_CACHE_BYTES) {
                     // A large botanical tree can contain dozens of long links.
                     // Clearing every cached bitmap here made the next frame build
@@ -242,13 +259,13 @@ final class BotanicalEffect {
                     // recorded Picture fallback instead.
                     bitmap.recycle();
                     bitmap = null;
-                    rejected[bucket - 1] = true;
+                    rejected[bucket] = true;
                 } else {
-                    cache[bucket - 1] = bitmap;
+                    cache[bucket] = bitmap;
                     bitmapCacheBytes += bytes;
                 }
             } else {
-                rejected[bucket - 1] = true;
+                rejected[bucket] = true;
             }
         }
         if (bitmap == null) {
@@ -273,15 +290,15 @@ final class BotanicalEffect {
         canvas.drawBitmap(bitmap, null, bitmapDestination, paint);
     }
 
-    private Bitmap createBitmap(Decoration decoration, int bucket, boolean selected) {
+    private Bitmap createBitmap(Decoration decoration, float density, boolean selected) {
         final float pad = 24f;
         float left = decoration.bounds.left - pad;
         float top = decoration.bounds.top - pad;
         float right = decoration.bounds.right + pad;
         float bottom = decoration.bounds.bottom + pad;
-        int width = Math.max(1, Math.min(4096, (int) Math.ceil((right - left) * bucket)));
-        int height = Math.max(1, Math.min(4096, (int) Math.ceil((bottom - top) * bucket)));
-        if ((long) width * height > MAX_BITMAP_PIXELS) return null;
+        int width = Math.max(1, (int) Math.ceil((right - left) * density));
+        int height = Math.max(1, (int) Math.ceil((bottom - top) * density));
+        if (width>4096 || height>4096 || (long) width * height > MAX_BITMAP_PIXELS) return null;
         Bitmap bitmap;
         try {
             bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -289,8 +306,9 @@ final class BotanicalEffect {
             return null;
         }
         Canvas bitmapCanvas = new Canvas(bitmap);
-        bitmapCanvas.translate(-left * bucket, -top * bucket);
-        bitmapCanvas.scale(bucket, bucket);
+        // Map the full bounds exactly, including rounding up to whole pixels.
+        bitmapCanvas.scale(width/(right-left),height/(bottom-top));
+        bitmapCanvas.translate(-left,-top);
         drawDecoration(bitmapCanvas, decoration, 1f, selected);
         return bitmap;
     }
@@ -341,9 +359,9 @@ final class BotanicalEffect {
     }
 
     private static long decorationKey(float width, float height, int seed) {
-        long w = Math.round(width) & 0xffffffffL;
-        long h = Math.round(height) & 0xffffffffL;
-        return (w << 32) ^ (h << 3) ^ (seed & 7L);
+        long w = Math.round(width) & 0xffffffL;
+        long h = Math.round(height) & 0xffffffL;
+        return (w << 32) | (h << 8) | (seed & 255L);
     }
 
     private static void clearBitmaps(Decoration decoration) {
@@ -358,9 +376,15 @@ final class BotanicalEffect {
     }
 
     private static int detailBucket(float scale) {
-        if (!Float.isFinite(scale) || scale <= 1f) return 1;
-        return Math.min(3, Math.max(1, (int) Math.ceil(scale)));
+        if(!Float.isFinite(scale))return 4;
+        // Every stem, vein and petal is rendered; only the pixel density of the cached image changes.
+        if(scale<=.125f)return 0;
+        if(scale<=.25f)return 1;
+        if(scale<=.5f)return 2;
+        return scale<=1f?3:4;
     }
+
+    private static float bitmapDensity(int bucket) { return .125f*(1<<bucket); }
 
     private void drawDecoration(Canvas canvas, Decoration decoration, float scale, boolean selected) {
         paint.setStyle(Paint.Style.STROKE);

@@ -16,6 +16,7 @@ import java.util.Set;
  * The calculation is read-only and is safe to use while editing is locked.
  */
 final class KinshipCalculator {
+    private static final ThreadLocal<TreeRelationsIndex> ACTIVE_INDEX = new ThreadLocal<>();
     private static final int MAX_GENERATIONS = 24;
     private static final int MAX_PATH_LENGTH = 16;
     static final class Result {
@@ -57,6 +58,17 @@ final class KinshipCalculator {
     }
 
     static Result calculate(TreeState state, String firstId, String secondId) {
+        return calculate(state, firstId, secondId, false);
+    }
+
+    static Result calculate(TreeState state, String firstId, String secondId, boolean terminological) {
+        TreeRelationsIndex previous=ACTIVE_INDEX.get();
+        if (state!=null) ACTIVE_INDEX.set(new TreeRelationsIndex(state,false));
+        try { return calculateIndexed(state,firstId,secondId,terminological); }
+        finally { if (previous==null) ACTIVE_INDEX.remove(); else ACTIVE_INDEX.set(previous); }
+    }
+
+    private static Result calculateIndexed(TreeState state, String firstId, String secondId, boolean terminological) {
         if (state == null || firstId == null || secondId == null
             || !state.people.containsKey(firstId) || !state.people.containsKey(secondId)) {
             return new Result(false, "родство не найдено", "родство не найдено", "");
@@ -65,8 +77,8 @@ final class KinshipCalculator {
             return new Result(true, "это один и тот же человек", "это один и тот же человек", "");
         }
 
-        Description first = describe(state, firstId, secondId, true);
-        Description second = describe(state, secondId, firstId, true);
+        Description first = describe(state, firstId, secondId, true, terminological);
+        Description second = describe(state, secondId, firstId, true, terminological);
         boolean found = first.found || second.found;
         String path = buildPathDescription(state, firstId, secondId);
         if (!found) {
@@ -86,7 +98,8 @@ final class KinshipCalculator {
         TreeState state,
         String subjectId,
         String referenceId,
-        boolean allowPartnerFallback
+        boolean allowPartnerFallback,
+        boolean terminological
     ) {
         Person subject = state.people.get(subjectId);
         if (subject == null || !state.people.containsKey(referenceId)) {
@@ -118,86 +131,28 @@ final class KinshipCalculator {
 
         CommonAncestor common = nearestCommonAncestor(subjectAncestors, referenceAncestors);
         if (!common.id.isEmpty() && common.subjectDepth > 0 && common.referenceDepth > 0) {
-            int subjectDepth = common.subjectDepth;
-            int referenceDepth = common.referenceDepth;
-            if (subjectDepth == 1 && referenceDepth == 1) {
-                return found(gendered(subject, "брат", "сестра", "брат или сестра"));
-            }
-            if (subjectDepth == 1 && referenceDepth >= 2) {
-                if (referenceDepth == 2) {
-                    return found(gendered(subject, "дядя", "тётя", "дядя или тётя"));
-                }
-                return found(gendered(
-                    subject,
-                    greatPrefix(referenceDepth - 2) + "дядя",
-                    greatPrefix(referenceDepth - 2) + "тётя",
-                    "дальний дядя или тётя"));
-            }
-            if (referenceDepth == 1 && subjectDepth >= 2) {
-                if (subjectDepth == 2) {
-                    return found(gendered(subject, "племянник", "племянница", "племянник или племянница"));
-                }
-                return found(gendered(
-                    subject,
-                    greatPrefix(subjectDepth - 2) + "племянник",
-                    greatPrefix(subjectDepth - 2) + "племянница",
-                    "дальний племянник или племянница"));
-            }
-
-            int cousinDegree = Math.min(subjectDepth, referenceDepth) - 1;
-            int generationDifference = Math.abs(subjectDepth - referenceDepth);
-            String cousin = cousinLabel(subject, cousinDegree);
-            if (generationDifference == 0) return found(cousin);
-            return found(cousin + " с разницей в " + generationDifference + " "
-                + generationWord(generationDifference));
+            return found(collateralLabel(subject, common.subjectDepth - 1,
+                common.referenceDepth - 1, terminological));
         }
 
-        SiblingAncestors siblingAncestors = nearestSiblingAncestors(
-            state,
-            subjectAncestors,
-            referenceAncestors);
-        if (siblingAncestors.subjectDepth != Integer.MAX_VALUE) {
-            int subjectDepth = siblingAncestors.subjectDepth;
-            int referenceDepth = siblingAncestors.referenceDepth;
-            if (subjectDepth == 0 && referenceDepth >= 1) {
-                if (referenceDepth == 1) {
-                    return found(gendered(subject, "дядя", "тётя", "дядя или тётя"));
-                }
-                return found(gendered(subject, "дальний дядя", "дальняя тётя", "дальний дядя или тётя"));
-            }
-            if (referenceDepth == 0 && subjectDepth >= 1) {
-                if (subjectDepth == 1) {
-                    return found(gendered(subject, "племянник", "племянница", "племянник или племянница"));
-                }
-                return found(gendered(
-                    subject,
-                    "дальний племянник",
-                    "дальняя племянница",
-                    "дальний племянник или племянница"));
-            }
-            if (subjectDepth >= 1 && referenceDepth >= 1) {
-                int cousinDegree = Math.min(subjectDepth, referenceDepth);
-                int generationDifference = Math.abs(subjectDepth - referenceDepth);
-                String cousin = cousinLabel(subject, cousinDegree);
-                if (generationDifference == 0) return found(cousin);
-                return found(cousin + " с разницей в " + generationDifference + " "
-                    + generationWord(generationDifference));
-            }
+        SiblingAncestors siblings = nearestSiblingAncestors(state, subjectAncestors, referenceAncestors);
+        if (siblings.subjectDepth != Integer.MAX_VALUE) {
+            return found(collateralLabel(subject, siblings.subjectDepth, siblings.referenceDepth, terminological));
         }
 
         if (allowPartnerFallback) {
-            Description viaPartner = describeThroughPartner(state, subjectId, referenceId);
+            Description viaPartner = describeThroughPartner(state, subjectId, referenceId, terminological);
             if (viaPartner.found) return viaPartner;
         }
         return notFound();
     }
 
-    private static Description describeThroughPartner(TreeState state, String subjectId, String referenceId) {
+    private static Description describeThroughPartner(TreeState state, String subjectId, String referenceId, boolean terminological) {
         Person subject = state.people.get(subjectId);
         if (subject == null) return notFound();
 
         for (String partnerId : partnersOf(state, subjectId)) {
-            Description partnerRelation = describe(state, partnerId, referenceId, false);
+            Description partnerRelation = describe(state, partnerId, referenceId, false, terminological);
             if (!partnerRelation.found) continue;
             if (isParent(state, partnerId, referenceId)) {
                 return found(gendered(subject, "отчим", "мачеха", "супруг или супруга родителя"));
@@ -217,7 +172,7 @@ final class KinshipCalculator {
         }
 
         for (String referencePartnerId : partnersOf(state, referenceId)) {
-            Description relationToPartner = describe(state, subjectId, referencePartnerId, false);
+            Description relationToPartner = describe(state, subjectId, referencePartnerId, false, terminological);
             if (!relationToPartner.found) continue;
             if (isParent(state, subjectId, referencePartnerId)) {
                 String partnerGender = PersonGender.resolve(state.people.get(referencePartnerId));
@@ -256,11 +211,9 @@ final class KinshipCalculator {
             String current = queue.remove();
             int depth = depths.get(current);
             if (depth >= MAX_GENERATIONS) continue;
-            for (Relation relation : state.links) {
-                if (!"parent".equals(relation.type) || !current.equals(relation.to)) continue;
-                if (!state.people.containsKey(relation.from) || depths.containsKey(relation.from)) continue;
-                depths.put(relation.from, depth + 1);
-                queue.add(relation.from);
+            for (String parent : ACTIVE_INDEX.get().parents.getOrDefault(current,Collections.emptySet())) {
+                if (depths.containsKey(parent)) continue;
+                depths.put(parent,depth+1); queue.add(parent);
             }
         }
         return depths;
@@ -351,24 +304,11 @@ final class KinshipCalculator {
     }
 
     private static Set<String> parentsOf(TreeState state, String childId) {
-        Set<String> result = new LinkedHashSet<>();
-        for (Relation relation : state.links) {
-            if ("parent".equals(relation.type) && childId.equals(relation.to)
-                && state.people.containsKey(relation.from)) {
-                result.add(relation.from);
-            }
-        }
-        return result;
+        return new LinkedHashSet<>(ACTIVE_INDEX.get().parents.getOrDefault(childId, Collections.emptySet()));
     }
 
     private static Set<String> partnersOf(TreeState state, String personId) {
-        Set<String> result = new LinkedHashSet<>();
-        for (Relation relation : state.links) {
-            if (!"partner".equals(relation.type) && !"family".equals(relation.type)) continue;
-            if (personId.equals(relation.from) && state.people.containsKey(relation.to)) result.add(relation.to);
-            if (personId.equals(relation.to) && state.people.containsKey(relation.from)) result.add(relation.from);
-        }
-        return result;
+        return new LinkedHashSet<>(ACTIVE_INDEX.get().partners.getOrDefault(personId, Collections.emptySet()));
     }
 
     private static String ancestorLabel(Person subject, int generations) {
@@ -385,21 +325,56 @@ final class KinshipCalculator {
         return gendered(subject, "потомок", "потомок", "потомок") + " в " + generations + "-м поколении";
     }
 
-    private static String cousinLabel(Person subject, int degree) {
-        String prefix;
-        if (degree <= 1) prefix = "двоюрод";
-        else if (degree == 2) prefix = "троюрод";
-        else if (degree == 3) prefix = "четвероюрод";
-        else if (degree == 4) prefix = "пятиюрод";
-        else return "дальний родственник";
-        return gendered(subject, prefix + "ный брат", prefix + "ная сестра", prefix + "ный родственник");
+    /** Depths measured from a pair of siblings, including the siblings themselves at zero. */
+    private static String collateralLabel(Person subject, int subjectDepth, int referenceDepth, boolean terminology) {
+        int degree = Math.min(subjectDepth, referenceDepth);
+        int difference = Math.abs(subjectDepth - referenceDepth);
+        boolean younger = subjectDepth > referenceDepth;
+        String cousin = cousinLabel(subject, degree);
+        if (difference == 0) return cousin;
+        if (!terminology && degree > 0) {
+            return cousin + " с разницей в " + difference + " " + generationWord(difference)
+                + (younger ? " (младшее поколение)" : " (старшее поколение)");
+        }
+        String stem = cousinStem(degree);
+        if (difference == 1) {
+            String male = degree == 0 ? "" : stem + "ый ";
+            String female = degree == 0 ? "" : stem + "ая ";
+            return gendered(subject,
+                male + (younger ? "племянник" : "дядя"),
+                female + (younger ? "племянница" : "тётя"),
+                male + (younger ? "племянник или племянница" : "дядя или тётя"));
+        }
+        // Explicit descriptions preserve the number of generations without ambiguous rare terms.
+        if (younger) {
+            String relatives = degree == 0 ? "брата или сестры"
+                : stem + "ого брата или " + stem + "ой сестры";
+            return descendantLabel(subject, difference) + " " + relatives;
+        }
+        String ancestor = difference == 2 ? "дедушки или бабушки"
+            : difference == 3 ? "прадедушки или прабабушки" : "предка в " + difference + "-м поколении";
+        return cousin + " " + ancestor;
     }
 
-    private static String greatPrefix(int count) {
-        if (count <= 0) return "";
-        if (count == 1) return "двоюродный ";
-        if (count == 2) return "троюродный ";
-        return "дальний ";
+    private static String cousinLabel(Person subject, int degree) {
+        if (degree == 0) return gendered(subject, "брат", "сестра", "брат или сестра");
+        String stem = cousinStem(degree);
+        return gendered(subject, stem + "ый брат", stem + "ая сестра", stem + "ый брат или сестра");
+    }
+
+    private static String cousinStem(int degree) {
+        switch (degree) {
+            case 1: return "двоюродн";
+            case 2: return "троюродн";
+            case 3: return "четвероюродн";
+            case 4: return "пятиюродн";
+            case 5: return "шестиюродн";
+            case 6: return "семиюродн";
+            case 7: return "восьмиюродн";
+            case 8: return "девятиюродн";
+            case 9: return "десятиюродн";
+            default: return (degree + 1) + "-юродн";
+        }
     }
 
     private static String generationWord(int value) {
@@ -419,9 +394,12 @@ final class KinshipCalculator {
     }
 
     private static String siblingLabel(TreeState state, Person subject, String subjectId, String referenceId) {
-        Set<String> commonParents = parentsOf(state, subjectId);
-        commonParents.retainAll(parentsOf(state, referenceId));
-        if (commonParents.size() != 1) {
+        Set<String> subjectParents = parentsOf(state, subjectId);
+        Set<String> referenceParents = parentsOf(state, referenceId);
+        Set<String> commonParents = new LinkedHashSet<>(subjectParents);
+        commonParents.retainAll(referenceParents);
+        // A missing second parent is not evidence that siblings have different parents.
+        if (commonParents.size() != 1 || subjectParents.size() < 2 || referenceParents.size() < 2) {
             return gendered(subject, "брат", "сестра", "брат или сестра");
         }
         Person commonParent = state.people.get(commonParents.iterator().next());
@@ -474,12 +452,7 @@ final class KinshipCalculator {
     }
 
     private static Set<String> neighborsOf(TreeState state, String personId) {
-        Set<String> result = new LinkedHashSet<>();
-        for (Relation relation : state.links) {
-            if (personId.equals(relation.from) && state.people.containsKey(relation.to)) result.add(relation.to);
-            if (personId.equals(relation.to) && state.people.containsKey(relation.from)) result.add(relation.from);
-        }
-        return result;
+        return new LinkedHashSet<>(ACTIVE_INDEX.get().adjacent.getOrDefault(personId, Collections.emptySet()));
     }
 
     private static Description found(String label) {

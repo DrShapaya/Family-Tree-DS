@@ -6,6 +6,8 @@ import android.os.Looper;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Serializes and writes immutable tree copies outside the UI thread.
@@ -31,6 +33,10 @@ final class TreeSaveCoordinator {
 
     private long requestedRevision = 0L;
     private long dispatchedRevision = 0L;
+    private volatile long savedRevision = 0L;
+    private volatile long failedRevision = -1L;
+    private final AtomicReference<PendingSave> pending = new AtomicReference<>();
+    private final AtomicBoolean writing = new AtomicBoolean();
     private Runnable scheduled;
     private boolean closed = false;
 
@@ -64,7 +70,7 @@ final class TreeSaveCoordinator {
     }
 
     void flush() {
-        if (closed || requestedRevision <= dispatchedRevision) return;
+        if (closed || requestedRevision <= savedRevision) return;
         if (scheduled != null) main.removeCallbacks(scheduled);
         dispatch(requestedRevision);
     }
@@ -73,22 +79,59 @@ final class TreeSaveCoordinator {
         if (closed) return;
         flush();
         closed = true;
-        writer.shutdown();
+        writer.execute(writer::shutdown);
     }
 
     private void dispatch(long revision) {
-        if (closed || revision < requestedRevision || revision <= dispatchedRevision) return;
+        if (closed || revision < requestedRevision || revision <= savedRevision
+                || (revision <= dispatchedRevision && writing.get() && revision > failedRevision)) return;
         scheduled = null;
         beforeSnapshot.run();
         TreeState source = stateProvider.get();
         if (source == null) return;
         TreeState snapshot = TreeStateCopier.copy(source);
         dispatchedRevision = revision;
+        pending.set(new PendingSave(revision, snapshot));
+        startWriter();
+    }
+
+    private void startWriter() {
+        if (!writing.compareAndSet(false, true)) return;
         writer.execute(() -> {
-            boolean saved = store.save(snapshot);
-            if (listener == null) return;
-            if (!saved) main.post(listener::onSaveError);
-            else listener.onSaved(snapshot);
+            try {
+                PendingSave next;
+                while ((next = pending.getAndSet(null)) != null) {
+                    if (store.save(next.snapshot)) {
+                        savedRevision = next.revision;
+                        if (listener != null) listener.onSaved(next.snapshot);
+                    } else {
+                        failedRevision = next.revision;
+                        if (listener != null) main.post(listener::onSaveError);
+                    }
+                }
+            } finally {
+                writing.set(false);
+                if (pending.get() != null) startWriter();
+            }
+        });
+    }
+
+    private static final class PendingSave {
+        final long revision;
+        final TreeState snapshot;
+        PendingSave(long revision, TreeState snapshot) { this.revision = revision; this.snapshot = snapshot; }
+    }
+
+    void saveThen(java.util.function.Consumer<Boolean> completion) {
+        if (closed) { completion.accept(false); return; }
+        requestImmediate(); flush();
+        long revision=requestedRevision;
+        writer.execute(new Runnable() {
+            @Override public void run() {
+                if (writing.get() || pending.get()!=null) { writer.execute(this); return; }
+                boolean saved=savedRevision>=revision;
+                main.post(() -> { if (!closed) completion.accept(saved); });
+            }
         });
     }
 }

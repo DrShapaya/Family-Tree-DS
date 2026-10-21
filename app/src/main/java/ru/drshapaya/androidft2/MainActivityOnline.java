@@ -1211,8 +1211,10 @@ final class MainActivityOnline {
     }
 
     private void configureDialog(Dialog dialog, View shell) {
-        dialog.setOnShowListener(shown -> applyDialogWindow(dialog, shell));
-        if (dialog.isShowing()) applyDialogWindow(dialog, shell);
+        // Configure before WindowManager attaches the first frame, so the
+        // entrance never starts at the theme's default size or position.
+        applyDialogWindow(dialog, shell);
+        dialog.setOnShowListener(shown -> PanelTransitions.popup(shell, true));
     }
 
     private void applyDialogWindow(Dialog dialog, View shell) {
@@ -1227,6 +1229,10 @@ final class MainActivityOnline {
         shell.setMinimumWidth(width);
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         WindowManager.LayoutParams attributes = window.getAttributes();
+        attributes.gravity = Gravity.CENTER;
+        attributes.x = 0;
+        attributes.y = 0;
+        attributes.windowAnimations = 0;
         attributes.width = width;
         attributes.height = dialog == dashboard
             ? height

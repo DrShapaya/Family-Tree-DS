@@ -104,8 +104,21 @@ final class MainActivitySettings {
             : "Кривые родительские линии включены");
     }
 
+    void toggleFamilyLineMode() {
+        activity.familyLineMode = "centered".equals(activity.familyLineMode)
+            ? "individual"
+            : "centered";
+        activity.treeView.setFamilyLineMode(activity.familyLineMode);
+        refreshSettingsIfVisible();
+        activity.saveOnly();
+        activity.toast("centered".equals(activity.familyLineMode)
+            ? "Линии идут от середины пары"
+            : "Линии идут от каждого человека");
+    }
+
     void toggleFocusTree() {
         activity.focusTree = !activity.focusTree;
+        activity.applyFocusSystemBars();
         activity.applyFocusTreeUi();
         refreshSettingsIfVisible();
         activity.saveOnly();

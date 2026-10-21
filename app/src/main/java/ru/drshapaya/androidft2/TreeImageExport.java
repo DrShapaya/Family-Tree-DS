@@ -11,17 +11,21 @@ final class TreeImageExport {
     final RectF extent;
     final RectF crop;
     String background, frame;
-    boolean grid = false, generations, compact, details, straight;
+    boolean grid = false, generations, compact, details, straight, centered;
     float fontScale;
     int verticalCuts, horizontalCuts;
+    final long safePixelsPerBitmap;
 
     TreeImageExport(MainActivity activity) {
+        safePixelsPerBitmap = ExportLayout.safePixelsForHeap(
+            Runtime.getRuntime().maxMemory());
         state = TreeStateCopier.copy(activity.state);
         state.selectedId = "";
         generations = activity.generationLines;
         compact = activity.compactCards;
         details = !activity.hideCardDetails;
         straight = "orthogonal".equals(activity.parentLineMode);
+        centered = "centered".equals(activity.familyLineMode);
         fontScale = activity.fontScale;
         RewardWallet wallet = new RewardWallet(activity);
         background = wallet.selected(RewardCatalog.CANVAS_BACKGROUNDS);
@@ -48,14 +52,32 @@ final class TreeImageExport {
         renderer.setCompactCards(compact);
         renderer.setHideDetails(!details);
         renderer.setParentLineMode(straight ? "orthogonal" : "smart");
+        renderer.setFamilyLineMode(centered ? "centered" : "individual");
         renderer.setFontScale(fontScale);
+    }
+
+    /** UI captures settings; the returned detached renderer belongs to one background task. */
+    TreeImageExport forkForPreview() { return new TreeImageExport(this); }
+
+    private TreeImageExport(TreeImageExport original) {
+        state=original.state; safePixelsPerBitmap=original.safePixelsPerBitmap;
+        background=original.background; frame=original.frame; grid=original.grid;
+        generations=original.generations; compact=original.compact; details=original.details;
+        straight=original.straight; centered=original.centered; fontScale=original.fontScale;
+        verticalCuts=original.verticalCuts; horizontalCuts=original.horizontalCuts;
+        extent=new RectF(original.extent); crop=new RectF(original.crop);
+        renderer=new TreeCanvasView(original.renderer.getContext());
+        original.renderer.copyExportStylesTo(renderer);
+        apply();
     }
 
     void resetCrop() { crop.set(renderer.imageExportBounds()); }
 
     ExportLayout layout(float scale, long pixels) {
         return new ExportLayout(crop.width(), crop.height(), scale,
-            Math.max(1_000_000L, pixels), verticalCuts, horizontalCuts);
+            Math.min(Math.max(1_000_000L, pixels), safePixelsPerBitmap),
+            verticalCuts,
+            horizontalCuts);
     }
 
     Bitmap preview() {
@@ -112,19 +134,13 @@ final class TreeImageExport {
         int left = layout.x(column), top = layout.y(row);
         int width = layout.x(column + 1) - left;
         int height = layout.y(row + 1) - top;
-        // A small bleed keeps antialiased leaves, smoke and flames identical at tile seams.
-        int bleed = 8;
-        Bitmap bitmap = Bitmap.createBitmap(width + bleed * 2,
-            height + bleed * 2, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         try {
             Canvas canvas = new Canvas(bitmap);
-            canvas.translate(bleed - left, bleed - top);
+            canvas.translate(-left, -top);
             canvas.scale(layout.width / crop.width(), layout.height / crop.height());
             drawCrop(canvas, Math.max(layout.width / crop.width(), layout.height / crop.height()));
-            Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            new Canvas(result).drawBitmap(bitmap, -bleed, -bleed, null);
-            bitmap.recycle();
-            return result;
+            return bitmap;
         } catch (RuntimeException | OutOfMemoryError error) {
             if (!bitmap.isRecycled()) bitmap.recycle();
             throw error;

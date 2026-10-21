@@ -88,6 +88,7 @@ final class MainUiKit {
         button.setMinWidth(dp(44));
         button.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
         button.setPadding(dp(10), 0, dp(10), 0);
+        PressFeedback.install(button);
         return button;
     }
 
@@ -177,6 +178,7 @@ final class MainUiKit {
         button.setForeground(centeredIcon(R.drawable.ic_menu_close, Color.rgb(28, 34, 38)));
         button.setForegroundGravity(Gravity.CENTER);
         button.setOnClickListener(listener);
+        PressFeedback.install(button);
         return button;
     }
 
@@ -236,9 +238,9 @@ final class MainUiKit {
         GradientDrawable background = new GradientDrawable(
             GradientDrawable.Orientation.TL_BR,
             new int[]{
-                Color.rgb(220, 249, 232),
-                Color.rgb(250, 247, 255),
-                Color.rgb(231, 218, 255)
+                AppThemePalette.surface(Color.rgb(220, 249, 232)),
+                AppThemePalette.surface(Color.rgb(250, 247, 255)),
+                AppThemePalette.surface(Color.rgb(231, 218, 255))
             });
         background.setCornerRadius(radius);
         background.setStroke(dp(1), Color.argb(110, 122, 91, 177));

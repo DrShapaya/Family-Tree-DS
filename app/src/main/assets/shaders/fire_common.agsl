@@ -1,0 +1,16 @@
+uniform float2 cardSize;
+uniform float pixel;
+uniform float seconds;
+uniform float phase;
+float4 over(float4 under, float4 src) { return src + under * (1.0-src.a); }
+float cover(float distance) { return clamp(.5-distance/pixel,0.0,1.0); }
+float4 ink(float3 rgb,float alpha,float coverage) {
+    float a=clamp(alpha*coverage,0.0,1.0);return float4(rgb*a,a);
+}
+float roundDistance(float2 p,float2 centre,float2 halfSize,float radius) {
+    float2 q=abs(p-centre)-halfSize+radius;
+    return length(max(q,0.0))+min(max(q.x,q.y),0.0)-radius;
+}
+float rectangleDistance(float2 p,float2 halfSize) {
+    float2 q=abs(p)-halfSize;return length(max(q,0.0))+min(max(q.x,q.y),0.0);
+}

@@ -104,7 +104,7 @@ final class AppThemePalette {
             if (light < 165) return withAlpha(alpha, 174, 189, 195);
             return color;
         }
-        if (g > r * 1.18f && g > b * 1.05f && light < 155) {
+        if (g > r * 1.18f && g >= b * 0.92f && light < 155) {
             return withAlpha(alpha, 106, 222, 209);
         }
         if (b > g * 1.08f && r > g * 0.68f && light < 170) {

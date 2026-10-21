@@ -49,6 +49,9 @@ def appMetricaApiKey = appMetricaProperties.getProperty(
     providers.gradleProperty("APPMETRICA_API_KEY")
         .orElse("")
         .get())
+def expectedAppMetricaCounterId = "6350593"
+def expectedAppMetricaApiKeySha256 =
+    "df94454974497a0fb686dac5256060908128c1703efbed587adeed618951ad8a"
 
 android {
     namespace 'ru.drshapaya.androidft2'
@@ -58,8 +61,8 @@ android {
         applicationId 'ru.drshapaya.familytree'
         minSdk 24
         targetSdk 36
-        versionCode 302
-        versionName '2.8.0'
+        versionCode 309
+        versionName '2.8.1'
         manifestPlaceholders = [appLabel: "Family Tree DS"]
         buildConfigField "String", "GITHUB_CLIENT_ID", "\"${githubClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "String", "GITHUB_CLIENT_SECRET", "\"${githubClientSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\""
@@ -99,8 +102,9 @@ android {
                 signingConfig signingConfigs.release
             }
             buildConfigField "String", "YANDEX_REWARDED_AD_UNIT_ID", "\"R-M-19993209-1\""
-            minifyEnabled false
-            shrinkResources false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
         }
     }
 
@@ -117,13 +121,44 @@ android {
     }
 }
 
+def validateReleaseAppMetricaConfig = tasks.register("validateReleaseAppMetricaConfig") {
+    group = "verification"
+    description = "Checks that release analytics targets the production AppMetrica counter."
+
+    doLast {
+        def normalizedApiKey = appMetricaApiKey.trim()
+        if (normalizedApiKey.isEmpty()) {
+            throw new GradleException(
+                "AppMetrica API key is missing for release counter ${expectedAppMetricaCounterId}.")
+        }
+        def actualSha256 = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(normalizedApiKey.getBytes("UTF-8"))
+            .encodeHex()
+            .toString()
+        if (actualSha256 != expectedAppMetricaApiKeySha256) {
+            throw new GradleException(
+                "AppMetrica API key does not belong to release counter ${expectedAppMetricaCounterId}.")
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(validateReleaseAppMetricaConfig)
+}
+
 dependencies {
-    implementation 'com.yandex.android:mobileads:8.4.0'
+    implementation 'com.yandex.android:mobileads:8.6.0'
     implementation 'io.appmetrica.analytics:analytics:8.5.1'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.2.0'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20260719'
     // Device rendering checks use the platform test runner, without app runtime dependencies.
-    androidTestCompileOnly files("${android.sdkDirectory}/platforms/${android.compileSdkVersion}/optional/android.test.base.jar")
-    androidTestCompileOnly files("${android.sdkDirectory}/platforms/${android.compileSdkVersion}/optional/android.test.runner.jar")
+    // AGP 8 exposes the SDK path as a String, so android.sdkDirectory is not
+    // available here during the connected-test configuration phase.
+    def androidSdkDir = System.getenv("ANDROID_SDK_ROOT") ?: System.getenv("ANDROID_HOME")
+    if (androidSdkDir == null || androidSdkDir.trim().isEmpty()) {
+        androidSdkDir = new File(System.getProperty("user.home"), "AppData/Local/Android/Sdk").absolutePath
+    }
+    androidTestCompileOnly files("${androidSdkDir}/platforms/android-36/optional/android.test.base.jar")
+    androidTestCompileOnly files("${androidSdkDir}/platforms/android-36/optional/android.test.runner.jar")
 }

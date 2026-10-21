@@ -37,6 +37,11 @@ final class TreeDocumentRenderer {
     };
     private final float cardWidth;
     private final float cardHeight;
+    private final FamilyLineRouter.Plan familyPlan;
+    private final SceneBoundsIndex<Person> personBounds=new SceneBoundsIndex<>();
+    private final SceneBoundsIndex<Relation> relationBounds=new SceneBoundsIndex<>();
+    private final SceneBoundsIndex<FamilyLineRouter.FamilyRoute> familyBounds=new SceneBoundsIndex<>();
+    private final java.util.Map<FamilyLineRouter.FamilyRoute,Path> familyPaths=new java.util.IdentityHashMap<>();
 
     TreeDocumentRenderer(Context context, TreeState state, TreeMediaStore mediaStore) {
         this.context = context;
@@ -49,6 +54,23 @@ final class TreeDocumentRenderer {
             ? TreeLayoutEngine.GRID * 3f
             : TreeLayoutEngine.CARD_H;
         text.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        familyPlan="centered".equals(this.state.familyLineMode)
+            ? FamilyLineRouter.build(this.state,cardWidth,cardHeight,TreeLayoutEngine.GRID) : FamilyLineRouter.Plan.empty();
+        for (Person p:this.state.people.values()) personBounds.add(p,p.x,p.y,p.x+cardWidth,p.y+cardHeight);
+        for (Relation r:this.state.links) {
+            if (familyPlan.consumes(r)) continue;
+            Person a=this.state.people.get(r.from),b=this.state.people.get(r.to);
+            if (a!=null && b!=null) relationBounds.add(r,Math.min(a.x,b.x)-cardWidth,Math.min(a.y,b.y)-cardHeight,
+                Math.max(a.x,b.x)+cardWidth*2,Math.max(a.y,b.y)+cardHeight*2);
+        }
+        for (FamilyLineRouter.FamilyRoute route:familyPlan.routes) {
+            float left=Float.POSITIVE_INFINITY,top=left,right=Float.NEGATIVE_INFINITY,bottom=right;
+            for (FamilyLineRouter.Segment s:route.segments) {
+                left=Math.min(left,Math.min(s.x1,s.x2)-8);top=Math.min(top,Math.min(s.y1,s.y2)-8);
+                right=Math.max(right,Math.max(s.x1,s.x2)+8);bottom=Math.max(bottom,Math.max(s.y1,s.y2)+8);
+            }
+            familyBounds.add(route,left,top,right,bottom);
+        }
     }
 
     RectF bounds() {
@@ -130,7 +152,23 @@ final class TreeDocumentRenderer {
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeWidth(3f);
         paint.setColor(monochrome ? Color.DKGRAY : Color.rgb(47, 125, 117));
-        for (Relation relation : state.links) {
+        for (FamilyLineRouter.FamilyRoute route : familyBounds.query(visible.left,visible.top,visible.right,visible.bottom)) {
+            path.reset();
+            boolean visibleRoute = false;
+            for (FamilyLineRouter.Segment segment : route.segments) {
+                RectF bounds = new RectF(
+                    Math.min(segment.x1, segment.x2) - 8f,
+                    Math.min(segment.y1, segment.y2) - 8f,
+                    Math.max(segment.x1, segment.x2) + 8f,
+                    Math.max(segment.y1, segment.y2) + 8f);
+                if (RectF.intersects(visible, bounds)) visibleRoute = true;
+            }
+            Path cached=familyPaths.get(route);
+            if (cached==null) { appendFamilyRoutePath(route); cached=new Path(path); familyPaths.put(route,cached); }
+            if (visibleRoute) canvas.drawPath(cached, paint);
+        }
+        for (Relation relation : relationBounds.query(visible.left,visible.top,visible.right,visible.bottom)) {
+            if (familyPlan.consumes(relation)) continue;
             Person from = state.people.get(relation.from);
             Person to = state.people.get(relation.to);
             if (from == null || to == null) continue;
@@ -141,6 +179,74 @@ final class TreeDocumentRenderer {
             if (!RectF.intersects(visible, new RectF(minX, minY, maxX, maxY))) continue;
             buildLinkPath(relation, from, to);
             canvas.drawPath(path, paint);
+        }
+    }
+
+    private void appendFamilyRoutePath(FamilyLineRouter.FamilyRoute route) {
+        if ("orthogonal".equals(state.parentLineMode)) {
+            for (FamilyLineRouter.Segment segment : route.segments) {
+                path.moveTo(segment.x1, segment.y1);
+                path.lineTo(segment.x2, segment.y2);
+            }
+            return;
+        }
+        boolean paired = route.parentIds.size() > 1;
+        for (String parentId : route.parentIds) {
+            Person parent = state.people.get(parentId);
+            if (parent == null) continue;
+            float centerX = parent.x + cardWidth / 2f;
+            boolean unionBesideCard = paired
+                && route.unionY >= parent.y - 1f
+                && route.unionY <= parent.y + cardHeight + 1f;
+            float startX = unionBesideCard
+                ? (route.unionX >= centerX ? parent.x + cardWidth : parent.x)
+                : centerX;
+            float startY = unionBesideCard ? parent.y + cardHeight / 2f : parent.y + cardHeight;
+            if (Math.abs(startX - route.unionX) < 0.01f
+                && Math.abs(startY - route.unionY) < 0.01f) continue;
+            path.moveTo(startX, startY);
+            float dx = route.unionX - startX;
+            float dy = route.unionY - startY;
+            if (Math.abs(dy) < 0.01f) {
+                path.cubicTo(
+                    startX + dx * 0.38f,
+                    startY,
+                    startX + dx * 0.78f,
+                    route.unionY,
+                    route.unionX,
+                    route.unionY);
+            } else {
+                path.cubicTo(
+                    startX,
+                    startY + dy * 0.52f,
+                    route.unionX,
+                    route.unionY - dy * 0.18f,
+                    route.unionX,
+                    route.unionY);
+            }
+        }
+        if (Math.abs(route.busY - route.unionY) > 0.01f) {
+            path.moveTo(route.unionX, route.unionY);
+            path.lineTo(route.unionX, route.busY);
+        }
+        for (String childId : route.childIds) {
+            Person child = state.people.get(childId);
+            if (child == null) continue;
+            float childX = child.x + cardWidth / 2f;
+            float childY = child.y;
+            path.moveTo(route.unionX, route.busY);
+            float dy = childY - route.busY;
+            if (Math.abs(childX - route.unionX) < 0.01f) {
+                path.lineTo(childX, childY);
+            } else {
+                path.cubicTo(
+                    route.unionX,
+                    route.busY + dy * 0.34f,
+                    childX,
+                    childY - dy * 0.34f,
+                    childX,
+                    childY);
+            }
         }
     }
 
@@ -172,7 +278,7 @@ final class TreeDocumentRenderer {
     }
 
     private void drawCards(Canvas canvas, RectF visible, boolean monochrome) {
-        for (Person person : state.people.values()) {
+        for (Person person : personBounds.query(visible.left,visible.top,visible.right,visible.bottom)) {
             card.set(person.x, person.y, person.x + cardWidth, person.y + cardHeight);
             if (!RectF.intersects(visible, card)) continue;
             float radius = 8f;
@@ -249,7 +355,7 @@ final class TreeDocumentRenderer {
             text.setTextSize(18f);
             text.setColor(Color.DKGRAY);
             Paint.FontMetrics fm = text.getFontMetrics();
-            canvas.drawText(initials(person.name), cx, cy - (fm.ascent + fm.descent) / 2f, text);
+            canvas.drawText(initials(PersonNames.display(person, state.useMaidenNames)), cx, cy - (fm.ascent + fm.descent) / 2f, text);
             text.setTextAlign(Paint.Align.LEFT);
         }
     }
@@ -332,9 +438,9 @@ final class TreeDocumentRenderer {
     }
 
     private String displayName(Person person) {
-        return person.name == null || person.name.trim().isEmpty()
+        return PersonNames.display(person, state.useMaidenNames).isEmpty()
             ? AppLanguage.text(context, "Без имени")
-            : person.name.trim();
+            : PersonNames.display(person, state.useMaidenNames);
     }
 
     private String yearRange(Person person) {

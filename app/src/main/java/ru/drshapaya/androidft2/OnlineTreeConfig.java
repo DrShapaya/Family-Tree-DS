@@ -7,9 +7,6 @@ import android.util.AtomicFile;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 final class OnlineTreeConfig {
     private static final String PREFS = "androidft-online-v1";
@@ -67,10 +64,6 @@ final class OnlineTreeConfig {
     long lastSyncAt() { return preferences.getLong("lastSyncAt", 0L); }
     long lastBackupAt() { return preferences.getLong("lastBackupAt", 0L); }
     boolean localEditPending() { return preferences.getBoolean("localEditPending", false); }
-    Set<String> remoteMediaIds() {
-        Set<String> value = preferences.getStringSet("remoteMediaIds", Collections.emptySet());
-        return value == null ? new HashSet<>() : new HashSet<>(value);
-    }
 
     boolean signedIn() { return !token().isEmpty() && !login().isEmpty(); }
     boolean connected() { return signedIn() && !owner().isEmpty() && !repo().isEmpty(); }
@@ -129,14 +122,6 @@ final class OnlineTreeConfig {
         requireCommit(preferences.edit()
             .putString("lastBackupHash", safe(stateHash))
             .putLong("lastBackupAt", Math.max(0L, createdAt)));
-    }
-
-    void markRemoteMedia(String mediaId) {
-        if (mediaId == null || mediaId.isEmpty()) return;
-        Set<String> ids = remoteMediaIds();
-        if (ids.add(mediaId)) {
-            requireCommit(preferences.edit().putStringSet("remoteMediaIds", ids));
-        }
     }
 
     void clearTree() {

@@ -13,11 +13,11 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.OpenableColumns;
-import android.util.LruCache;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
@@ -25,7 +25,6 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.GridLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -68,22 +67,28 @@ final class MainActivityPeople {
     private String genderFilter = "all";
     private String lifeFilter = "all";
     private String photoFilter = "all";
+    private String quickFilterQuery = "";
     private String armedFilterChip = "";
     private final Map<String, TextView> activeFilterChips = new LinkedHashMap<>();
     private String sort = "surname";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Collator peopleCollator = createPeopleCollator();
-    private final LruCache<String, Bitmap> avatarCache = new LruCache<>(48);
-    private final ExecutorService avatarDecoder = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "people-avatar-decoder");
+    private final ExecutorService albumImporter = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "album-media-importer");
         thread.setPriority(Thread.NORM_PRIORITY - 1);
         return thread;
     });
     private Runnable pendingFilter;
+    private final java.util.concurrent.ExecutorService peopleSearch = Executors.newSingleThreadExecutor();
+    private volatile long suggestionRevision;
+    private volatile long peopleSearchRevision;
+    private volatile boolean closed;
+    private android.widget.ListView peopleList;
     private String pendingPhotoTarget = "";
     private String pendingPhotoAlbum = "";
     private String pendingPhotoItem = "";
     private Dialog openPhotoDialog;
+    private final Set<Dialog> galleryDialogs = new LinkedHashSet<>();
     private int galleryColumns;
     private static final String SEARCH_PREFS = "androidft_people_search";
     private static final String RECENT_SEARCHES = "recent";
@@ -183,9 +188,11 @@ final class MainActivityPeople {
     }
 
     void close() {
+        closed = true; peopleSearchRevision++; peopleSearch.shutdownNow();
         mainHandler.removeCallbacksAndMessages(null);
-        avatarDecoder.shutdownNow();
-        avatarCache.evictAll();
+        albumImporter.shutdownNow();
+        for (Dialog dialog:new ArrayList<>(galleryDialogs)) dialog.dismiss();
+        galleryDialogs.clear();
     }
 
     void refresh() {
@@ -229,6 +236,7 @@ final class MainActivityPeople {
 
     private void renderList() {
         if (pendingFilter != null) mainHandler.removeCallbacks(pendingFilter);
+        String currentQuery = query == null ? "" : query.getText().toString();
         content.removeAllViews();
         boolean landscape = activity.isLandscapeLayout() && sidebarContent != null;
         if (landscape) sidebarContent.removeAllViews();
@@ -240,6 +248,8 @@ final class MainActivityPeople {
         LinearLayout searchRow = new LinearLayout(activity);
         searchRow.setGravity(Gravity.CENTER_VERTICAL);
         query = activity.field("Умный поиск");
+        query.setText(currentQuery);
+        query.setSelection(query.getText().length());
         query.setSingleLine(true);
         query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         query.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_search, 0, 0, 0);
@@ -317,11 +327,11 @@ final class MainActivityPeople {
             resultSubtitle = null;
         }
 
-        ScrollView scroll = new ScrollView(activity);
-        LinearLayout rows = new LinearLayout(activity);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(rows);
-        content.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        android.widget.ListView rows = new android.widget.ListView(activity);
+        rows.setDivider(null); rows.setDividerHeight(0);
+        rows.setCacheColorHint(Color.TRANSPARENT);
+        peopleList = rows;
+        content.addView(rows, new LinearLayout.LayoutParams(-1, 0, 1));
 
         query.addTextChangedListener(new SimpleTextWatcher(() -> {
             if (pendingFilter != null) mainHandler.removeCallbacks(pendingFilter);
@@ -375,17 +385,41 @@ final class MainActivityPeople {
 
     private void updateSmartSuggestions(String input) {
         if (smartSuggestions == null || smartSuggestionsScroll == null) return;
+        long requested=++suggestionRevision;
         smartSuggestions.removeAllViews();
         if (input == null || input.trim().isEmpty() || activity.state == null) {
             smartSuggestionsScroll.setVisibility(View.GONE);
             return;
         }
-        List<SearchSuggestion> suggestions = buildSearchSuggestions(input, 8);
+        TreeState source=activity.state;
+        TreeState snapshot=TreeStateCopier.copy(source);
+        String order=sort;
+        peopleSearch.execute(() -> {
+            if (closed || requested!=suggestionRevision) return;
+            List<Person> people=new ArrayList<>(snapshot.people.values());
+            Collator collator=createPeopleCollator();
+            people.sort((a,b) -> {
+                int names=collator.compare(value(a.name),value(b.name));
+                if ("name".equals(order)) return names;
+                if ("birth".equals(order)) return compareYears(a.bornYear,b.bornYear,names);
+                int family=collator.compare(TreeState.surnameOf(a.name),TreeState.surnameOf(b.name));
+                return family==0?names:family;
+            });
+            List<SearchSuggestions.Suggestion> result=SearchSuggestions.build(input,8,people,
+                () -> SearchSuggestions.treePlaces(people),() -> SearchSuggestions.birthYears(people),"Без имени");
+            mainHandler.post(() -> {
+                if (!closed && requested==suggestionRevision && activity.state==source && !activity.isDestroyed()) renderSmartSuggestions(result);
+            });
+        });
+    }
+
+    private void renderSmartSuggestions(List<SearchSuggestions.Suggestion> suggestions) {
+        smartSuggestions.removeAllViews();
         if (suggestions.isEmpty()) {
             smartSuggestionsScroll.setVisibility(View.GONE);
             return;
         }
-        for (SearchSuggestion suggestion : suggestions) {
+        for (SearchSuggestions.Suggestion suggestion : suggestions) {
             TextView pill = text(suggestion.label, 10, Color.rgb(8, 122, 115), true);
             pill.setGravity(Gravity.CENTER);
             pill.setSingleLine(true);
@@ -399,90 +433,9 @@ final class MainActivityPeople {
         smartSuggestionsScroll.setVisibility(View.VISIBLE);
     }
 
-    private List<SearchSuggestion> buildSearchSuggestions(String input, int limit) {
-        List<SearchSuggestion> result = new ArrayList<>();
-        Set<String> seen = new LinkedHashSet<>();
-        String commandPrefix = relationCommandPrefix(input);
-        String suggestionInput = commandPrefix.isEmpty() ? input : input.substring(Math.min(commandPrefix.length(), input.length()));
-        String normalizedInput = normalizeSearch(suggestionInput);
-        if (normalizedInput.isEmpty() || activity.state == null) return result;
-        boolean trailingSpace = suggestionInput.endsWith(" ");
-        String[] tokens = normalizedInput.split("\\s+");
-
-        List<Person> rankedPeople = sortedPeople();
-        rankedPeople.sort((first, second) -> Integer.compare(
-            SmartPeopleSearch.suggestionScore(displayName(second), normalizedInput),
-            SmartPeopleSearch.suggestionScore(displayName(first), normalizedInput)));
-        for (Person person : rankedPeople) {
-            String name = displayName(person);
-            if (SmartPeopleSearch.suggestionScore(name, normalizedInput) <= 0) continue;
-            addSuggestion(result, seen, normalizedInput, commandPrefix, name, name, person.id, limit);
-            if (result.size() >= limit) return result;
-        }
-
-        if (commandPrefix.isEmpty() && tokens.length <= 1 && !trailingSpace) {
-            for (String place : uniquePlaces()) {
-                if (!normalizeSearch(place).startsWith(tokens[0])) continue;
-                addSuggestion(result, seen, normalizedInput, "", place, place, "", limit);
-                if (result.size() >= limit) return result;
-            }
-            for (int month = 1; month <= 12; month++) {
-                String monthName = monthName(month);
-                if (normalizeSearch(monthName).startsWith(tokens[0])) {
-                    addSuggestion(result, seen, normalizedInput, "", monthName, monthName, "", limit);
-                }
-                if (result.size() >= limit) return result;
-            }
-            for (String year : uniqueYears()) {
-                if (year.startsWith(tokens[0])) {
-                    addSuggestion(result, seen, normalizedInput, "", year, year, "", limit);
-                }
-                if (result.size() >= limit) return result;
-            }
-        }
-        return result;
-    }
-
-    private void addSuggestion(
-        List<SearchSuggestion> result,
-        Set<String> seen,
-        String normalizedInput,
-        String prefix,
-        String label,
-        String apply,
-        String personId,
-        int limit
-    ) {
-        String key = normalizeSearch(label);
-        if (result.size() >= limit || key.isEmpty()
-            || key.equals(normalizedInput) && (personId == null || personId.isEmpty())
-            || !seen.add(key)) return;
-        result.add(new SearchSuggestion(label, prefix + apply, personId));
-    }
-
-    private String relationCommandPrefix(String input) {
-        String raw = input == null ? "" : input;
-        String normalized = normalizeSearch(raw);
-        for (String command : new String[]{"предки", "потомки", "родственники", "родственников", "предков", "потомков"}) {
-            if (normalized.equals(command)) return raw.endsWith(" ") ? raw : raw + " ";
-            if (normalized.startsWith(command + " ")) {
-                int index = raw.toLowerCase(Locale.ROOT).replace('ё', 'е').indexOf(command);
-                if (index >= 0) {
-                    int end = Math.min(raw.length(), index + command.length());
-                    while (end < raw.length() && Character.isWhitespace(raw.charAt(end))) end++;
-                    return raw.substring(0, end);
-                }
-            }
-        }
-        return "";
-    }
-
-    private String progressiveNameSuggestion(String name, int tokenCount, boolean trailingSpace) {
-        String[] parts = nameParts(name);
-        if (parts.length <= 2) return displayNameFromParts(parts, parts.length);
-        if (tokenCount <= 1) return displayNameFromParts(parts, 2);
-        if (tokenCount == 2 && !trailingSpace) return displayNameFromParts(parts, 2);
-        return displayNameFromParts(parts, parts.length);
+    private List<SearchSuggestions.Suggestion> buildSearchSuggestions(String input, int limit) {
+        return SearchSuggestions.build(
+            input, limit, sortedPeople(), this::uniquePlaces, this::uniqueYears, "Без имени");
     }
 
     private List<Person> sortedPeople() {
@@ -536,6 +489,8 @@ final class MainActivityPeople {
         if (!"all".equals(photoFilter)) chips.addView(chip(
             "photo", "with".equals(photoFilter) ? "С фото" : "Без фото",
             () -> photoFilter = "all"));
+        if (!quickFilterQuery.isEmpty()) chips.addView(chip(
+            "quick", quickFilterQuery, () -> quickFilterQuery = ""));
     }
 
     private TextView chip(String key, String label, Runnable remove) {
@@ -576,42 +531,103 @@ final class MainActivityPeople {
             : label + ". Нажмите, чтобы подготовить отключение фильтра"));
     }
 
-    private void fillPeopleRows(LinearLayout rows) {
-        rows.removeAllViews();
-        if (activity.state == null) return;
-        String rawQuery = query == null ? "" : query.getText().toString().trim();
-        SmartPeopleSearch.Query smart = SmartPeopleSearch.parse(activity.state, rawQuery, activity.state.selectedId);
-        List<Person> people = new ArrayList<>();
-        if (!smart.kinshipFirstId.isEmpty() && !smart.kinshipSecondId.isEmpty()) {
-            addIfPresent(people, smart.kinshipFirstId);
-            addIfPresent(people, smart.kinshipSecondId);
-        } else {
-            Calendar now = Calendar.getInstance();
-            for (Person person : activity.state.people.values()) {
-                if (!matches(person, smart, now)) continue;
-                people.add(person);
+    private void fillPeopleRows(android.widget.ListView rows) {
+        if (closed || activity.state == null) return;
+        long requested = ++peopleSearchRevision;
+        TreeState source = activity.state;
+        long editEpoch = source.localEditEpoch;
+        TreeState snapshot = TreeStateCopier.copy(source);
+        String raw = query == null ? "" : query.getText().toString().trim();
+        String quickQuery = quickFilterQuery, gender=genderFilter, life=lifeFilter, photo=photoFilter, order=sort;
+        boolean terminology = activity.kinshipTerminological;
+        peopleSearch.execute(() -> {
+            if (closed || requested != peopleSearchRevision) return;
+            SmartPeopleSearch.Query smart = SmartPeopleSearch.parse(snapshot, raw, snapshot.selectedId, terminology);
+            SmartPeopleSearch.Query quick = SmartPeopleSearch.parse(snapshot, quickQuery, snapshot.selectedId, terminology);
+            List<Person> people = new ArrayList<>();
+            if (!smart.kinshipFirstId.isEmpty() && !smart.kinshipSecondId.isEmpty()) {
+                Person first=snapshot.people.get(smart.kinshipFirstId), second=snapshot.people.get(smart.kinshipSecondId);
+                if (first!=null) people.add(first);
+                if (second!=null && second!=first) people.add(second);
+            } else {
+                Calendar now=Calendar.getInstance();
+                for (Person person : snapshot.people.values()) {
+                    if (Thread.currentThread().isInterrupted()) return;
+                    if (matches(person, smart, quick, now, gender, life, photo)) people.add(person);
+                }
             }
+            Collator collator=createPeopleCollator();
+            Map<String,String> surnames=new LinkedHashMap<>();
+            for (Person p:people) surnames.put(p.id,TreeState.surnameOf(p.name));
+            people.sort((x,y) -> {
+                int names=collator.compare(value(x.name),value(y.name));
+                if ("birth".equals(order)) return compareYears(x.bornYear,y.bornYear,names);
+                if ("name".equals(order)) return names;
+                int family=collator.compare(surnames.get(x.id),surnames.get(y.id));
+                return family==0 ? names : family;
+            });
+            mainHandler.post(() -> {
+                if (closed || requested != peopleSearchRevision || peopleList != rows || activity.isDestroyed()) return;
+                if (source != activity.state || editEpoch != source.localEditEpoch) { fillPeopleRows(rows); return; }
+                List<Object> entries=new ArrayList<>();
+                if (!smart.kinshipSummary.isEmpty()) entries.add(smart);
+                String section="";
+                for (Person match:people) {
+                    Person person=source.people.get(match.id); if (person==null) continue;
+                    String next=sectionFor(person);
+                    if (!next.equals(section)) { section=next; entries.add(section); }
+                    entries.add(person);
+                }
+                if (people.isEmpty()) entries.add(Boolean.FALSE);
+                if (resultSubtitle!=null) LocalizedViews.setRaw(resultSubtitle,peopleCountText(people.size()));
+                int first=rows.getFirstVisiblePosition(); View top=rows.getChildAt(0); int offset=top==null?0:top.getTop();
+                rows.setAdapter(new PeopleAdapter(entries));
+                rows.setSelectionFromTop(Math.min(first,Math.max(0,entries.size()-1)),offset);
+            });
+        });
+    }
+
+    private final class PeopleAdapter extends android.widget.BaseAdapter {
+        final List<Object> entries;
+        PeopleAdapter(List<Object> entries) { this.entries=entries; }
+        @Override public int getCount() { return entries.size(); }
+        @Override public Object getItem(int position) { return entries.get(position); }
+        @Override public long getItemId(int position) { return position; }
+        @Override public int getViewTypeCount() { return 4; }
+        @Override public int getItemViewType(int position) {
+            Object item=getItem(position);
+            return item instanceof Person ? 0 : item instanceof String ? 1 : item instanceof SmartPeopleSearch.Query ? 2 : 3;
         }
-        Collections.sort(people, personComparator());
-        if (resultSubtitle != null) {
-            LocalizedViews.setRaw(resultSubtitle, peopleCountText(people.size()));
-        }
-        if (!smart.kinshipSummary.isEmpty()) {
-            rows.addView(kinshipPreviewCard(smart));
-        }
-        String section = "";
-        for (Person person : people) {
-            String next = sectionFor(person);
-            if (!next.equals(section)) {
-                section = next;
-                TextView label = text(section, 12, Color.rgb(8, 122, 115), true);
-                label.setGravity(Gravity.CENTER_VERTICAL);
-                label.setPadding(dp(8), dp(4), 0, 0);
-                rows.addView(label, new LinearLayout.LayoutParams(-1, dp(30)));
+        @Override public boolean isEnabled(int position) { return getItem(position) instanceof Person; }
+        @Override public View getView(int position, View reused, ViewGroup parent) {
+            Object item=getItem(position);
+            if (item instanceof Person) {
+                Person person=(Person)item;
+                LinearLayout row;
+                if (reused instanceof LinearLayout) row=(LinearLayout)reused;
+                else { row=(LinearLayout)personRow(person); row.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,dp(71))); }
+                row.setOnClickListener(v -> openPerson(person,false));
+                LinearLayout copy=(LinearLayout)row.getChildAt(1);
+                LocalizedViews.setRaw((TextView)copy.getChildAt(0),displayName(person));
+                String years=years(person);
+                String detail=years+(value(person.place).isEmpty()?"":(years.isEmpty()?"":" · ")+person.place);
+                LocalizedViews.setRaw((TextView)copy.getChildAt(1),detail.isEmpty()?activity.tr("Карточка человека"):detail);
+                if (row.getTag()!=person) {
+                    row.removeViewAt(0); row.addView(avatar(person,48),0,new LinearLayout.LayoutParams(dp(48),dp(48)));
+                    row.setTag(person);
+                }
+                row.getChildAt(2).setOnClickListener(v -> openPerson(person,true));
+                return row;
             }
-            rows.addView(personRow(person));
+            if (item instanceof String) {
+                TextView label=reused instanceof TextView ? (TextView)reused : text("",12,Color.rgb(8,122,115),true);
+                LocalizedViews.setRaw(label,(String)item); label.setGravity(Gravity.CENTER_VERTICAL); label.setPadding(dp(8),dp(4),0,0);
+                label.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,dp(30))); return label;
+            }
+            View view=item instanceof SmartPeopleSearch.Query ? kinshipPreviewCard((SmartPeopleSearch.Query)item)
+                : emptyState("Люди не найдены","Измените запрос или сбросьте фильтры");
+            view.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1,-2)); return view;
         }
-        if (people.isEmpty()) rows.addView(emptyState("Люди не найдены", "Измените запрос или сбросьте фильтры"));
     }
 
     private void addIfPresent(List<Person> people, String personId) {
@@ -619,11 +635,7 @@ final class MainActivityPeople {
         if (person != null && !people.contains(person)) people.add(person);
     }
 
-    private boolean matches(Person person, SmartPeopleSearch.Query smart, Calendar now) {
-        return matches(person, smart, now, genderFilter, lifeFilter, photoFilter);
-    }
-
-    private boolean matches(Person person, SmartPeopleSearch.Query smart, Calendar now,
+    private boolean matches(Person person, SmartPeopleSearch.Query smart, SmartPeopleSearch.Query quick, Calendar now,
                             String gender, String life, String photo) {
         if ("male".equals(gender) && !PersonGender.MALE.equals(person.gender)) return false;
         if ("female".equals(gender) && !PersonGender.FEMALE.equals(person.gender)) return false;
@@ -633,7 +645,8 @@ final class MainActivityPeople {
         boolean hasPhoto = hasPhoto(person);
         if ("with".equals(photo) && !hasPhoto) return false;
         if ("without".equals(photo) && hasPhoto) return false;
-        return SmartPeopleSearch.matches(activity.state, smart, person, this::hasPhoto, now);
+        return SmartPeopleSearch.matches(activity.state, smart, person, this::hasPhoto, now)
+            && SmartPeopleSearch.matches(activity.state, quick, person, this::hasPhoto, now);
     }
 
     private String currentSearchSummary() {
@@ -643,7 +656,8 @@ final class MainActivityPeople {
     private String currentSearchSummary(String gender, String life, String photo) {
         if (activity.state == null) return "Люди → все записи → показать 0 " + peopleWord(0);
         String rawQuery = query == null ? "" : query.getText().toString().trim();
-        SmartPeopleSearch.Query smart = SmartPeopleSearch.parse(activity.state, rawQuery, activity.state.selectedId);
+        SmartPeopleSearch.Query smart = SmartPeopleSearch.parse(activity.state, rawQuery, activity.state.selectedId, activity.kinshipTerminological);
+        SmartPeopleSearch.Query quick = SmartPeopleSearch.parse(activity.state, quickFilterQuery, activity.state.selectedId, activity.kinshipTerminological);
         int count = 0;
         if (!smart.kinshipFirstId.isEmpty() && !smart.kinshipSecondId.isEmpty()) {
             if (activity.state.people.containsKey(smart.kinshipFirstId)) count++;
@@ -654,12 +668,13 @@ final class MainActivityPeople {
         } else {
             Calendar now = Calendar.getInstance();
             for (Person person : activity.state.people.values()) {
-                if (matches(person, smart, now, gender, life, photo)) count++;
+                if (matches(person, smart, quick, now, gender, life, photo)) count++;
             }
         }
-        return smart != null && smart.active
+        String summary = smart != null && smart.active
             ? SmartPeopleSearch.explanation(smart, count)
             : "Люди → все записи → показать " + count + " " + peopleWord(count);
+        return quickFilterQuery.isEmpty() ? summary : summary + " · фильтр: " + quickFilterQuery;
     }
 
     private TextView filterSummaryCard(String[] pending) {
@@ -697,7 +712,7 @@ final class MainActivityPeople {
             Person second = activity.state.people.get(smart.kinshipSecondId);
             if (first == null || second == null) return;
             commitCurrentSearchToRecent();
-            activity.showKinshipResult(first, second, KinshipCalculator.calculate(activity.state, first.id, second.id));
+            activity.showKinshipResult(first, second, activity.calculateKinship(first.id, second.id));
         });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(46));
         params.setMargins(0, dp(9), 0, 0);
@@ -809,11 +824,12 @@ final class MainActivityPeople {
         host.addView(menuAction("Место", "Выбрать из мест, которые есть в дереве", R.drawable.ic_field_location, () -> {
             showPlaceFilters();
         }));
-        host.addView(menuAction("Родство", "Предки, потомки, родственники и связь двух людей", R.drawable.ic_menu_route, () -> {
+        host.addView(menuAction("Родство", "Предки, потомки и ближайшие родственники", R.drawable.ic_menu_route, () -> {
             showRelationFilters();
         }));
         host.addView(dialogActions("Сбросить", () -> {
             genderFilter = lifeFilter = photoFilter = "all";
+            quickFilterQuery = "";
             armedFilterChip = "";
             refresh();
             dialog.dismiss();
@@ -833,11 +849,11 @@ final class MainActivityPeople {
         LinearLayout host = dialogHost(dialog);
         host.addView(menuAction("Без даты рождения", "Нет дня, месяца, года или текстовой даты", R.drawable.ic_field_calendar, () -> {
             dialog.dismiss();
-            applySearchAndCommit("без даты рождения");
+            applyQuickFilter("без даты рождения");
         }));
         host.addView(menuAction("С датой рождения", "Заполнена любая дата рождения", R.drawable.ic_field_calendar, () -> {
             dialog.dismiss();
-            applySearchAndCommit("с датой рождения");
+            applyQuickFilter("с датой рождения");
         }));
         dialog.show();
     }
@@ -901,16 +917,16 @@ final class MainActivityPeople {
                 return;
             }
             dialog.dismiss();
-            applySearchAndCommit(search);
+            applyQuickFilter(search);
         }));
 
         host.addView(menuAction("Скоро день рождения", "Ближайшие 31 день", R.drawable.ic_menu_near, () -> {
             dialog.dismiss();
-            applySearchAndCommit("скоро день рождения");
+            applyQuickFilter("скоро день рождения");
         }));
         host.addView(menuAction("Старше 80 лет", "Возраст считается по году рождения", R.drawable.ic_menu_history, () -> {
             dialog.dismiss();
-            applySearchAndCommit("старше 80 лет");
+            applyQuickFilter("старше 80 лет");
         }));
         dialog.show();
     }
@@ -1021,7 +1037,7 @@ final class MainActivityPeople {
                 int count = placeCount(place);
                 host.addView(menuAction(place, count + " совпадений", R.drawable.ic_field_location, () -> {
                     dialog.dismiss();
-                    applySearchAndCommit(place);
+                    applyQuickFilter(place);
                 }));
             }
         }
@@ -1043,6 +1059,12 @@ final class MainActivityPeople {
             dialog.dismiss();
             applySearch("родственники ");
         }));
+        for (String relation : new String[]{"Дети", "Родители", "Партнёры", "Братья", "Сёстры"}) {
+            host.addView(menuAction(relation, "После выбора допишите человека", R.drawable.ic_menu_people, () -> {
+                dialog.dismiss();
+                applySearch(relation.toLowerCase(Locale.ROOT) + " ");
+            }));
+        }
         host.addView(menuAction("Проверить связь", "Два поля с подсказками по людям", R.drawable.ic_menu_route, () -> {
             dialog.dismiss();
             showRelationSearchDialog();
@@ -1090,7 +1112,7 @@ final class MainActivityPeople {
             activity.showKinshipResult(
                 firstPerson,
                 secondPerson,
-                KinshipCalculator.calculate(activity.state, firstPerson.id, secondPerson.id));
+                activity.calculateKinship(firstPerson.id, secondPerson.id));
         }));
         updatePersonSuggestions(first, firstScroll, firstSuggestions, firstId, applying);
         updatePersonSuggestions(second, secondScroll, secondSuggestions, secondId, applying);
@@ -1136,7 +1158,7 @@ final class MainActivityPeople {
             return;
         }
         int count = 0;
-        for (SearchSuggestion suggestion : buildSearchSuggestions(input, 8)) {
+        for (SearchSuggestions.Suggestion suggestion : buildSearchSuggestions(input, 8)) {
             TextView pill = text(suggestion.label, 10, Color.rgb(8, 122, 115), true);
             pill.setGravity(Gravity.CENTER);
             pill.setSingleLine(true);
@@ -1230,7 +1252,7 @@ final class MainActivityPeople {
         row.setBackground(activity.panelBg(Color.WHITE, dp(15), Color.rgb(217, 224, 229)));
         ImageView icon = new ImageView(activity);
         icon.setImageResource(R.drawable.ic_menu_search);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(AppThemePalette.primary());
         icon.setPadding(dp(10), dp(10), dp(10), dp(10));
         icon.setBackground(activity.panelBg(Color.rgb(235, 248, 246), dp(12), Color.argb(52, 24, 169, 153)));
         row.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -1278,6 +1300,12 @@ final class MainActivityPeople {
     private void applySearchAndCommit(String value) {
         applySearch(value);
         commitCurrentSearchToRecent();
+    }
+
+    private void applyQuickFilter(String value) {
+        quickFilterQuery = value(value);
+        armedFilterChip = "";
+        refresh();
     }
 
     private void commitCurrentSearchToRecent() {
@@ -1427,26 +1455,23 @@ final class MainActivityPeople {
     }
 
     private void showFamilies() {
-        Dialog dialog = fullDialog("Семейные альбомы");
+        Dialog dialog = galleryDialog("Семейные альбомы");
         LinearLayout host = dialogHost(dialog);
         Map<String, List<Person>> groups = familyGroups(true);
         TextView hint = text("Семьи с фотографиями добавляются автоматически", 10, Color.rgb(101, 113, 122), false);
         host.addView(hint, new LinearLayout.LayoutParams(-1, dp(34)));
-        GridLayout grid = photoGrid();
+        VirtualPhotoGrid grid = photoGrid();
         for (Map.Entry<String, List<Person>> entry : groups.entrySet()) {
-            View tile = familyTile(entry.getKey(), entry.getValue(), () -> showFamilyAlbum(entry.getKey(), entry.getValue()));
-            tile.setOnLongClickListener(v -> {
-                showFamilyMenu(entry.getKey(), entry.getValue(), dialog);
-                return true;
+            addGridTile(grid, () -> {
+                View tile = familyTile(entry.getKey(), entry.getValue(), () -> showFamilyAlbum(entry.getKey(), entry.getValue()));
+                tile.setOnLongClickListener(v -> {
+                    showFamilyMenu(entry.getKey(), entry.getValue(), dialog);
+                    return true;
+                });
+                return tile;
             });
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-            params.width = 0;
-            params.height = dp(154);
-            params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-            params.setMargins(0, 0, dp(8), dp(8));
-            grid.addView(tile, params);
         }
-        host.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
         Button addFamily = activity.actionButton("+  Добавить семью из существующих", v -> chooseFamily(dialog));
         addFamily.setTextColor(Color.rgb(8, 122, 115));
         addFamily.setBackground(activity.panelBg(Color.rgb(232, 248, 246), dp(14), Color.argb(72, 24, 169, 153)));
@@ -1479,7 +1504,7 @@ final class MainActivityPeople {
     }
 
     private void showAvatarAlbum() {
-        Dialog dialog = fullDialog("Все аватары");
+        Dialog dialog = galleryDialog("Все аватары");
         openPhotoDialog = dialog;
         LinearLayout host = dialogHost(dialog);
         host.addView(albumToolbar(new String[]{"Добавить человеку фото"}, new int[]{R.drawable.ic_menu_add_box},
@@ -1495,7 +1520,7 @@ final class MainActivityPeople {
         host.addView(summary, new LinearLayout.LayoutParams(-1, dp(30)));
         LinearLayout results = new LinearLayout(activity);
         results.setOrientation(LinearLayout.VERTICAL);
-        host.addView(results, new LinearLayout.LayoutParams(-1, -2));
+        host.addView(results, new LinearLayout.LayoutParams(-1, 0, 1));
         Runnable render = () -> renderAvatarAlbumResults(results, summary, search.getText().toString(), dialog);
         final Runnable[] pendingSearch = new Runnable[1];
         search.addTextChangedListener(new SimpleTextWatcher(() -> {
@@ -1528,28 +1553,28 @@ final class MainActivityPeople {
                 needle.isEmpty() ? "Фотографий пока нет" : "Ничего не найдено",
                 needle.isEmpty() ? "Добавьте аватар в карточку человека" : "Попробуйте изменить запрос"));
         } else {
-            results.addView(peopleGrid(filtered, null, dialog));
+            results.addView(peopleGrid(filtered, null, dialog), new LinearLayout.LayoutParams(-1, -1));
         }
     }
 
     private void showFamilyAlbum(String surname, List<Person> people) {
-        Dialog dialog = fullDialog(capitalize(surname));
+        Dialog dialog = galleryDialog(capitalize(surname));
         openPhotoDialog = dialog;
         LinearLayout host = dialogHost(dialog);
         host.addView(albumToolbar(new String[]{"Добавить фото"}, new int[]{R.drawable.ic_menu_add_box},
             new Runnable[]{() -> openAlbumPhotoPicker("family", surname, "")}));
-        GridLayout grid = photoGrid();
-        for (Person person : people) addGridTile(grid, personTile(person, null, null, dialog));
+        VirtualPhotoGrid grid = photoGrid();
+        for (Person person : people) addGridTile(grid, () -> personTile(person, null, null, dialog));
         for (String mediaId : activity.state.familyAlbumMedia.getOrDefault(surname, Collections.emptyList())) {
-            addGridTile(grid, mediaTile(mediaId, () -> removeMedia("family", surname, "", mediaId)));
+            addGridTile(grid, () -> mediaTile(mediaId, () -> removeMedia("family", surname, "", mediaId)));
         }
-        if (grid.getChildCount() == 0) host.addView(emptyState("Альбом пуст", "Добавьте фотографии семьи"));
-        else host.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        if (grid.itemCount() == 0) host.addView(emptyState("Альбом пуст", "Добавьте фотографии семьи"));
+        else host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
         dialog.show();
     }
 
     private void showCustomAlbum(String name) {
-        Dialog dialog = fullDialog(name);
+        Dialog dialog = galleryDialog(name);
         openPhotoDialog = dialog;
         LinearLayout host = dialogHost(dialog);
         host.addView(albumToolbar(
@@ -1561,23 +1586,23 @@ final class MainActivityPeople {
                 () -> createFolder(name, dialog)
             }
         ));
-        GridLayout grid = photoGrid();
-        for (PhotoAlbumFolder folder : albumFolders(name)) addGridTile(grid, folderTile(name, folder, dialog));
+        VirtualPhotoGrid grid = photoGrid();
+        for (PhotoAlbumFolder folder : albumFolders(name)) addGridTile(grid, () -> folderTile(name, folder, dialog));
         for (Person person : peopleForIds(activity.state.photoAlbums.getOrDefault(name, Collections.emptyList()))) {
-            addGridTile(grid, personTile(person, name, null, dialog));
+            addGridTile(grid, () -> personTile(person, name, null, dialog));
         }
         for (String mediaId : albumMedia(name)) {
-            addGridTile(grid, mediaTile(mediaId, () -> removeMedia("album", name, "", mediaId)));
+            addGridTile(grid, () -> mediaTile(mediaId, () -> removeMedia("album", name, "", mediaId)));
         }
-        if (grid.getChildCount() == 0) host.addView(emptyState("Альбом пока пуст", "Добавьте людей, любые фото или создайте папку"));
-        else host.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        if (grid.itemCount() == 0) host.addView(emptyState("Альбом пока пуст", "Добавьте людей, любые фото или создайте папку"));
+        else host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
         dialog.show();
     }
 
     private void showFolder(String albumName, String folderId) {
         PhotoAlbumFolder folder = findFolder(albumName, folderId);
         if (folder == null) return;
-        Dialog dialog = fullDialog(folder.name);
+        Dialog dialog = galleryDialog(folder.name);
         openPhotoDialog = dialog;
         LinearLayout host = dialogHost(dialog);
         host.addView(albumToolbar(
@@ -1588,36 +1613,36 @@ final class MainActivityPeople {
                 () -> openAlbumPhotoPicker("folder", albumName, folder.id)
             }
         ));
-        GridLayout grid = photoGrid();
-        for (Person person : peopleForIds(folder.personIds)) addGridTile(grid, personTile(person, albumName, folder.id, dialog));
+        VirtualPhotoGrid grid = photoGrid();
+        for (Person person : peopleForIds(folder.personIds)) addGridTile(grid, () -> personTile(person, albumName, folder.id, dialog));
         for (String mediaId : folder.photoMediaIds) {
-            addGridTile(grid, mediaTile(mediaId, () -> removeMedia("folder", albumName, folder.id, mediaId)));
+            addGridTile(grid, () -> mediaTile(mediaId, () -> removeMedia("folder", albumName, folder.id, mediaId)));
         }
-        if (grid.getChildCount() == 0) host.addView(emptyState("Папка пока пуста", "Выберите аватары или добавьте фотографии"));
-        else host.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        if (grid.itemCount() == 0) host.addView(emptyState("Папка пока пуста", "Выберите аватары или добавьте фотографии"));
+        else host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
         dialog.show();
     }
 
     private void showPersonGallery(Person person) {
         if (person == null) return;
-        Dialog dialog = fullDialog(displayName(person));
+        Dialog dialog = galleryDialog(displayName(person));
         openPhotoDialog = dialog;
         LinearLayout host = dialogHost(dialog);
         host.addView(albumToolbar(new String[]{"Добавить фото"}, new int[]{R.drawable.ic_menu_add_box},
             new Runnable[]{() -> openAlbumPhotoPicker("person", "", person.id)}));
-        GridLayout grid = photoGrid();
-        if (hasPhoto(person)) addGridTile(grid, personAvatarPhotoTile(person, dialog));
+        VirtualPhotoGrid grid = photoGrid();
+        if (hasPhoto(person)) addGridTile(grid, () -> personAvatarPhotoTile(person, dialog));
         for (String mediaId : activity.state.personAlbumMedia.getOrDefault(person.id, Collections.emptyList())) {
-            addGridTile(grid, mediaTile(mediaId, () -> removeMedia("person", "", person.id, mediaId)));
+            addGridTile(grid, () -> mediaTile(mediaId, () -> removeMedia("person", "", person.id, mediaId)));
         }
-        if (grid.getChildCount() == 0) host.addView(emptyState("Фотографий пока нет", "Добавьте снимки этого человека"));
-        else host.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+        if (grid.itemCount() == 0) host.addView(emptyState("Фотографий пока нет", "Добавьте снимки этого человека"));
+        else host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
         dialog.show();
     }
 
-    private GridLayout peopleGrid(List<Person> people, String albumName, Dialog parent) {
-        GridLayout grid = photoGrid();
-        for (Person person : people) addGridTile(grid, personTile(person, albumName, null, parent));
+    private VirtualPhotoGrid peopleGrid(List<Person> people, String albumName, Dialog parent) {
+        VirtualPhotoGrid grid = photoGrid();
+        for (Person person : people) addGridTile(grid, () -> personTile(person, albumName, null, parent));
         return grid;
     }
 
@@ -1742,35 +1767,42 @@ final class MainActivityPeople {
     private View mediaPreview(String mediaId, int sizeDp) {
         FrameLayout frame = new FrameLayout(activity);
         frame.setBackground(activity.colorSwatchBg(Color.rgb(224, 231, 234), dp(14)));
-        avatarDecoder.execute(() -> {
-            Bitmap bitmap = activity.store.mediaStore().decodeBitmap(mediaId, dp(sizeDp));
-            if (bitmap == null) return;
-            mainHandler.post(() -> {
-                ImageView image = new ImageView(activity);
-                image.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                image.setImageBitmap(bitmap);
-                frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
-            });
-        });
+        frame.addView(new ThumbnailImageView(activity, activity.store.mediaStore(), mediaId, "", dp(sizeDp), null),
+            new FrameLayout.LayoutParams(-1, -1));
         return frame;
     }
 
-    private void addGridTile(GridLayout grid, View tile) {
-        GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-        params.width = 0;
-        params.height = -2;
-        params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-        params.setMargins(0, 0, dp(8), dp(8));
-        grid.addView(tile, params);
+    private void addGridTile(VirtualPhotoGrid grid, java.util.function.Supplier<View> tile) {
+        grid.tiles.add(tile);
     }
 
-    private GridLayout photoGrid() {
-        PinchGridLayout grid = new PinchGridLayout();
-        grid.setColumnCount(galleryColumns);
-        return grid;
-    }
+    private VirtualPhotoGrid photoGrid() { return new VirtualPhotoGrid(); }
 
-    private final class PinchGridLayout extends GridLayout {
+    private final class VirtualPhotoGrid extends android.widget.GridView {
+        private final List<java.util.function.Supplier<View>> tiles = new ArrayList<>();
+        private final android.widget.BaseAdapter adapter = new android.widget.BaseAdapter() {
+            @Override public int getCount() { return tiles.size(); }
+            @Override public Object getItem(int position) { return tiles.get(position); }
+            @Override public long getItemId(int position) { return position; }
+            @Override public View getView(int position, View reused, ViewGroup parent) {
+                FrameLayout cell = reused instanceof FrameLayout ? (FrameLayout)reused : new FrameLayout(activity);
+                java.util.function.Supplier<View> tile = tiles.get(position);
+                if (cell.getTag() != tile) {
+                    cell.removeAllViews();
+                    cell.addView(tile.get(), new FrameLayout.LayoutParams(-1, -2));
+                    cell.setTag(tile);
+                }
+                cell.setLayoutParams(new android.widget.AbsListView.LayoutParams(-1, -2));
+                return cell;
+            }
+        };
+
+        int itemCount() { return tiles.size(); }
+
+        @Override protected void onAttachedToWindow() {
+            super.onAttachedToWindow(); adapter.notifyDataSetChanged();
+        }
+
         private final ScaleGestureDetector scaleDetector;
         private float accumulatedScale = 1f;
         private int pendingColumns;
@@ -1779,8 +1811,14 @@ final class MainActivityPeople {
         private long lastDetectorEventTime = Long.MIN_VALUE;
         private int lastDetectorAction = -1;
 
-        PinchGridLayout() {
+        VirtualPhotoGrid() {
             super(activity);
+            setNumColumns(galleryColumns);
+            setHorizontalSpacing(dp(8)); setVerticalSpacing(dp(8));
+            setStretchMode(android.widget.GridView.STRETCH_COLUMN_WIDTH);
+            setSelector(new ColorDrawable(Color.TRANSPARENT));
+            setCacheColorHint(Color.TRANSPARENT);
+            setAdapter(adapter);
             pendingColumns = galleryColumns;
             scaleDetector = new ScaleGestureDetector(activity, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 @Override
@@ -1809,9 +1847,7 @@ final class MainActivityPeople {
                 public void onScaleEnd(ScaleGestureDetector detector) {
                     pinching = false;
                     int columns = pendingColumns;
-                    // GridLayout may be in the middle of measuring its children while
-                    // ScaleGestureDetector dispatches this callback. Reconfigure on the
-                    // next UI turn to avoid an inconsistent GridLayout axis state.
+                    // Apply the new column count after the current gesture dispatch.
                     post(() -> updateGalleryColumns(columns));
                 }
             });
@@ -1839,6 +1875,8 @@ final class MainActivityPeople {
             return handled || super.onTouchEvent(event);
         }
 
+        @Override public boolean performClick() { return super.performClick(); }
+
         private void feedScaleDetector(MotionEvent event) {
             int action = event.getAction();
             if (event.getEventTime() == lastDetectorEventTime && action == lastDetectorAction) return;
@@ -1849,9 +1887,9 @@ final class MainActivityPeople {
 
         private void updateGalleryColumns(int columns) {
             int next = Math.max(1, Math.min(5, columns));
-            if (next == galleryColumns && getColumnCount() == next) return;
+            if (next == galleryColumns && getNumColumns() == next) return;
             galleryColumns = next;
-            setColumnCount(galleryColumns);
+            setNumColumns(galleryColumns);
             activity.getSharedPreferences("androidft_ui", Activity.MODE_PRIVATE)
                 .edit().putInt("gallery_columns", galleryColumns).apply();
             requestLayout();
@@ -2055,7 +2093,7 @@ final class MainActivityPeople {
         row.setBackground(activity.panelBg(Color.WHITE, dp(15), Color.rgb(217, 224, 229)));
         ImageView icon = new ImageView(activity);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.rgb(8, 122, 115));
+        icon.setColorFilter(AppThemePalette.primary());
         icon.setPadding(dp(10), dp(10), dp(10), dp(10));
         icon.setBackground(activity.panelBg(Color.rgb(235, 248, 246), dp(12), Color.argb(52, 24, 169, 153)));
         row.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -2340,7 +2378,7 @@ final class MainActivityPeople {
         if (!activity.requireEditingEnabled()) return;
         List<Uri> uris = new ArrayList<>();
         ClipData clip = data.getClipData();
-        if (clip != null) for (int i = 0; i < clip.getItemCount() && uris.size() < 60; i++) {
+        if (clip != null) for (int i = 0; i < clip.getItemCount(); i++) {
             Uri uri = clip.getItemAt(i).getUri();
             if (uri != null && !uris.contains(uri)) uris.add(uri);
         }
@@ -2350,13 +2388,15 @@ final class MainActivityPeople {
         final String albumName = pendingPhotoAlbum;
         final String itemId = pendingPhotoItem;
         activity.toast(uris.size() == 1 ? "Добавление фотографии…" : "Добавление фотографий…");
-        avatarDecoder.execute(() -> importAlbumPhotos(uris, target, albumName, itemId));
+        TreeState source = activity.state;
+        albumImporter.execute(() -> importAlbumPhotos(uris, target, albumName, itemId, source));
     }
 
-    private void importAlbumPhotos(List<Uri> uris, String target, String albumName, String itemId) {
+    private void importAlbumPhotos(List<Uri> uris, String target, String albumName, String itemId, TreeState source) {
         List<String> imported = new ArrayList<>();
         int failed = 0;
         for (Uri uri : uris) {
+            if (closed || Thread.currentThread().isInterrupted()) return;
             try (InputStream input = activity.getContentResolver().openInputStream(uri)) {
                 if (input == null) throw new IllegalStateException("Фото не открыто");
                 String mime = activity.getContentResolver().getType(uri);
@@ -2368,6 +2408,8 @@ final class MainActivityPeople {
         }
         final int failedCount = failed;
         mainHandler.post(() -> {
+            if (closed || activity.isDestroyed() || activity.state != source) return;
+            if (!activity.requireEditingEnabled()) return;
             if (imported.isEmpty()) {
                 activity.toast("Не удалось добавить фотографии");
                 return;
@@ -2377,6 +2419,8 @@ final class MainActivityPeople {
                 activity.toast("Папка больше не существует");
                 return;
             }
+            Person owner=source.people.get(itemId);
+            activity.recordUndo("Добавлено фото", albumName.isEmpty() ? owner==null ? "" : owner.name : albumName);
             for (String mediaId : imported) if (!destination.contains(mediaId)) destination.add(mediaId);
             activity.saveOnly();
             if (openPhotoDialog != null) openPhotoDialog.dismiss();
@@ -2389,9 +2433,11 @@ final class MainActivityPeople {
 
     private List<String> mediaTarget(String target, String albumName, String itemId) {
         if (activity.state == null) return null;
-        if ("album".equals(target)) return activity.state.photoAlbumMedia.computeIfAbsent(albumName, key -> new ArrayList<>());
+        if ("album".equals(target)) return activity.state.photoAlbums.containsKey(albumName)
+            ? activity.state.photoAlbumMedia.computeIfAbsent(albumName, key -> new ArrayList<>()) : null;
         if ("family".equals(target)) return activity.state.familyAlbumMedia.computeIfAbsent(albumName, key -> new ArrayList<>());
-        if ("person".equals(target)) return activity.state.personAlbumMedia.computeIfAbsent(itemId, key -> new ArrayList<>());
+        if ("person".equals(target)) return activity.state.people.containsKey(itemId)
+            ? activity.state.personAlbumMedia.computeIfAbsent(itemId, key -> new ArrayList<>()) : null;
         if ("folder".equals(target)) {
             PhotoAlbumFolder folder = findFolder(albumName, itemId);
             return folder == null ? null : folder.photoMediaIds;
@@ -2502,30 +2548,9 @@ final class MainActivityPeople {
         String mediaId = value(person.photoMediaId);
         String legacyPhoto = value(person.photo);
         if (mediaId.isEmpty() && legacyPhoto.isEmpty()) return frame;
-        String key = (mediaId.isEmpty() ? "legacy:" + legacyPhoto.hashCode() : mediaId)
-            + ":" + sizeDp + ":" + person.avatarScale + ":" + person.avatarOffsetX + ":" + person.avatarOffsetY;
-        Bitmap cached = avatarCache.get(key);
-        if (cached != null) {
-            addAvatarBitmap(frame, cached, person);
-            return frame;
-        }
-        avatarDecoder.execute(() -> {
-            Bitmap bitmap = mediaId.isEmpty()
-                ? activity.bitmapFromDataUrl(legacyPhoto)
-                : activity.store.mediaStore().decodeBitmap(mediaId, dp(sizeDp));
-            if (bitmap == null) return;
-            avatarCache.put(key, bitmap);
-            mainHandler.post(() -> {
-                if (!activity.isFinishing() && !activity.isDestroyed()) addAvatarBitmap(frame, bitmap, person);
-            });
-        });
+        frame.addView(new ThumbnailImageView(activity, activity.store.mediaStore(), mediaId, legacyPhoto, dp(sizeDp), person),
+            new FrameLayout.LayoutParams(-1, -1));
         return frame;
-    }
-
-    private void addAvatarBitmap(FrameLayout frame, Bitmap bitmap, Person person) {
-        ImageView image = new ImageView(activity);
-        AvatarTransform.apply(image, bitmap, person);
-        frame.addView(image, new FrameLayout.LayoutParams(-1, -1));
     }
 
     private static Collator createPeopleCollator() {
@@ -2539,6 +2564,27 @@ final class MainActivityPeople {
         view.setGravity(Gravity.CENTER);
         view.setBackground(activity.colorSwatchBg(TreeState.colorFor(value, 0), dp(14)));
         return view;
+    }
+
+    /** Gallery owns the viewport; nesting a GridView in a ScrollView would materialize all rows. */
+    private Dialog galleryDialog(String title) {
+        Dialog dialog = fullDialog(title);
+        galleryDialogs.add(dialog);
+        openPhotoDialog=dialog;
+        dialog.setOnDismissListener(ignored -> {
+            galleryDialogs.remove(dialog);
+            if (openPhotoDialog==dialog) {
+                openPhotoDialog=null;
+                for (Dialog remaining:galleryDialogs) openPhotoDialog=remaining;
+            }
+        });
+        LinearLayout host = dialogHost(dialog);
+        ScrollView scroll = (ScrollView)host.getParent();
+        LinearLayout shell = (LinearLayout)scroll.getParent();
+        int index = shell.indexOfChild(scroll);
+        scroll.removeView(host); shell.removeView(scroll);
+        shell.addView(host, index, new LinearLayout.LayoutParams(-1, 0, 1));
+        return dialog;
     }
 
     private Dialog fullDialog(String title) {
@@ -2774,25 +2820,6 @@ final class MainActivityPeople {
         return born + "–" + died;
     }
 
-    private String surnameDisplayOf(Person person) {
-        String[] parts = nameParts(displayName(person));
-        return parts.length == 0 ? "" : parts[0];
-    }
-
-    private String[] nameParts(String name) {
-        String value = value(name);
-        return value.isEmpty() || "Без имени".equals(value) ? new String[0] : value.split("\\s+");
-    }
-
-    private String displayNameFromParts(String[] parts, int count) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < Math.min(parts.length, count); i++) {
-            if (builder.length() > 0) builder.append(' ');
-            builder.append(parts[i]);
-        }
-        return builder.toString();
-    }
-
     private List<String> splitPlaces(String place) {
         List<String> result = new ArrayList<>();
         String value = value(place);
@@ -2890,18 +2917,6 @@ final class MainActivityPeople {
         @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
         @Override public void onTextChanged(CharSequence s, int start, int before, int count) { changed.run(); }
         @Override public void afterTextChanged(android.text.Editable s) { }
-    }
-
-    private static final class SearchSuggestion {
-        final String label;
-        final String applyText;
-        final String personId;
-
-        SearchSuggestion(String label, String applyText, String personId) {
-            this.label = label;
-            this.applyText = applyText;
-            this.personId = personId == null ? "" : personId;
-        }
     }
 
     private static final class SquareFrame extends FrameLayout {

@@ -30,6 +30,11 @@ final class MainActivityQuality {
 
     private TreeQualityAnalyzer.TreeReport report =
         new TreeQualityAnalyzer.TreeReport();
+    private final java.util.concurrent.ExecutorService analyzer = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+    private long revision;
+    private boolean closed;
+    private Runnable pendingRefresh;
 
     MainActivityQuality(
         Activity activity,
@@ -117,14 +122,33 @@ final class MainActivityQuality {
     }
 
     void refresh() {
-        report = TreeQualityAnalyzer.analyze(state());
-        if (treeView() != null) treeView().setQualityReports(report.people);
-        updateTreeQualityButton();
+        if (closed) return;
+        long requested = ++revision;
+        if (pendingRefresh != null) main.removeCallbacks(pendingRefresh);
+        pendingRefresh = () -> {
+            TreeState snapshot = TreeStateCopier.copy(state());
+            analyzer.execute(() -> {
+                TreeQualityAnalyzer.TreeReport next = TreeQualityAnalyzer.analyze(snapshot);
+                main.post(() -> {
+                    if (closed || requested != revision || activity.isDestroyed()) return;
+                    report = next;
+                    if (treeView() != null) treeView().setQualityReports(report.people);
+                    updateTreeQualityButton();
+                });
+            });
+        };
+        main.postDelayed(pendingRefresh, 100L);
     }
 
-    void showTreeDialog() {
+    void close() {
+        closed = true; revision++;
+        if (pendingRefresh != null) main.removeCallbacks(pendingRefresh);
+        analyzer.shutdownNow();
+    }
+
+    Dialog showTreeDialog() {
         report = TreeQualityAnalyzer.analyze(state());
-        showQualityDialog(
+        return showQualityDialog(
             "Оценка здоровья дерева",
             state().people.size() + " карточек · " + state().links.size() + " связей",
             report.score,
@@ -148,7 +172,7 @@ final class MainActivityQuality {
             person.id);
     }
 
-    private void showQualityDialog(
+    private Dialog showQualityDialog(
         String titleValue,
         String subtitleValue,
         int score,
@@ -158,34 +182,36 @@ final class MainActivityQuality {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         boolean treeReport = personId == null || personId.isEmpty();
-        ScrollView scroll = new ScrollView(activity);
-        scroll.setFillViewport(true);
         LinearLayout shell = new LinearLayout(activity);
+        shell.setTag("quality.shell");
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(ui.dp(16), ui.dp(14), ui.dp(16), ui.dp(16));
         shell.setBackground(treeReport
             ? ui.softAccentGradientBg(ui.dp(18))
             : ui.panelBg(Color.rgb(250, 252, 253), ui.dp(18), Color.argb(56, 63, 82, 94)));
-        scroll.addView(shell, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout top = new LinearLayout(activity);
+        top.setTag("quality.header");
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout heading = new LinearLayout(activity);
         heading.setOrientation(LinearLayout.VERTICAL);
         TextView title = ui.actionTitle(titleValue, false);
         title.setTextSize(19);
-        heading.addView(title, new LinearLayout.LayoutParams(-1, ui.dp(30)));
+        title.setSingleLine(false);
+        heading.addView(title, new LinearLayout.LayoutParams(-1, -2));
         TextView subtitle = ui.actionDetail(subtitleValue, false);
         subtitle.setTextSize(11);
         heading.addView(subtitle, new LinearLayout.LayoutParams(-1, ui.dp(22)));
-        top.addView(heading, new LinearLayout.LayoutParams(0, ui.dp(52), 1));
+        top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
         top.addView(ui.closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(ui.dp(42), ui.dp(42)));
         shell.addView(top);
 
         if (treeReport) shell.addView(qualityGenderSummary(), qualityGenderParams());
-        shell.addView(qualityScoreCard(score, treeReport), qualityBlockParams());
+        View scoreCard=qualityScoreCard(score, treeReport); scoreCard.setTag("quality.score");
+        shell.addView(scoreCard, qualityBlockParams());
         LinearLayout metrics = new LinearLayout(activity);
+        metrics.setTag("quality.metrics");
         metrics.setOrientation(LinearLayout.HORIZONTAL);
         int errors = 0;
         int warnings = 0;
@@ -195,34 +221,38 @@ final class MainActivityQuality {
             else if (issue.severity == TreeQualityAnalyzer.WARNING) warnings++;
             else recommendations++;
         }
-        metrics.addView(qualityMetric("Ошибки", errors, Color.rgb(197, 83, 75)), new LinearLayout.LayoutParams(0, ui.dp(58), 1));
-        LinearLayout.LayoutParams warningParams = new LinearLayout.LayoutParams(0, ui.dp(58), 1);
+        metrics.addView(qualityMetric("Ошибки", errors, Color.rgb(197, 83, 75)), new LinearLayout.LayoutParams(0, ui.dp(compactDialog() ? 44 : 58), 1));
+        LinearLayout.LayoutParams warningParams = new LinearLayout.LayoutParams(0, ui.dp(compactDialog() ? 44 : 58), 1);
         warningParams.setMargins(ui.dp(7), 0, 0, 0);
         metrics.addView(qualityMetric("Предупреждения", warnings, Color.rgb(184, 128, 24)), warningParams);
-        LinearLayout.LayoutParams recommendationParams = new LinearLayout.LayoutParams(0, ui.dp(58), 1);
+        LinearLayout.LayoutParams recommendationParams = new LinearLayout.LayoutParams(0, ui.dp(compactDialog() ? 44 : 58), 1);
         recommendationParams.setMargins(ui.dp(7), 0, 0, 0);
         metrics.addView(qualityMetric("Советы", recommendations, Color.rgb(101, 113, 122)), recommendationParams);
         shell.addView(metrics, qualityBlockParams());
 
         TextView section = ui.sectionLabel(issues.isEmpty() ? "РЕЗУЛЬТАТ" : "ЧТО НУЖНО ПРОВЕРИТЬ");
-        shell.addView(section, new LinearLayout.LayoutParams(-1, ui.dp(34)));
+        shell.addView(section, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 24 : 34)));
+        ScrollView scroll=new ScrollView(activity); scroll.setTag("quality.issues");
+        LinearLayout problemList=new LinearLayout(activity); problemList.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(problemList,new ScrollView.LayoutParams(-1,-2));
+        shell.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         if (issues.isEmpty()) {
             TextView empty = ui.actionDetail("Замечаний не найдено. Данные выглядят согласованными.", false);
             empty.setTextSize(12);
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(ui.dp(12), ui.dp(14), ui.dp(12), ui.dp(14));
             empty.setBackground(ui.panelBg(Color.rgb(232, 248, 246), ui.dp(12), Color.argb(72, 24, 169, 153)));
-            shell.addView(empty, new LinearLayout.LayoutParams(-1, ui.dp(72)));
+            problemList.addView(empty, new LinearLayout.LayoutParams(-1, ui.dp(72)));
         } else if (treeReport) {
-            addGroupedQualityIssues(shell, issues, dialog);
+            addGroupedQualityIssues(problemList, issues, dialog);
         } else {
             int limit = Math.min(60, issues.size());
             for (int index = 0; index < limit; index++) {
-                shell.addView(qualityIssueRow(issues.get(index), dialog, false), qualityIssueParams());
+                problemList.addView(qualityIssueRow(issues.get(index), dialog, false), qualityIssueParams());
             }
         }
 
-        dialog.setContentView(scroll);
+        dialog.setContentView(shell);
         dialog.setCanceledOnTouchOutside(true);
         Window window = dialog.getWindow();
         if (window != null) {
@@ -236,6 +266,7 @@ final class MainActivityQuality {
             window.setAttributes(attrs);
         }
         dialog.show();
+        return dialog;
     }
 
     private View qualityScoreCard(int score, boolean treeReport) {
@@ -245,14 +276,14 @@ final class MainActivityQuality {
         int color = score >= 80
             ? AppThemePalette.secondary()
             : score >= 55 ? Color.rgb(184, 128, 24) : Color.rgb(197, 83, 75);
-        card.setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10));
+        card.setPadding(ui.dp(14), ui.dp(compactDialog() ? 4 : 10), ui.dp(14), ui.dp(compactDialog() ? 4 : 10));
         card.setBackground(treeReport || score >= 80
             ? ui.softAccentGradientBg(ui.dp(12))
             : ui.panelBg(Color.WHITE, ui.dp(12), Color.argb(86, Color.red(color), Color.green(color), Color.blue(color))));
         TextView scoreView = new LocalizedTextView(activity);
         LocalizedViews.setRaw(scoreView, score + "%");
         scoreView.setTextColor(color);
-        scoreView.setTextSize(26);
+        scoreView.setTextSize(compactDialog() ? 22 : 26);
         scoreView.setTypeface(ui.uiBold());
         scoreView.setGravity(Gravity.CENTER);
         card.addView(scoreView, new LinearLayout.LayoutParams(ui.dp(82), -1));
@@ -262,11 +293,11 @@ final class MainActivityQuality {
             score >= 80 ? "Хорошее состояние" : score >= 55 ? "Нужно проверить" : "Требует внимания",
             false);
         if (score >= 80) title.setTextColor(AppThemePalette.secondary());
-        copy.addView(title, new LinearLayout.LayoutParams(-1, ui.dp(25)));
+        copy.addView(title, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 19 : 25)));
         TextView detail = ui.actionDetail("Оценка учитывает заполненность, даты и семейные связи.", false);
         detail.setTextSize(9);
         detail.setMaxLines(2);
-        copy.addView(detail, new LinearLayout.LayoutParams(-1, ui.dp(34)));
+        copy.addView(detail, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 20 : 34)));
         card.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
         return card;
     }
@@ -282,11 +313,11 @@ final class MainActivityQuality {
         number.setTextSize(18);
         number.setTypeface(ui.uiBold());
         number.setGravity(Gravity.CENTER);
-        metric.addView(number, new LinearLayout.LayoutParams(-1, ui.dp(30)));
+        metric.addView(number, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 24 : 30)));
         TextView caption = ui.actionDetail(label, false);
         caption.setTextSize(8);
         caption.setGravity(Gravity.CENTER);
-        metric.addView(caption, new LinearLayout.LayoutParams(-1, ui.dp(20)));
+        metric.addView(caption, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 18 : 20)));
         return metric;
     }
 
@@ -305,7 +336,7 @@ final class MainActivityQuality {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
+        row.setPadding(ui.dp(8), ui.dp(compactDialog() ? 5 : 7), ui.dp(8), ui.dp(compactDialog() ? 5 : 7));
         row.setBackground(ui.panelBg(Color.WHITE, ui.dp(12), Color.rgb(217, 224, 229)));
         row.addView(qualityGenderMetric("М", "Мужчины", male, Color.rgb(47, 125, 185)), new LinearLayout.LayoutParams(0, -1, 1));
         LinearLayout.LayoutParams femaleParams = new LinearLayout.LayoutParams(0, -1, 1);
@@ -402,13 +433,7 @@ final class MainActivityQuality {
             ui.dp(9),
             Color.argb(76, Color.red(color), Color.green(color), Color.blue(color))));
 
-        TextView arrow = new LocalizedTextView(activity);
-        LocalizedViews.setRaw(arrow, "›");
-        arrow.setTextColor(color);
-        arrow.setTextSize(22);
-        arrow.setTypeface(ui.uiBold());
-        arrow.setGravity(Gravity.CENTER);
-        arrow.setIncludeFontPadding(false);
+        DisclosureChevron arrow = new DisclosureChevron(activity, color);
         header.addView(arrow, new LinearLayout.LayoutParams(ui.dp(28), -1));
 
         TextView title = new LocalizedTextView(activity);
@@ -447,7 +472,8 @@ final class MainActivityQuality {
                 populated[0] = true;
             }
             content.setVisibility(open ? View.GONE : View.VISIBLE);
-            LocalizedViews.setRaw(arrow, open ? "›" : "⌄");
+            arrow.expanded(!open);
+            if (!open) PanelTransitions.enter(content, false, null);
         });
         return group;
     }
@@ -515,14 +541,14 @@ final class MainActivityQuality {
     }
 
     private LinearLayout.LayoutParams qualityBlockParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, ui.dp(80));
-        params.setMargins(0, ui.dp(12), 0, 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 50 : 80));
+        params.setMargins(0, ui.dp(compactDialog() ? 6 : 12), 0, 0);
         return params;
     }
 
     private LinearLayout.LayoutParams qualityGenderParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, ui.dp(62));
-        params.setMargins(0, ui.dp(10), 0, 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 52 : 62));
+        params.setMargins(0, ui.dp(compactDialog() ? 6 : 10), 0, 0);
         return params;
     }
 
@@ -531,6 +557,8 @@ final class MainActivityQuality {
         params.setMargins(0, 0, 0, ui.dp(8));
         return params;
     }
+
+    private boolean compactDialog() { return activity.getResources().getDisplayMetrics().heightPixels<ui.dp(500); }
 
     private LinearLayout.LayoutParams qualityProblemHeaderParams() {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);

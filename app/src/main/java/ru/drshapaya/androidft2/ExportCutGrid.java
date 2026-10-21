@@ -34,7 +34,7 @@ final class ExportCutGrid extends View {
         float cellH = getHeight() / (float) ROWS;
         for (int y = 0; y < ROWS; y++) for (int x = 0; x < COLUMNS; x++) {
             paint.setColor(x <= export.verticalCuts && y <= export.horizontalCuts
-                ? Color.rgb(30, 162, 146) : Color.rgb(216, 228, 230));
+                ? AppThemePalette.primaryBright() : AppThemePalette.surface(Color.rgb(216, 228, 230)));
             canvas.drawRoundRect(x * cellW + 2, y * cellH + 2, (x + 1) * cellW - 2,
                 (y + 1) * cellH - 2, 3, 3, paint);
         }

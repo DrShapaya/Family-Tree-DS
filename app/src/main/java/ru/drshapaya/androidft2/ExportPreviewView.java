@@ -22,6 +22,11 @@ final class ExportPreviewView extends View {
     private final RectF displayExtent = new RectF();
     private final Path contentClip = new Path();
     private Bitmap bitmap;
+    private final java.util.concurrent.ExecutorService previewWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final android.os.Handler main=new android.os.Handler(android.os.Looper.getMainLooper());
+    private volatile long previewRevision;
+    private boolean released;
+    private java.util.function.Consumer<Throwable> onError;
     private int drag;
     private float lastX, lastY;
     private final ScaleGestureDetector scaleDetector;
@@ -36,7 +41,7 @@ final class ExportPreviewView extends View {
         super(context);
         this.export = export;
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(225, 233, 235));
+        background.setColor(AppThemePalette.surface(Color.rgb(225, 233, 235)));
         background.setCornerRadius(14f * density());
         setBackground(background);
         setClipToOutline(true);
@@ -76,16 +81,32 @@ final class ExportPreviewView extends View {
     }
 
     void refresh(float requestedScale, long maxPixels) {
+        if (released) return;
         export.apply();
         updateDisplayExtent();
-        Bitmap next = export.previewForDisplay(
-            displayExtent, requestedScale, maxPixels, getWidth(), getHeight());
-        if (bitmap != null) bitmap.recycle();
-        bitmap = next;
-        invalidate();
+        long revision=++previewRevision;
+        RectF bounds=new RectF(displayExtent);
+        int width=getWidth(),height=getHeight();
+        TreeImageExport snapshot=export.forkForPreview();
+        previewWorker.execute(() -> {
+            try {
+                if (revision!=previewRevision) return;
+                Bitmap next=snapshot.previewForDisplay(bounds,requestedScale,maxPixels,width,height);
+                main.post(() -> {
+                    if (released || revision!=previewRevision) { next.recycle(); return; }
+                    if (bitmap!=null) bitmap.recycle();
+                    bitmap=next; invalidate();
+                });
+            } catch (RuntimeException | OutOfMemoryError error) {
+                main.post(() -> { if (!released && revision==previewRevision && onError!=null) onError.accept(error); });
+            } finally { snapshot.close(); }
+        });
     }
 
+    void setOnError(java.util.function.Consumer<Throwable> callback) { onError=callback; }
+
     void release() {
+        released=true; previewRevision++; previewWorker.shutdown();
         if (bitmap != null) bitmap.recycle();
         bitmap = null;
     }

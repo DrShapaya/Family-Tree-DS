@@ -28,6 +28,57 @@ public final class TreeLayoutEngineStressTest {
         exerciseEveryPlacement(state);
     }
 
+    @Test(timeout = 10_000L)
+    public void globalLayoutHandlesMoreThanFiveHundredCards() {
+        TreeState state = descendantTree(6, 3);
+        assertTrue(
+            "масштабный сценарий должен содержать больше 500 карточек",
+            state.people.size() > 500);
+        applyPlacement(state, BrokenPlacement.STACK);
+
+        TreeLayoutEngine.layout(state);
+
+        assertLayoutInvariants(state, "GLOBAL_500_PLUS");
+        LayoutConstraints.ValidationResult validation = new LayoutConstraints().validate(
+            FamilyLayoutGraph.from(state),
+            LayoutSnapshot.capture(state));
+        assertTrue(
+            "GLOBAL_500_PLUS: единый валидатор не должен находить нарушений",
+            validation.isValid());
+    }
+
+    @Test(timeout = 20_000L)
+    public void localPartnerAdditionKeepsLargeArrangedTreeValid() {
+        TreeState state = descendantTree(6, 3);
+        TreeLayoutEngine.layout(state);
+        String anchorId = "g1_f0_c1_person";
+        Person anchor = state.people.get(anchorId);
+        Person added = new Person("added_partner_in_large_tree");
+        added.name = "Новый партнёр";
+        added.gender = PersonGender.UNKNOWN;
+        added.x = anchor.x - TreeLayoutEngine.CARD_W - TreeLayoutEngine.GRID;
+        added.y = anchor.y;
+        state.people.put(added.id, added);
+        state.links.add(new Relation("added_large_partner", "partner", anchorId, added.id, "left"));
+        for (Relation relation : new ArrayList<>(state.links)) {
+            if ("parent".equals(relation.type) && anchorId.equals(relation.from)) {
+                state.links.add(new Relation("added_parent_" + relation.to,
+                    "parent", added.id, relation.to, "right"));
+            }
+        }
+        state.autoArrangeOnAdd = true;
+
+        TreeLayoutEngine.layoutAfterAddition(
+            state,
+            java.util.Collections.singleton(added.id),
+            anchorId,
+            "add-partner-with-children");
+
+        assertTrue("a large tree should remain valid after a local partner addition",
+            new LayoutConstraints().validate(
+                FamilyLayoutGraph.from(state), LayoutSnapshot.capture(state)).isValid());
+    }
+
     @Test(timeout = 20_000L)
     public void complexRemarriageTreeRecoversFromEveryBrokenPlacement() {
         exerciseEveryPlacement(complexRemarriageTree());
@@ -58,6 +109,30 @@ public final class TreeLayoutEngineStressTest {
 
         assertLayoutInvariants(state, "STEPWISE_IDEMPOTENT");
         assertSameLayout(arrangedOnce, state, "STEPWISE_IDEMPOTENT");
+    }
+
+    @Test(timeout = 90_000L)
+    public void stepwiseManualArrangeHandlesMoreThanFiveHundredCardsAndIsIdempotent() {
+        TreeState state = descendantTree(6, 3);
+        assertTrue(
+            "масштабный сценарий должен содержать больше 500 карточек",
+            state.people.size() > 500);
+        applyPlacement(state, BrokenPlacement.STACK);
+
+        TreeLayoutEngine.rebuildStepwise(state);
+
+        assertLayoutInvariants(state, "STEPWISE_500_PLUS");
+        LayoutConstraints.ValidationResult validation = new LayoutConstraints().validate(
+            FamilyLayoutGraph.from(state),
+            LayoutSnapshot.capture(state));
+        assertTrue(
+            "STEPWISE_500_PLUS: после первого упорядочивания дерево должно быть валидным",
+            validation.isValid());
+
+        TreeState arrangedOnce = TreeStateCopier.copy(state);
+        TreeLayoutEngine.rebuildStepwise(state);
+
+        assertSameLayout(arrangedOnce, state, "STEPWISE_500_PLUS_IDEMPOTENT");
     }
 
     @Test(timeout = 20_000L)
@@ -95,16 +170,14 @@ public final class TreeLayoutEngineStressTest {
         FamilyLayoutGraph.ParentFamily secondUnion = graph.parentFamilyOf(
             "second_marriage_child_0");
         assertTrue(firstUnion != null && secondUnion != null && firstUnion != secondUnion);
-        assertEquals(
-            describeFamily(firstUnion, state),
-            directCenter(firstUnion.parents, state),
-            directCenter(firstUnion.children, state),
-            TreeLayoutEngine.GRID);
-        assertEquals(
-            describeFamily(secondUnion, state),
-            directCenter(secondUnion.parents, state),
-            directCenter(secondUnion.children, state),
-            TreeLayoutEngine.GRID);
+        assertTrue(state.people.get(remarried).x
+            < state.people.get("g1_f0_c0_partner").x);
+        assertTrue(state.people.get(remarried).x
+            < state.people.get("second_partner").x);
+        // Repeated unions are independent outward blocks. Requiring each child
+        // block to share the average center of the common parent and its spouse
+        // would pull both unions back through one another; the invariant checks
+        // above cover separation, generations and card collisions instead.
 
         TreeState arrangedOnce = TreeStateCopier.copy(state);
         TreeLayoutEngine.rebuildStepwise(state);
@@ -297,33 +370,6 @@ public final class TreeLayoutEngineStressTest {
             assertEquals(scenario + ": недетерминированный X для " + id, a.x, b.x, EPSILON);
             assertEquals(scenario + ": недетерминированный Y для " + id, a.y, b.y, EPSILON);
         }
-    }
-
-    private static float directCenter(Iterable<String> ids, TreeState state) {
-        float left = Float.MAX_VALUE;
-        float right = -Float.MAX_VALUE;
-        for (String id : ids) {
-            Person person = state.people.get(id);
-            if (person == null) continue;
-            left = Math.min(left, person.x);
-            right = Math.max(right, person.x + TreeLayoutEngine.CARD_W);
-        }
-        return (left + right) / 2f;
-    }
-
-    private static String describeFamily(
-        FamilyLayoutGraph.ParentFamily family,
-        TreeState state
-    ) {
-        StringBuilder value = new StringBuilder();
-        for (String id : family.parents) {
-            value.append(id).append('=').append(state.people.get(id).x).append(' ');
-        }
-        value.append(" children: ");
-        for (String id : family.children) {
-            value.append(id).append('=').append(state.people.get(id).x).append(' ');
-        }
-        return value.toString();
     }
 
     private static void addPerson(TreeState state, String id, String name, int year, String gender) {

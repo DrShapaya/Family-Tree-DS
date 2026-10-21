@@ -22,24 +22,38 @@ final class BotanicalCanvasBackground {
     private static final int CROP_TOP = 168;
     private static final int CROP_RIGHT = 1434;
     private static final int CROP_BOTTOM = 773;
-    private final Bitmap bitmap;
-    private final BitmapShader shader;
-    private final BitmapShader secondaryShader;
+    private static final java.util.Map<Integer,java.lang.ref.WeakReference<Bitmap>> textures=new java.util.HashMap<>();
+    private final android.content.res.Resources resources;
+    private Bitmap bitmap;
+    private BitmapShader shader;
+    private BitmapShader secondaryShader;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Matrix matrix = new Matrix();
 
     BotanicalCanvasBackground(Context context) {
-        Bitmap source = BitmapFactory.decodeResource(
-            context.getResources(), R.drawable.canvas_background_botanical);
-        bitmap = cropTexture(source);
+        resources=context.getResources();
+    }
+
+    private void ensureTexture() {
+        if(bitmap!=null)return;
+        synchronized(textures) {
+            int density=resources.getDisplayMetrics().densityDpi;
+            java.lang.ref.WeakReference<Bitmap> reference=textures.get(density);
+            bitmap=reference==null?null:reference.get();
+            if(bitmap==null) {
+                bitmap=cropTexture(BitmapFactory.decodeResource(resources,R.drawable.canvas_background_botanical));
+                if(bitmap!=null)textures.put(density,new java.lang.ref.WeakReference<>(bitmap));
+            }
+        }
         shader = bitmap == null ? null : new BitmapShader(
-            bitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+            bitmap, Shader.TileMode.MIRROR, Shader.TileMode.MIRROR);
         secondaryShader = bitmap == null ? null : new BitmapShader(
-            bitmap, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+            bitmap, Shader.TileMode.MIRROR, Shader.TileMode.MIRROR);
     }
 
     void draw(Canvas canvas, int width, int height, float scale, float offsetX, float offsetY,
               boolean dark, boolean fitArea) {
+        ensureTexture();
         if (shader == null || secondaryShader == null || bitmap == null) return;
         float imageScale = fitArea
             ? Math.max(width / (float) bitmap.getWidth(), height / (float) bitmap.getHeight())
@@ -62,13 +76,11 @@ final class BotanicalCanvasBackground {
             : SECONDARY_TILE_WORLD_WIDTH / bitmap.getWidth() * Math.max(.01f, scale);
         matrix.reset();
         matrix.setScale(secondaryScale, secondaryScale);
-        matrix.postTranslate(
-            fitArea
-                ? (width - bitmap.getWidth() * secondaryScale) / 2f + 137f
-                : offsetX + 137f * Math.max(.01f, scale),
-            fitArea
-                ? (height - bitmap.getHeight() * secondaryScale) / 2f - 89f
-                : offsetY - 89f * Math.max(.01f, scale));
+        float secondaryX=fitArea ? (width-bitmap.getWidth()*secondaryScale)/2f+137f
+            : offsetX+137f*Math.max(.01f,scale);
+        float secondaryY=fitArea ? (height-bitmap.getHeight()*secondaryScale)/2f-89f
+            : offsetY-89f*Math.max(.01f,scale);
+        matrix.postTranslate(secondaryX,secondaryY);
         secondaryShader.setLocalMatrix(matrix);
         paint.setShader(secondaryShader);
         paint.setColor(Color.WHITE);

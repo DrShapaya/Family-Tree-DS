@@ -12,6 +12,7 @@ final class RewardCatalog {
     static final String WIDGET_FRAMES = "widget_frames";
     static final String EXPORT_FRAMES = "export_frames";
     static final String STANDARD = "standard";
+    static final String LINK_STYLE_CARD_COLORS = "link_style_card_colors";
     static final String RARITY_COMMON = "common";
     static final String RARITY_RARE = "rare";
     static final String RARITY_EPIC = "epic";
@@ -118,6 +119,8 @@ final class RewardCatalog {
             "Зелёные побеги, листья с прожилками и маленькие белые цветы.", RARITY_RARE),
         new Item("link_style_botanical", LINK_STYLES, "Растительные связи",
             "Тонкие вьющиеся стебли с листьями. Родственные пунктиры сохраняются.", RARITY_RARE),
+        new Item(LINK_STYLE_CARD_COLORS, LINK_STYLES, "Связи в цвет карточек",
+            "Линии повторяют цвета карточек. При окраске по фамилии ветви получают семейные цвета.", RARITY_COMMON),
         new Item(
             "canvas_background_paper",
             CANVAS_BACKGROUNDS,

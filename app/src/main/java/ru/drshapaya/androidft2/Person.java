@@ -3,8 +3,16 @@ package ru.drshapaya.androidft2;
 final class Person {
     String id;
     String name = "";
+    String surname = "";
+    String givenName = "";
+    String patronymic = "";
+    String maidenName = "";
+    boolean namePartsSet = false;
+    boolean maidenNameEnabled = false;
+    String surnameDisplay = "inherit";
     String born = "";
     String died = "";
+    String lifeStatus = PersonLifeStatus.UNKNOWN;
     String bornDay = "";
     String bornMonth = "";
     String bornYear = "";
@@ -27,6 +35,11 @@ final class Person {
     float x = Float.NaN;
     float y = Float.NaN;
     boolean pinned = false;
+    transient SearchCache searchCache = new SearchCache();
+
+    static final class SearchCache {
+        volatile SmartPeopleSearch.PreparedText text;
+    }
 
     Person(String id) {
         this.id = id;
