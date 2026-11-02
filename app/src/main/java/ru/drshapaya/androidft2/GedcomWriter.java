@@ -2,7 +2,7 @@ package ru.drshapaya.androidft2;
 
 import java.util.*;
 
-/** Exports explicit relationships without dropping childless families or extra parents. */
+/** Exports explicit relationships without inventing parentless families. */
 final class GedcomWriter {
     private static final class Family {
         String id;
@@ -14,13 +14,19 @@ final class GedcomWriter {
         for (String id : state.people.keySet()) ids.put(id, "I" + (ids.size()+1));
         List<Family> families = new ArrayList<>();
         Map<String,Set<String>> parents = new LinkedHashMap<>();
+        Map<String,Set<String>> siblings = new LinkedHashMap<>();
+        Map<String,Set<String>> customParents = new LinkedHashMap<>();
+        for (String id : state.people.keySet()) siblings.put(id, new LinkedHashSet<>());
         for (Relation r : state.links) {
             if (!ids.containsKey(r.from) || !ids.containsKey(r.to) || r.from.equals(r.to)) continue;
             if ("parent".equals(r.type)) parents.computeIfAbsent(r.to, k -> new LinkedHashSet<>()).add(r.from);
-            if ("partner".equals(r.type) || "sibling".equals(r.type)) {
+            if ("sibling".equals(r.type)) {
+                siblings.get(r.from).add(r.to);
+                siblings.get(r.to).add(r.from);
+            }
+            if ("partner".equals(r.type)) {
                 Family f = new Family();
-                if ("partner".equals(r.type)) { f.parents.add(r.from); f.parents.add(r.to); }
-                else { f.children.add(r.from); f.children.add(r.to); }
+                f.parents.add(r.from); f.parents.add(r.to);
                 families.add(f);
             }
         }
@@ -32,10 +38,23 @@ final class GedcomWriter {
                 }
             }
             for (String parent : remaining) {
-                Family single = null;
-                for (Family f : families) if (f.parents.size()==1 && f.parents.get(0).equals(parent)) { single=f; break; }
-                if (single==null) { single=new Family(); single.parents.add(parent); families.add(single); }
-                single.children.add(entry.getKey());
+                if (remaining.size() == 1) {
+                    customParents.computeIfAbsent(parent, k -> new LinkedHashSet<>()).add(entry.getKey());
+                }
+            }
+            if (remaining.size() > 1) {
+                Family grouped = null;
+                for (Family f : families) {
+                    if (f.parents.size() == remaining.size() && f.parents.containsAll(remaining)) {
+                        grouped = f; break;
+                    }
+                }
+                if (grouped == null) {
+                    grouped = new Family();
+                    grouped.parents.addAll(remaining);
+                    families.add(grouped);
+                }
+                grouped.children.add(entry.getKey());
             }
         }
         for (int i=0;i<families.size();i++) families.get(i).id="F"+(i+1);
@@ -73,6 +92,10 @@ final class GedcomWriter {
             if (!died.isEmpty()) { out.append("1 DEAT\n"); text(out,2,"DATE",died); }
             else if (PersonLifeStatus.DECEASED.equals(p.lifeStatus)) out.append("1 DEAT Y\n");
             if (!p.notes.isEmpty()) text(out,1,"NOTE",p.notes);
+            for (String sibling : siblings.getOrDefault(p.id, Collections.emptySet()))
+                out.append("1 _FTDS_SIBL @").append(ids.get(sibling)).append("@\n");
+            for (String child : customParents.getOrDefault(p.id, Collections.emptySet()))
+                out.append("1 _FTDS_PARENT @").append(ids.get(child)).append("@\n");
             for (Relation r : state.links) if ("family".equals(r.type) && p.id.equals(r.from) && ids.containsKey(r.to)) {
                 out.append("1 ASSO @").append(ids.get(r.to)).append("@\n2 RELA family\n");
             }

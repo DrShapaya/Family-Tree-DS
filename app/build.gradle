@@ -61,8 +61,8 @@ android {
         applicationId 'ru.drshapaya.familytree'
         minSdk 24
         targetSdk 36
-        versionCode 309
-        versionName '2.8.1'
+        versionCode 310
+        versionName '2.8.2'
         manifestPlaceholders = [appLabel: "Family Tree DS"]
         buildConfigField "String", "GITHUB_CLIENT_ID", "\"${githubClientId.replace("\\", "\\\\").replace("\"", "\\\"")}\""
         buildConfigField "String", "GITHUB_CLIENT_SECRET", "\"${githubClientSecret.replace("\\", "\\\\").replace("\"", "\\\"")}\""

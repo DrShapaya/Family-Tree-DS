@@ -98,6 +98,8 @@ final class GedcomReader {
         }
         Map<String, Person> people = new LinkedHashMap<>();
         Map<String, Family> families = new LinkedHashMap<>();
+        Map<String, Set<String>> siblingPointers = new LinkedHashMap<>();
+        Map<String, Set<String>> parentPointers = new LinkedHashMap<>();
         Map<String, String> parentGenders = new LinkedHashMap<>();
         Set<String> explicitSex = new LinkedHashSet<>();
         for (Node n : roots) {
@@ -156,6 +158,14 @@ final class GedcomReader {
                             ("FAMC".equals(field.tag) ? f.children : f.parents).add(n.pointer);
                             if (!records.containsKey(field.value) || !"FAM".equals(records.get(field.value).tag)) result.unresolvedReferences++;
                             break;
+                        case "_FTDS_SIBL":
+                            if (field.value.matches("@[^@]+@"))
+                                siblingPointers.computeIfAbsent(n.pointer, key -> new LinkedHashSet<>()).add(field.value);
+                            break;
+                        case "_FTDS_PARENT":
+                            if (field.value.matches("@[^@]+@"))
+                                parentPointers.computeIfAbsent(n.pointer, key -> new LinkedHashSet<>()).add(field.value);
+                            break;
                         case "OBJE":
                             Node media = resolve(field, records, result);
                             if (media == null) break;
@@ -189,6 +199,24 @@ final class GedcomReader {
             }
         }
         Set<String> links = new LinkedHashSet<>();
+        for (Map.Entry<String, Set<String>> entry : siblingPointers.entrySet()) {
+            Person a = people.get(entry.getKey());
+            if (a == null) { result.unresolvedReferences += entry.getValue().size(); continue; }
+            for (String pointer : entry.getValue()) {
+                Person b = people.get(pointer);
+                if (b == null) result.unresolvedReferences++;
+                else link(result.state, links, "sibling", a, b);
+            }
+        }
+        for (Map.Entry<String, Set<String>> entry : parentPointers.entrySet()) {
+            Person parent = people.get(entry.getKey());
+            if (parent == null) { result.unresolvedReferences += entry.getValue().size(); continue; }
+            for (String pointer : entry.getValue()) {
+                Person child = people.get(pointer);
+                if (child == null) result.unresolvedReferences++;
+                else link(result.state, links, "parent", parent, child);
+            }
+        }
         for (Node n : roots) if ("INDI".equals(n.tag)) {
             for (Node field : n.children) if ("ASSO".equals(field.tag) && "family".equalsIgnoreCase(field.value("RELA").trim())) {
                 Person a = people.get(n.pointer), b = people.get(field.value);

@@ -91,6 +91,46 @@ public class GedcomCompatibilityTest {
             +"0 @F@ FAM\n1 CHIL @A@\n1 CHIL @B@\n0 TRLR\n");
         assertEquals(1,r.state.links.size()); assertEquals("sibling",r.state.links.get(0).type);
     }
+    @Test public void exportsSiblingsWithoutInventingParentlessFamilies() {
+        TreeState state = new TreeState();
+        Person a = new Person("a"); a.name = "A";
+        Person b = new Person("b"); b.name = "B";
+        state.people.put(a.id, a); state.people.put(b.id, b);
+        state.addRelation("sibling", a.id, b.id);
+
+        String gedcom = GedcomWriter.write(state);
+        assertTrue(gedcom.contains("1 _FTDS_SIBL @I2@"));
+        assertTrue(gedcom.contains("1 _FTDS_SIBL @I1@"));
+        assertFalse(gedcom.contains(" FAM\n"));
+
+        GedcomReader.Result restored = GedcomReader.read(gedcom);
+        assertEquals(2, restored.state.people.size());
+        assertEquals(1, restored.state.links.size());
+        assertEquals("sibling", restored.state.links.get(0).type);
+        assertEquals(0, restored.unresolvedReferences);
+    }
+    @Test public void groupsUnpairedCoParentsAndKeepsTrueSingleParentsAsExtensionLinks() {
+        TreeState state = new TreeState();
+        Person parentA = new Person("parentA"); parentA.name = "Parent A";
+        Person parentB = new Person("parentB"); parentB.name = "Parent B";
+        Person child = new Person("child"); child.name = "Child";
+        Person loneChild = new Person("loneChild"); loneChild.name = "Lone child";
+        state.people.put(parentA.id, parentA); state.people.put(parentB.id, parentB);
+        state.people.put(child.id, child); state.people.put(loneChild.id, loneChild);
+        state.addRelation("parent", parentA.id, child.id);
+        state.addRelation("parent", parentB.id, child.id);
+        state.addRelation("parent", parentA.id, loneChild.id);
+
+        String gedcom = GedcomWriter.write(state);
+        assertTrue(gedcom.contains("1 HUSB @I1@"));
+        assertTrue(gedcom.contains("1 WIFE @I2@"));
+        assertTrue(gedcom.contains("1 _FTDS_PARENT @I4@"));
+        assertFalse(gedcom.contains("1 HUSB @I1@\n1 CHIL @I4@"));
+
+        GedcomReader.Result restored = GedcomReader.read(gedcom);
+        assertEquals(0, restored.unresolvedReferences);
+        assertEquals(3, restored.state.links.stream().filter(r -> "parent".equals(r.type)).count());
+    }
 
     @Test public void reportsUnresolvedRecordsAndUnsupportedEmbeddedImages() {
         GedcomReader.Result r=GedcomReader.read("0 HEAD\n0 @A@ INDI\n1 NAME A\n1 FAMC @missing@\n"
