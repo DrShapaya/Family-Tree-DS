@@ -23,7 +23,13 @@ final class MainActivityStatistics {
         statisticsTitle.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_statistics, 0, 0, 0);
         statisticsTitle.setCompoundDrawablePadding(activity.dp(8));
         activity.tintDrawables(statisticsTitle, AppThemePalette.secondary());
-        shell.addView(statisticsTitle);
+        LinearLayout statisticsHeader = new LinearLayout(activity);
+        statisticsHeader.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        statisticsHeader.addView(statisticsTitle, new LinearLayout.LayoutParams(0, -2, 1));
+        statisticsHeader.addView(
+            activity.closeButton(v -> dialog.dismiss()),
+            new LinearLayout.LayoutParams(activity.dp(42), activity.dp(42)));
+        shell.addView(statisticsHeader);
         LinearLayout tabs = new LinearLayout(activity);
         android.widget.Button numbers = activity.actionButton("Показатели",null);
         android.widget.Button diagrams = activity.actionButton("Диаграммы",null);
@@ -89,7 +95,6 @@ final class MainActivityStatistics {
         metric(activity, content, "Родителей с детьми в дереве", String.valueOf(stats.parentSamples));
         content.addView(text(activity, "Среднее рассчитано среди людей, у которых записан хотя бы один ребёнок. Учитываются только связи в этом дереве, повторные связи не увеличивают число детей.", 12, false));
         buildCharts(activity, charts, stats, reference);
-        shell.addView(activity.actionButton("Закрыть", v -> dialog.dismiss()));
         dialog.setContentView(shell);
         dialog.show();
         Window window = dialog.getWindow();

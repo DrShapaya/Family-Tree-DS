@@ -2817,6 +2817,9 @@ final class MainActivityPeople {
         String born = value(person.bornYear).isEmpty() ? value(person.born) : value(person.bornYear);
         String died = value(person.diedYear).isEmpty() ? value(person.died) : value(person.diedYear);
         if (born.isEmpty() && died.isEmpty()) return "";
+        boolean english = AppLanguage.isEnglish(activity);
+        if (died.isEmpty()) return (english ? "b. " : "род. ") + born;
+        if (born.isEmpty()) return (english ? "d. " : "ум. ") + died;
         return born + "–" + died;
     }
 

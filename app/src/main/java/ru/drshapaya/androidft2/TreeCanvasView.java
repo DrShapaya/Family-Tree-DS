@@ -52,6 +52,8 @@ final class TreeCanvasView extends View {
         void onCanvasTouched();
         void onEditBlocked();
         void onZoomChanged(float scale);
+        /** A finished pan or pinch of the canvas (not a card drag). */
+        default void onViewportGesture() {}
     }
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -140,6 +142,7 @@ final class TreeCanvasView extends View {
     private TreeState state;
     private TreeMediaStore mediaStore;
     private Listener listener;
+    private float rightInset;
     private String filter = "";
     private SmartPeopleSearch.Query smartFilter;
     private final ExecutorService filterWorker = Executors.newSingleThreadExecutor();
@@ -264,7 +267,10 @@ final class TreeCanvasView extends View {
                 zoom(detector.getScaleFactor(), detector.getFocusX(), detector.getFocusY());
                 return true;
             }
-            @Override public void onScaleEnd(ScaleGestureDetector detector) { postInvalidateOnAnimation(); }
+            @Override public void onScaleEnd(ScaleGestureDetector detector) {
+                postInvalidateOnAnimation();
+                if (listener != null) listener.onViewportGesture();
+            }
         });
     }
 
@@ -578,7 +584,7 @@ final class TreeCanvasView extends View {
     }
 
     PointF viewportCenterWorld() {
-        return new PointF((getWidth() / 2f - offsetX) / scale - cardWidthWorld() / 2f, (getHeight() / 2f - offsetY) / scale - cardHeightWorld() / 2f);
+        return new PointF((visibleCenterX() - offsetX) / scale - cardWidthWorld() / 2f, (getHeight() / 2f - offsetY) / scale - cardHeightWorld() / 2f);
     }
 
     void setTheme(String value) {
@@ -609,13 +615,25 @@ final class TreeCanvasView extends View {
         removeCallbacks(continuousZoom);
     }
 
+    /**
+     * Width of the floating tool rail over the right edge. Fitting and focusing
+     * centre the tree in the space left of it so no card ends up under the buttons.
+     */
+    void setRightInset(float inset) {
+        rightInset = Math.max(0f, inset);
+    }
+
+    private float visibleCenterX() {
+        return (getWidth() - rightInset) / 2f;
+    }
+
     void fit() {
         if (state == null || state.people.isEmpty() || getWidth() == 0 || getHeight() == 0) return;
         RectF bounds = treeBounds();
-        float sx = (getWidth() - 80f) / Math.max(cardWidthWorld(), bounds.width());
+        float sx = (getWidth() - rightInset - 80f) / Math.max(cardWidthWorld(), bounds.width());
         float sy = (getHeight() - 180f) / Math.max(cardHeightWorld(), bounds.height());
         float target = clamp(Math.min(sx, sy), 0.08f, 2.2f);
-        animateCamera(target, getWidth() / 2f - bounds.centerX() * target,
+        animateCamera(target, visibleCenterX() - bounds.centerX() * target,
             getHeight() / 2f - bounds.centerY() * target);
     }
 
@@ -630,7 +648,7 @@ final class TreeCanvasView extends View {
         Person person = state.people.get(personId);
         if (person == null) return;
         float target = clamp(Math.max(scale, 0.95f), 0.08f, 2.2f);
-        animateCamera(target, getWidth() / 2f - (person.x + cardWidthWorld() / 2f) * target,
+        animateCamera(target, visibleCenterX() - (person.x + cardWidthWorld() / 2f) * target,
             getHeight() / 2f - (person.y + cardHeightWorld() / 2f) * target);
         focusHighlightId = personId;
         focusHighlightUntil = SystemClock.uptimeMillis() + 1800L;
@@ -2204,8 +2222,10 @@ final class TreeCanvasView extends View {
         String born = displayDate(person.bornDay, person.bornMonth, person.bornYear);
         String died = displayDate(person.diedDay, person.diedMonth, person.diedYear);
         int age = age(person);
-        String ageText = age < 0 ? "" : " (" + ageLabel(age) + ")";
-        if (!born.isEmpty() && !died.isEmpty()) return born + " - " + died + ageText;
+        // Only a year is known for many ancestors, so the age is marked as approximate.
+        String ageText = age < 0 ? ""
+            : " (" + (BirthdayCalculator.hasExactAge(person) ? "" : "≈") + ageLabel(age) + ")";
+        if (!born.isEmpty() && !died.isEmpty()) return born + " – " + died + ageText;
         if (!born.isEmpty()) {
             return (AppLanguage.isEnglish(getContext()) ? "Born " : "Род. ")
                 + born + ageText;
@@ -2722,6 +2742,7 @@ final class TreeCanvasView extends View {
                     finishSelection();
                     return true;
                 }
+                if (moved && draggingCanvas && listener != null) listener.onViewportGesture();
                 if (!moved && draggingCanvas) {
                     Relation link = hitLink(event.getX(), event.getY());
                     if (link != null) {

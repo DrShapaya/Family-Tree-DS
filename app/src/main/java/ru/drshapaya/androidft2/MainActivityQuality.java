@@ -265,10 +265,11 @@ final class MainActivityQuality {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             WindowManager.LayoutParams attrs = window.getAttributes();
             attrs.width = width;
-            attrs.height = Math.min(activity.getResources().getDisplayMetrics().heightPixels - ui.dp(54), ui.dp(760));
             attrs.dimAmount = 0.34f;
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             window.setAttributes(attrs);
+            DialogSizing.wrapUpTo(dialog, shell, scroll,
+                Math.min(activity.getResources().getDisplayMetrics().heightPixels - ui.dp(54), ui.dp(760)));
         }
         dialog.show();
         return dialog;

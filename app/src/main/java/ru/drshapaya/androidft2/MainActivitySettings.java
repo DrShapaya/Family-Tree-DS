@@ -63,6 +63,7 @@ final class MainActivitySettings {
     void toggleGenerationLines() {
         activity.generationLines = !activity.generationLines;
         activity.treeView.setGenerationLines(activity.generationLines);
+        activity.refreshGuidesTile();
         refreshSettingsIfVisible();
         activity.saveOnly();
         refreshGuidePanelIfVisible();
@@ -137,6 +138,7 @@ final class MainActivitySettings {
     void setTheme(String nextTheme) {
         String normalized = normalizeTheme(nextTheme);
         if (normalized.equals(activity.theme)) return;
+        activity.rememberSettingsScroll();
         activity.theme = normalized;
         activity.saveOnly();
         activity.toast("clean".equals(activity.theme) ? "Чистый режим" : "dark".equals(activity.theme) ? "Тёмная тема" : "Светлая тема");

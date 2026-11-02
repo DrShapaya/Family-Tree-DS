@@ -191,8 +191,8 @@ final class MainActivityFiles {
         header.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = versionText(share ? "Отправить дерево" : "Сохранить файл", 21, Color.rgb(28, 34, 38), true);
         header.addView(title, new LinearLayout.LayoutParams(0, activity.dp(48), 1));
-        Button close = activity.actionButton("Закрыть", v -> dialog.dismiss());
-        header.addView(close, new LinearLayout.LayoutParams(activity.dp(90), activity.dp(42)));
+        TextView close = activity.closeButton(v -> dialog.dismiss());
+        header.addView(close, new LinearLayout.LayoutParams(activity.dp(42), activity.dp(42)));
         shell.addView(header);
 
         TextView intro = versionText(
@@ -1042,8 +1042,8 @@ final class MainActivityFiles {
             versionText(titleValue, 19, Color.rgb(28, 34, 38), true),
             new LinearLayout.LayoutParams(0, activity.dp(46), 1));
         header.addView(
-            activity.actionButton("Закрыть", v -> dialog.dismiss()),
-            new LinearLayout.LayoutParams(activity.dp(90), activity.dp(42)));
+            activity.closeButton(v -> dialog.dismiss()),
+            new LinearLayout.LayoutParams(activity.dp(42), activity.dp(42)));
         shell.addView(header);
         dialog.setContentView(shell);
         dialog.setCanceledOnTouchOutside(true);
@@ -1108,8 +1108,8 @@ final class MainActivityFiles {
         heading.addView(subtitle);
         header.addView(heading, new LinearLayout.LayoutParams(0, activity.dp(52), 1));
 
-        Button close = activity.actionButton("Закрыть", v -> dialog.dismiss());
-        header.addView(close, new LinearLayout.LayoutParams(activity.dp(90), activity.dp(42)));
+        TextView close = activity.closeButton(v -> dialog.dismiss());
+        header.addView(close, new LinearLayout.LayoutParams(activity.dp(42), activity.dp(42)));
         shell.addView(header);
 
         ScrollView scroll = new ScrollView(activity);
@@ -1156,10 +1156,10 @@ final class MainActivityFiles {
             shell.setMinimumWidth(width);
             WindowManager.LayoutParams attrs = window.getAttributes();
             attrs.width = width;
-            attrs.height = height;
             attrs.dimAmount = 0.32f;
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             window.setAttributes(attrs);
+            DialogSizing.wrapUpTo(dialog, shell, scroll, height);
         }
         dialog.show();
     }

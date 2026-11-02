@@ -133,4 +133,22 @@ final class BirthdayCalculator {
     private static String safeName(Person person) {
         return person == null || person.name == null ? "" : person.name.trim();
     }
+
+    /**
+     * True when the age can be stated exactly: the birth day and month are known,
+     * and for a deceased person the death day and month are known too.
+     */
+    static boolean hasExactAge(Person person) {
+        if (person == null || !positive(person.bornDay) || !positive(person.bornMonth)) return false;
+        boolean died = positive(person.diedYear);
+        return !died || positive(person.diedDay) && positive(person.diedMonth);
+    }
+
+    private static boolean positive(String value) {
+        try {
+            return value != null && Integer.parseInt(value.trim()) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
 }

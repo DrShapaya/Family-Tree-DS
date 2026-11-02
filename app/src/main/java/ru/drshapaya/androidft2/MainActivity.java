@@ -22,6 +22,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Base64;
 import android.view.Gravity;
@@ -77,9 +78,12 @@ public final class MainActivity extends Activity {
     private static final String UI_PREFERENCES = "androidft-ui";
     private static final String TRAINING_OFFER_HANDLED = "training_offer_handled";
     private static final String PREF_TREE_HINT_DISMISSED = "tree_hint_dismissed";
+    private static final String STATE_ACTIVE_PANEL = "active_panel";
+    private static final String STATE_SETTINGS_SCROLL = "settings_scroll";
     private static final String PREF_UI_SCALE = "ui_scale";
     private static final String PREF_FONT_SCALE = "font_scale";
     private static final long TREE_HINT_AUTO_HIDE_MS = 5L * 60L * 1000L;
+    private static final int TREE_HINT_GESTURES_TO_LEARN = 3;
     static final String[][] TRAINING_STEPS = new String[][]{
         {"", "Как управлять деревом", "Перемещайте полотно одним пальцем, меняйте масштаб щипком, а карточку выбирайте обычным нажатием.", "next"},
         {"add-person", "Добавление человека", "Кнопка + создаёт первую карточку или открывает выбор родственника. В обучении мы ничего добавлять не будем.", "next"},
@@ -107,6 +111,12 @@ public final class MainActivity extends Activity {
     LinearLayout viewPanel;
     LinearLayout branchPanel;
     LinearLayout settingsPanel;
+    private ScrollView settingsScroll;
+    private TextView guidesTileDetail;
+    /** Settings scroll position to restore after a theme or language recreate; -1 if none. */
+    private int pendingSettingsScrollY = -1;
+    /** Scroll position taken when a theme or language change starts, before views reset it. */
+    private int rememberedSettingsScrollY = -1;
     View peoplePanel;
     View morePanel;
     LinearLayout settingsContent;
@@ -152,6 +162,7 @@ public final class MainActivity extends Activity {
     View distantCardsWarning;
     View actionOverlay;
     boolean treeHintDismissed;
+    private int treeHintGestures;
     boolean treeHintAutoHidden;
     View zoomRail;
     View bottomNavigation;
@@ -270,6 +281,9 @@ public final class MainActivity extends Activity {
             guideDraftLabel = "Generation";
         }
         store = new TreeStore(this);
+        if (savedInstanceState != null && "settings".equals(savedInstanceState.getString(STATE_ACTIVE_PANEL))) {
+            pendingSettingsScrollY = savedInstanceState.getInt(STATE_SETTINGS_SCROLL, 0);
+        }
         startupSplash = new StartupSplash(this, savedInstanceState);
         StartupSplash splash = startupSplash;
         new Thread(() -> {
@@ -282,6 +296,18 @@ public final class MainActivity extends Activity {
                 });
             });
         }, "tree-startup-loader").start();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // Theme and language changes recreate the activity from Settings; reopen it there.
+        if ("settings".equals(activePanel)) {
+            outState.putString(STATE_ACTIVE_PANEL, activePanel);
+            outState.putInt(STATE_SETTINGS_SCROLL, rememberedSettingsScrollY >= 0
+                ? rememberedSettingsScrollY
+                : settingsScroll == null ? 0 : settingsScroll.getScrollY());
+        }
     }
 
     private void initializeTree(TreeState loaded) {
@@ -403,6 +429,12 @@ public final class MainActivity extends Activity {
         String recoveryNotice = store.consumeRecoveryNotice();
         if (!recoveryNotice.isEmpty()) toast(recoveryNotice);
         handleIncomingIntent(getIntent());
+        if (pendingSettingsScrollY >= 0) {
+            int scrollY = pendingSettingsScrollY;
+            pendingSettingsScrollY = -1;
+            showPanel("settings");
+            restoreSettingsScroll(scrollY);
+        }
         Runnable afterStartup = () -> {
             if (!isFinishing() && !isDestroyed() && stage != null) {
                 stage.postDelayed(this::offerTrainingIfNeeded, 420);
@@ -625,6 +657,10 @@ public final class MainActivity extends Activity {
             @Override public void onEditBlocked() {
                 showEditingLockedPrompt();
             }
+            @Override public void onViewportGesture() {
+                countTreeHintGesture();
+            }
+
             @Override public void onZoomChanged(float scale) {
                 showZoomIndicator(scale);
             }
@@ -692,7 +728,7 @@ public final class MainActivity extends Activity {
         stage.addView(zoomIndicator, zoomIndicatorParams);
 
         TextView hint = new LocalizedTextView(this);
-        hint.setText("Один палец - движение, два пальца - масштаб");
+        hint.setText("Один палец — сдвиг, два — масштаб");
         hint.setTextColor(Color.rgb(101, 113, 122));
         hint.setTextSize(13);
         hint.setTypeface(ui());
@@ -740,6 +776,8 @@ public final class MainActivity extends Activity {
         stage.addView(canvasModePanel, canvasModeParams());
         zoomRail = buildZoomRail();
         stage.addView(zoomRail, railParams());
+        zoomRail.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+            updateTreeRightInset());
         historyPanel = buildHistoryPanel();
         stage.addView(historyPanel, historyParams());
         branchStatusPanel = buildBranchStatusPanel();
@@ -1293,10 +1331,6 @@ public final class MainActivity extends Activity {
                 showPanel("");
                 MainActivityStatistics.show(this, state.people.containsKey(state.rootId) ? state.rootId : state.selectedId);
             }), moreBubbleParams(false));
-        bubbles.addView(moreBubble(R.drawable.ic_editor_archive, "Сохранённые версии", "Последние локальные копии", () -> {
-            showPanel("");
-            filesModule.openVersions();
-        }), moreBubbleParams(false));
         bubbles.addView(moreBubble(R.drawable.ic_nav_more, "Параметры", "Вид, защита и оформление", () -> {
             showPanel("settings");
         }), moreBubbleParams(false));
@@ -1531,9 +1565,9 @@ public final class MainActivity extends Activity {
         quickParams.setMargins(dp(10), 0, 0, 0);
         actions.addView(cardActionTile(
             R.drawable.ic_menu_add_person,
-            "Быстрый старт",
-            "Создать основу дерева",
-            v -> quickStart(),
+            "Добавить родственника",
+            "Родители, дети, партнёр",
+            v -> showAddPersonMenu(),
             true), quickParams);
         panel.addView(actions, new LinearLayout.LayoutParams(-1, dp(112)));
 
@@ -1688,7 +1722,7 @@ public final class MainActivity extends Activity {
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(0, dp(8), 0, 0);
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
-        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить", "Сохраняет файл дерева в выбранную папку на телефоне.", v -> filesModule.showSaveMenu()));
+        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить на телефон", "Сохраняет файл дерева в выбранную папку на телефоне: .ftree, GEDCOM, HTML, PDF и другие форматы.", v -> filesModule.showSaveMenu()));
         rows.addView(menuRow(
             R.drawable.ic_editor_archive,
             "Сохранённые версии",
@@ -1697,8 +1731,8 @@ public final class MainActivity extends Activity {
         rows.addView(menuRow(R.drawable.ic_menu_import, "Импорт", "Загружает .ftree, JSON, GEDCOM и ZIP с фотографиями.", v -> openImport()));
         rows.addView(menuRow(
             R.drawable.ic_menu_export,
-            "Экспорт",
-            "Отправляет файл дерева в мессенджер, облако или другое приложение.",
+            "Отправить в другом формате",
+            "Отправляет дерево в формате GEDCOM, HTML, PDF, JSON, XML или PNG в мессенджер, облако или другое приложение.",
             v -> filesModule.showExportMenu()));
         return panel;
     }
@@ -1935,19 +1969,30 @@ public final class MainActivity extends Activity {
             true), new LinearLayout.LayoutParams(0, dp(112), 1));
         LinearLayout.LayoutParams guidesParams = new LinearLayout.LayoutParams(0, dp(112), 1);
         guidesParams.setMargins(dp(10), 0, 0, 0);
-        primary.addView(cardActionTile(
+        View guidesTile = cardActionTile(
             R.drawable.ic_menu_grid_lines,
             "Линии поколений",
-            "Направляющие и подписи уровней",
+            guidesTileDetail(),
             v -> togglePanel("guides"),
-            true), guidesParams);
+            true);
+        guidesTileDetail = (TextView) ((ViewGroup) guidesTile).getChildAt(2);
+        primary.addView(guidesTile, guidesParams);
         LinearLayout.LayoutParams primaryParams = new LinearLayout.LayoutParams(-1, dp(112));
         primaryParams.setMargins(0, 0, 0, dp(8));
         rows.addView(primary, primaryParams);
         rows.addView(menuRow(R.drawable.ic_menu_frame, "Рамка", "Выделяет карточки прямоугольной рамкой.", v -> startSelectionMode("rect")));
         rows.addView(menuRow(R.drawable.ic_menu_lasso, "Лассо", "Выделяет карточки свободной линией.", v -> startSelectionMode("lasso")));
         rows.addView(menuRow(R.drawable.ic_menu_branch, "Отображение ветки", "Выберите, какую часть дерева показать.", v -> togglePanel("branch")));
+        rows.addView(menuRow(R.drawable.ic_menu_add_person, "Быстрый старт", "Создаёт новое дерево за несколько шагов: вы, родители, бабушки и дедушки. Текущее дерево будет заменено после подтверждения.", v -> quickStart()));
         return panel;
+    }
+
+    private String guidesTileDetail() {
+        return generationLines ? "Включены · направляющие и подписи" : "Выключены · направляющие и подписи";
+    }
+
+    void refreshGuidesTile() {
+        if (guidesTileDetail != null) guidesTileDetail.setText(guidesTileDetail());
     }
 
     private void startManualArrange() {
@@ -2344,6 +2389,7 @@ public final class MainActivity extends Activity {
         top.addView(close, new LinearLayout.LayoutParams(dp(42), dp(42)));
         panel.addView(top, new LinearLayout.LayoutParams(-1, dp(44)));
         ScrollView scroll = new ScrollView(this);
+        settingsScroll = scroll;
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         settingsContent = new LinearLayout(this);
         settingsContent.setOrientation(LinearLayout.VERTICAL);
@@ -2525,6 +2571,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showLanguageDialog() {
+        rememberSettingsScroll();
         boolean english = AppLanguage.isEnglish(this);
         String current = AppLanguage.mode(this);
         Dialog dialog = new Dialog(this);
@@ -2711,6 +2758,7 @@ public final class MainActivity extends Activity {
         if (qualityModule != null) qualityModule.refresh();
         treeView.setEditLocked(editingBlocked());
         treeView.setGenerationLines(generationLines);
+        refreshGuidesTile();
         treeView.setHideDetails(hideCardDetails);
         treeView.setCompactCards(compactCards);
         treeView.setFontScale(fontScale);
@@ -2890,7 +2938,7 @@ public final class MainActivity extends Activity {
         treeHint.animate().cancel();
         treeHint.setTranslationX(0f);
         treeHint.setAlpha(1f);
-        treeHint.setText("Один палец - движение, два пальца - масштаб");
+        treeHint.setText("Один палец — сдвиг, два — масштаб");
         treeHint.setTextColor(Color.rgb(101, 113, 122));
         treeHint.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
         treeHint.setCompoundDrawablePadding(0);
@@ -3999,6 +4047,39 @@ public final class MainActivity extends Activity {
             .start();
     }
 
+    void rememberSettingsScroll() {
+        if ("settings".equals(activePanel) && settingsScroll != null) {
+            rememberedSettingsScrollY = settingsScroll.getScrollY();
+        }
+    }
+
+    /** Scrolls once the settings list is tall enough; the panel lays out after it opens. */
+    private void restoreSettingsScroll(int scrollY) {
+        if (settingsScroll == null || scrollY <= 0) return;
+        settingsScroll.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v, int left, int top, int right, int bottom,
+                                       int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (settingsScroll.getChildCount() == 0 || bottom - top <= 0) return;
+                settingsScroll.removeOnLayoutChangeListener(this);
+                settingsScroll.post(() -> settingsScroll.scrollTo(0, scrollY));
+            }
+        });
+        settingsScroll.requestLayout();
+    }
+
+    private void updateTreeRightInset() {
+        if (treeView == null || zoomRail == null || stage == null) return;
+        boolean railShown = zoomRail.getVisibility() == View.VISIBLE && zoomRail.getWidth() > 0;
+        treeView.setRightInset(railShown ? stage.getWidth() - zoomRail.getLeft() : 0f);
+    }
+
+    /** The gesture hint retires for good once the person has panned or pinched a few times. */
+    private void countTreeHintGesture() {
+        if (treeHintDismissed || ++treeHintGestures < TREE_HINT_GESTURES_TO_LEARN) return;
+        dismissTreeHint(1);
+    }
+
     private void hideTreeHintForSession() {
         if (treeHint == null || treeHintDismissed || treeHint.getVisibility() != View.VISIBLE) return;
         treeHintAutoHidden = true;
@@ -4052,7 +4133,20 @@ public final class MainActivity extends Activity {
     }
 
     private void startTraining() {
+        restoreTreeHint();
         settingsModule.startTraining();
+    }
+
+    /** Training brings the gesture hint back for people who want a reminder. */
+    private void restoreTreeHint() {
+        treeHintDismissed = false;
+        treeHintAutoHidden = false;
+        treeHintGestures = 0;
+        getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_TREE_HINT_DISMISSED, false)
+            .apply();
+        refreshLockUi();
     }
 
     private void offerTrainingIfNeeded() {
@@ -5359,39 +5453,73 @@ public final class MainActivity extends Activity {
         int accentSurface,
         int accentStroke
     ) {
+        String subtitle = MenuRowSubtitles.forRow(label, help);
+        LinearLayout row = rowBody(
+            iconRes, label, subtitle, accent, danger ? Color.rgb(197, 83, 75) : Color.rgb(28, 34, 38));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(subtitle.isEmpty() ? 48 : 56));
+        rowParams.setMargins(0, 0, 0, dp(8));
+        row.setLayoutParams(rowParams);
+        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
+        row.setOnClickListener(listener);
+        installRowHelp(row, label, help);
+        return row;
+    }
+
+    /** Icon, label and a one-line grey subtitle; the full explanation opens on long press. */
+    private LinearLayout rowBody(int iconRes, String label, String subtitle, int iconColor, int labelColor) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(48));
-        rowParams.setMargins(0, 0, 0, dp(8));
-        row.setLayoutParams(rowParams);
-
+        row.setPadding(dp(10), 0, dp(8), 0);
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(AppThemePalette.text(iconColor));
+        row.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
         TextView main = new LocalizedTextView(this);
-        main.setGravity(Gravity.CENTER_VERTICAL);
         main.setText(label);
-        main.setTextColor(danger ? Color.rgb(197, 83, 75) : Color.rgb(28, 34, 38));
+        main.setTextColor(labelColor);
         main.setTextSize(13);
         main.setTypeface(uiBold());
-        main.setPadding(dp(10), 0, dp(10), 0);
-        main.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
-        main.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
-        main.setCompoundDrawablePadding(dp(9));
-        tintDrawables(main, accent);
-        main.setOnClickListener(listener);
-        row.addView(main, new LinearLayout.LayoutParams(0, -1, 1));
-
-        TextView helpButton = new LocalizedTextView(this);
-        helpButton.setGravity(Gravity.CENTER);
-        helpButton.setText("?");
-        helpButton.setTextColor(accent);
-        helpButton.setTextSize(17);
-        helpButton.setTypeface(uiBold());
-        helpButton.setBackground(panelBg(accentSurface, dp(8), accentStroke));
-        helpButton.setOnClickListener(v -> showHelp(label, help));
-        LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(dp(42), -1);
-        helpParams.setMargins(dp(6), 0, 0, 0);
-        row.addView(helpButton, helpParams);
+        main.setSingleLine(true);
+        main.setEllipsize(TextUtils.TruncateAt.END);
+        main.setIncludeFontPadding(false);
+        copy.addView(main, new LinearLayout.LayoutParams(-1, -2));
+        if (!subtitle.isEmpty()) {
+            TextView sub = new LocalizedTextView(this);
+            sub.setText(subtitle);
+            sub.setTextColor(Color.rgb(101, 113, 122));
+            sub.setTextSize(10);
+            sub.setTypeface(ui());
+            sub.setSingleLine(true);
+            sub.setEllipsize(TextUtils.TruncateAt.END);
+            sub.setIncludeFontPadding(false);
+            LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(-1, -2);
+            subParams.setMargins(0, dp(3), 0, 0);
+            copy.addView(sub, subParams);
+        }
+        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(0, -2, 1);
+        copyParams.setMargins(dp(10), 0, 0, 0);
+        row.addView(copy, copyParams);
         return row;
+    }
+
+    private void installRowHelp(View row, String label, String help) {
+        if (help == null || help.trim().isEmpty()) return;
+        row.setOnLongClickListener(v -> {
+            showHelp(label, help);
+            return true;
+        });
+        row.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override
+            public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.addAction(new android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction(
+                    android.view.accessibility.AccessibilityNodeInfo.ACTION_LONG_CLICK, tr("Подробнее")));
+            }
+        });
     }
 
     private View themeRow() {
@@ -5403,7 +5531,7 @@ public final class MainActivity extends Activity {
         row.addView(themeTile(
             R.drawable.ic_menu_sun,
             "Светлая",
-            "Включает светлую тему.",
+            "Светлый фон",
             "light".equals(theme),
             v -> setTheme("light"),
             AppThemePalette.primary(),
@@ -5412,7 +5540,7 @@ public final class MainActivity extends Activity {
         row.addView(themeTile(
             R.drawable.ic_menu_moon,
             "Тёмная",
-            "Включает тёмную тему.",
+            "Тёмный фон",
             "dark".equals(theme),
             v -> setTheme("dark"),
             AppThemePalette.secondary(),
@@ -5421,7 +5549,7 @@ public final class MainActivity extends Activity {
         row.addView(themeTile(
             R.drawable.ic_menu_sparkles,
             "Чистая",
-            "Белый фон без сетки и лишних элементов.",
+            "Белый, без сетки",
             "clean".equals(theme),
             v -> setTheme("clean"),
             AppThemePalette.blue(),
@@ -5490,113 +5618,46 @@ public final class MainActivity extends Activity {
         textParams.setMargins(0, dp(1), 0, dp(1));
         tile.addView(text, textParams);
 
-        TextView help = new LocalizedTextView(this);
-        help.setGravity(Gravity.CENTER);
-        help.setText("?");
-        help.setTextSize(14);
-        help.setTypeface(uiBold());
-        help.setIncludeFontPadding(false);
-        help.setTextColor(accent);
-        help.setBackground(panelBg(accentSurface, dp(8), accentStroke));
-        help.setOnClickListener(v -> showHelp(label, helpText));
-        tile.addView(help, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        TextView detail = new LocalizedTextView(this);
+        detail.setGravity(Gravity.CENTER);
+        detail.setText(helpText);
+        detail.setTextSize(9);
+        detail.setTypeface(ui());
+        detail.setSingleLine(true);
+        detail.setEllipsize(TextUtils.TruncateAt.END);
+        detail.setIncludeFontPadding(false);
+        detail.setTextColor(Color.rgb(101, 113, 122));
+        tile.addView(detail, new LinearLayout.LayoutParams(-1, dp(14)));
         return tile;
     }
 
     private View settingActionRow(int iconRes, String label, String help, View.OnClickListener listener) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(48));
+        String subtitle = MenuRowSubtitles.forRow(label, help);
+        LinearLayout row = rowBody(iconRes, label, subtitle, AppThemePalette.primary(), Color.rgb(28, 34, 38));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(subtitle.isEmpty() ? 48 : 56));
         rowParams.setMargins(0, 0, 0, dp(8));
         row.setLayoutParams(rowParams);
-
-        LinearLayout mainBox = new LinearLayout(this);
-        mainBox.setGravity(Gravity.CENTER_VERTICAL);
-        mainBox.setOrientation(LinearLayout.HORIZONTAL);
-        mainBox.setPadding(dp(10), 0, dp(8), 0);
-        mainBox.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
-        mainBox.setOnClickListener(listener);
-
-        TextView main = new LocalizedTextView(this);
-        main.setGravity(Gravity.CENTER_VERTICAL);
-        main.setText(label);
-        main.setTextColor(Color.rgb(28, 34, 38));
-        main.setTextSize(13);
-        main.setTypeface(uiBold());
-        main.setIncludeFontPadding(false);
-        main.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
-        main.setCompoundDrawablePadding(dp(9));
-        tintDrawables(main, AppThemePalette.primary());
-        mainBox.addView(main, new LinearLayout.LayoutParams(0, -1, 1));
-        row.addView(mainBox, new LinearLayout.LayoutParams(0, -1, 1));
-
-        TextView helpButton = new LocalizedTextView(this);
-        helpButton.setGravity(Gravity.CENTER);
-        helpButton.setText("?");
-        helpButton.setTextColor(AppThemePalette.primary());
-        helpButton.setTextSize(14);
-        helpButton.setTypeface(uiBold());
-        helpButton.setIncludeFontPadding(false);
-        helpButton.setBackground(panelBg(
-            AppThemePalette.primarySurface(),
-            dp(8),
-            AppThemePalette.alpha(AppThemePalette.primaryBright(), 72)));
-        helpButton.setOnClickListener(v -> showHelp(label, help));
-        LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(dp(42), -1);
-        helpParams.setMargins(dp(6), 0, 0, 0);
-        row.addView(helpButton, helpParams);
+        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
+        row.setOnClickListener(listener);
+        installRowHelp(row, label, help);
         return row;
     }
 
     private View settingSwitchRow(int iconRes, String label, boolean enabled, String helpText, View.OnClickListener listener) {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(54));
+        String subtitle = MenuRowSubtitles.forRow(label, helpText);
+        LinearLayout row = rowBody(iconRes, label, subtitle, AppThemePalette.primary(), Color.rgb(28, 34, 38));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(56));
         rowParams.setMargins(0, 0, 0, dp(8));
         row.setLayoutParams(rowParams);
-
-        LinearLayout mainBox = new LinearLayout(this);
-        mainBox.setGravity(Gravity.CENTER_VERTICAL);
-        mainBox.setOrientation(LinearLayout.HORIZONTAL);
-        mainBox.setPadding(dp(10), 0, dp(8), 0);
-        mainBox.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
-        mainBox.setOnClickListener(listener);
-
-        TextView text = new LocalizedTextView(this);
-        text.setGravity(Gravity.CENTER_VERTICAL);
-        text.setText(label);
-        text.setTextColor(Color.rgb(28, 34, 38));
-        text.setTextSize(13);
-        text.setTypeface(uiBold());
-        text.setIncludeFontPadding(false);
-        text.setCompoundDrawablesWithIntrinsicBounds(iconRes, 0, 0, 0);
-        text.setCompoundDrawablePadding(dp(9));
-        tintDrawables(text, AppThemePalette.primary());
-        mainBox.addView(text, new LinearLayout.LayoutParams(0, -1, 1));
+        row.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
+        row.setOnClickListener(listener);
 
         FrameLayout toggle = toggleControl(enabled);
         toggle.setBackground(toggleBg(enabled));
         LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(dp(44), dp(26));
         toggleParams.setMargins(dp(8), 0, 0, 0);
-        mainBox.addView(toggle, toggleParams);
-        row.addView(mainBox, new LinearLayout.LayoutParams(0, -1, 1));
-
-        TextView help = new LocalizedTextView(this);
-        help.setGravity(Gravity.CENTER);
-        help.setText("?");
-        help.setTextColor(AppThemePalette.primary());
-        help.setTextSize(14);
-        help.setTypeface(uiBold());
-        help.setBackground(panelBg(
-            AppThemePalette.primarySurface(),
-            dp(8),
-            AppThemePalette.alpha(AppThemePalette.primaryBright(), 72)));
-        help.setOnClickListener(v -> showHelp(label, helpText));
-        LinearLayout.LayoutParams helpParams = new LinearLayout.LayoutParams(dp(42), -1);
-        helpParams.setMargins(dp(6), 0, 0, 0);
-        row.addView(help, helpParams);
+        row.addView(toggle, toggleParams);
+        installRowHelp(row, label, helpText);
         return row;
     }
 

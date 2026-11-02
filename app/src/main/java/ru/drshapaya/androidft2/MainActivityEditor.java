@@ -38,6 +38,9 @@ final class MainActivityEditor {
     private LinearLayout currentMemoryListHost;
     private TextView currentMemoryTab;
     private TextView currentMemoryPanelTitle;
+    private TextView currentBornCaption;
+    private View currentDiedBlock;
+    private View currentDiedToggle;
     private EditText currentMemoryTitleInput;
     private EditText currentMemoryTextInput;
     private LinearLayout currentMemoryDraftHost;
@@ -244,6 +247,9 @@ final class MainActivityEditor {
             person.avatarOffsetY = 0f;
             photo.setImageDrawable(null);
             initials.setVisibility(View.VISIBLE);
+            v.setVisibility(View.GONE);
+            loadPhoto.setText(activity.tr("Загрузить фото"));
+            photoHint.setText(activity.tr("Добавьте снимок для дерева и карточки"));
             saveOnly();
             activity.treeView.invalidate();
         });
@@ -257,6 +263,8 @@ final class MainActivityEditor {
         LinearLayout.LayoutParams removePhotoParams = new LinearLayout.LayoutParams(0, dp(46), 1);
         removePhotoParams.setMargins(dp(8), 0, 0, 0);
         photoButtons.addView(removePhoto, removePhotoParams);
+        // Without a photo there is nothing to remove; upload then spans the row.
+        removePhoto.setVisibility(hasPhoto ? View.VISIBLE : View.GONE);
         LinearLayout.LayoutParams photoActionsParams = new LinearLayout.LayoutParams(0, -2, 1);
         photoActionsParams.setMargins(dp(14), 0, 0, 0);
         photoTop.addView(photoActions, photoActionsParams);
@@ -283,7 +291,8 @@ final class MainActivityEditor {
         PersonNameFields nameFields = new PersonNameFields(activity, person);
         profileForm.addView(nameFields, editorBlockParams());
 
-        TextView bornSection = editorText("Родился/родилась", 13, Color.rgb(76, 83, 88), true);
+        TextView bornSection = editorText(bornCaption(person), 13, Color.rgb(76, 83, 88), true);
+        currentBornCaption = bornSection;
         profileForm.addView(bornSection, editorCaptionParams());
         EditText bornDay = numericField("ДД", person.bornDay, 2);
         EditText bornMonth = numericField("ММ", person.bornMonth, 2);
@@ -300,17 +309,35 @@ final class MainActivityEditor {
         agePanel.addView(editorMetric("ДО ДНЯ РОЖДЕНИЯ", birthdayValue), birthdayParams);
         profileForm.addView(agePanel, editorMetricParams());
 
-        TextView diedSection = editorText("Ушёл/ушла", 13, Color.rgb(76, 83, 88), true);
-        profileForm.addView(diedSection, editorCaptionParams());
+        Button lifeStatus = actionButton("", v -> {});
+        profileForm.addView(lifeStatus, editorBlockParams());
+
+        // The death date stays folded for living people so the form is not
+        // dominated by empty fields; status "Умер" or a stored date opens it.
+        LinearLayout diedBlock = new LinearLayout(activity);
+        diedBlock.setOrientation(LinearLayout.VERTICAL);
+        TextView diedSection = editorText("Дата смерти", 13, Color.rgb(76, 83, 88), true);
+        diedBlock.addView(diedSection, editorCaptionParams());
         EditText diedDay = numericField("ДД", person.diedDay, 2);
         EditText diedMonth = numericField("ММ", person.diedMonth, 2);
         EditText diedYear = numericField("ГГГГ", person.diedYear, 4);
-        profileForm.addView(dateEditorRow(diedDay, diedMonth, diedYear), editorBlockParams());
-
-        Button lifeStatus = actionButton("", v -> {});
+        diedBlock.addView(dateEditorRow(diedDay, diedMonth, diedYear), editorBlockParams());
+        Button diedToggle = actionButton("+ Указать дату смерти", v -> {
+            if (!activity.requireEditingEnabled()) return;
+            showDeathDate(true);
+            diedDay.requestFocus();
+        });
+        diedToggle.setTextSize(12);
+        diedToggle.setTextColor(Color.rgb(76, 83, 88));
+        diedToggle.setBackground(panelBg(Color.TRANSPARENT, dp(10), Color.rgb(217, 224, 229)));
+        profileForm.addView(diedToggle, editorBlockParams());
+        profileForm.addView(diedBlock, new LinearLayout.LayoutParams(-1, -2));
+        currentDiedBlock = diedBlock;
+        currentDiedToggle = diedToggle;
+        showDeathDate(PersonLifeStatus.hasDeathDate(person)
+            || PersonLifeStatus.DECEASED.equals(PersonLifeStatus.resolve(person)));
         updateLifeStatusButton(lifeStatus, person);
         lifeStatus.setOnClickListener(v -> chooseLifeStatus(person, lifeStatus));
-        profileForm.addView(lifeStatus, editorBlockParams());
 
         EditText place = field("город, страна");
         place.setSingleLine(true);
@@ -965,6 +992,8 @@ final class MainActivityEditor {
                     updateStats();
                 }
                 updateLifeStatusButton(button, person);
+                showDeathDate(PersonLifeStatus.hasDeathDate(person)
+                    || PersonLifeStatus.DECEASED.equals(PersonLifeStatus.resolve(person)));
                 picker.dismiss();
             });
             shell.addView(choice, editorBlockParams());
@@ -980,7 +1009,20 @@ final class MainActivityEditor {
         }
     }
 
+    private void showDeathDate(boolean visible) {
+        if (currentDiedBlock != null) currentDiedBlock.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (currentDiedToggle != null) currentDiedToggle.setVisibility(visible ? View.GONE : View.VISIBLE);
+    }
+
+    private static String bornCaption(Person person) {
+        String gender = PersonGender.resolve(person);
+        if (PersonGender.MALE.equals(gender)) return "Родился";
+        if (PersonGender.FEMALE.equals(gender)) return "Родилась";
+        return "Дата рождения";
+    }
+
     private void updateGenderChip(TextView chip, Person person) {
+        if (currentBornCaption != null) currentBornCaption.setText(bornCaption(person));
         if (chip == null) return;
         chip.setText("Пол: " + PersonGender.shortLabel(person));
         chip.setContentDescription(activity.tr(
@@ -1345,7 +1387,8 @@ final class MainActivityEditor {
             if (targetMonth < bornMonth || (targetMonth == bornMonth && targetDay < bornDay)) age--;
         }
         if (age < 0) return "нет даты рождения";
-        return age + " " + pluralRu(age, "год", "года", "лет");
+        return (BirthdayCalculator.hasExactAge(person) ? "" : "≈")
+            + age + " " + pluralRu(age, "год", "года", "лет");
     }
 
     private String editorBirthdayLabel(Person person) {
