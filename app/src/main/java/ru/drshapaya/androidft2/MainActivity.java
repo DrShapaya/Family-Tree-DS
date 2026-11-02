@@ -4625,9 +4625,8 @@ public final class MainActivity extends Activity {
 
     void updateStats() {
         if (stats != null) {
-            stats.setText(AppLanguage.isEnglish(this)
-                ? state.people.size() + " people, " + state.links.size() + " connections"
-                : state.people.size() + " человек, " + state.links.size() + " связей");
+            stats.setText(RussianWordForms.peopleAndLinks(
+                AppLanguage.isEnglish(this), state.people.size(), state.links.size()));
         }
         DiagnosticsLogger.updateStateMetrics(state);
     }
@@ -5134,6 +5133,7 @@ public final class MainActivity extends Activity {
         button.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
         button.setForeground(centeredIcon(R.drawable.ic_menu_close, Color.rgb(28, 34, 38)));
         button.setForegroundGravity(Gravity.CENTER);
+        button.setContentDescription(tr("Закрыть"));
         button.setOnClickListener(listener);
         PressFeedback.install(button);
         return button;
@@ -5202,7 +5202,22 @@ public final class MainActivity extends Activity {
         button.setTextSize(0);
         button.setForeground(centeredIcon(iconRes, tint));
         button.setForegroundGravity(Gravity.CENTER);
+        String description = defaultIconDescription(iconRes);
+        if (description != null) button.setContentDescription(tr(description));
         return button;
+    }
+
+    /** Spoken label for icon-only buttons; call sites may still set a more specific one. */
+    static String defaultIconDescription(int iconRes) {
+        if (iconRes == R.drawable.ic_menu_close) return "Закрыть";
+        if (iconRes == R.drawable.ic_menu_undo) return "Отменить действие";
+        if (iconRes == R.drawable.ic_menu_redo) return "Повторить действие";
+        if (iconRes == R.drawable.ic_menu_fit) return "Показать всё дерево";
+        if (iconRes == R.drawable.ic_menu_add_box) return "Добавить человека";
+        if (iconRes == R.drawable.ic_nav_card) return "Открыть карточку";
+        if (iconRes == R.drawable.ic_menu_zoom_in) return "Приблизить";
+        if (iconRes == R.drawable.ic_menu_zoom_out) return "Отдалить";
+        return null;
     }
 
     private Drawable centeredIcon(int iconRes, int tint) {
@@ -5270,14 +5285,19 @@ public final class MainActivity extends Activity {
 
     void stylePeopleNav(boolean active) {
         if (peopleNav == null) return;
-        int color = Color.WHITE;
+        // The central tab keeps its pill shape, but only the open section gets
+        // the full gradient so it never looks selected next to another tab.
+        int color = active ? Color.WHITE : AppThemePalette.text(Color.rgb(28, 34, 38));
         peopleNav.setTextColor(color);
         Drawable top = peopleNav.getCompoundDrawables()[1];
         if (top != null) top.mutate().setTint(color);
-        GradientDrawable background = tealGradientBg(dp(14));
-        background.setStroke(dp(1), active
-            ? AppThemePalette.alpha(AppThemePalette.secondaryBright(), 120)
-            : Color.argb(120, 255, 255, 255));
+        GradientDrawable background;
+        if (active) {
+            background = tealGradientBg(dp(14));
+            background.setStroke(dp(1), AppThemePalette.alpha(AppThemePalette.secondaryBright(), 120));
+        } else {
+            background = softAccentGradientBg(dp(14));
+        }
         peopleNav.setBackground(background);
         peopleNav.setElevation(dp(active ? 7 : 5));
         animateNavButton(peopleNav, active, true);

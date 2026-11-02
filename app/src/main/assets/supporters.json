@@ -10,20 +10,15 @@
   },
   "supporters": [
     {
-      "name": "Тест",
-      "amount": 67,
+      "id": "8c4cdab6-b33b-4451-88b3-6d32dd0c6f20",
+      "amountRevision": 0,
+      "donationLinks": [],
+      "name": "JVIiracLe",
+      "amount": 100,
       "currency": "RUB",
-      "color": "#8B7CFF",
-      "showHeart": false,
+      "color": "#F3A45F",
+      "showHeart": true,
       "order": 0
-    },
-    {
-      "name": "Тест 2",
-      "amount": 42,
-      "currency": "RUB",
-      "color": "#D59AEB",
-      "showHeart": false,
-      "order": 1
     }
   ]
 }

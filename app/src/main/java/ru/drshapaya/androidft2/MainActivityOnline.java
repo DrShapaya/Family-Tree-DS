@@ -82,8 +82,7 @@ final class MainActivityOnline {
         LinearLayout titles = new LinearLayout(activity);
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView eyebrow = label(
-            "ANDROIDFT " + MainActivity.VERSION_NAME + "  ·  "
-                + activity.tr("ПРИВАТНЫЙ РАЗДЕЛ"),
+            activity.tr("ПРИВАТНЫЙ РАЗДЕЛ"),
             9,
             Color.argb(210, 255, 255, 255),
             true);

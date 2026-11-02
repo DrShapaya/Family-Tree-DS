@@ -387,26 +387,10 @@ final class MainActivityEditor {
         LinearLayout.LayoutParams memoryPhotoParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
         memoryPhotoParams.setMargins(dp(8), 0, 0, 0);
         memoryActions.addView(memoryPhoto, memoryPhotoParams);
-        Button addMemory = actionButton("Сохранить", v -> {
-            if (text(memoryTitle).isEmpty()
-                    && text(memoryText).isEmpty()
-                    && currentMemoryDraftAttachments.isEmpty()) return;
+        Button addMemory = actionButton("Добавить", v -> {
+            if (!hasMemoryDraft(memoryTitle, memoryText)) return;
             if (!activity.requireEditingEnabled()) return;
-            recordUndo("Сохранена запись памяти", person.name);
-            Memory memory = new Memory();
-            memory.id = "m_" + java.util.UUID.randomUUID().toString().replace("-", "");
-            memory.title = text(memoryTitle).isEmpty()
-                ? activity.tr("Воспоминание")
-                : text(memoryTitle);
-            memory.text = text(memoryText);
-            memory.at = String.valueOf(System.currentTimeMillis());
-            memory.attachments.addAll(currentMemoryDraftAttachments);
-            syncLegacyAttachment(memory);
-            person.memories.add(0, memory);
-            currentMemoryDraftAttachments.clear();
-            renderMemoryDraft();
-            saveToast("Запись сохранена");
-            refreshMemorySection(person.id);
+            commitMemoryDraft(person, memoryTitle, memoryText, "Запись добавлена");
         });
         addMemory.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_note_add, 0, 0, 0);
         addMemory.setCompoundDrawablePadding(dp(7));
@@ -657,6 +641,16 @@ final class MainActivityEditor {
         dialog.setContentView(shell);
         dialog.setCanceledOnTouchOutside(true);
         dialog.setOnDismissListener(d -> {
+            // The editor promises automatic saving, so a typed but not yet added
+            // memory is kept instead of being dropped when the card closes.
+            if (currentPersonDialog == dialog
+                && currentMemoryTitleInput != null
+                && currentMemoryTextInput != null
+                && hasMemoryDraft(currentMemoryTitleInput, currentMemoryTextInput)
+                && !activity.editingBlocked()
+                && activity.state.people.get(person.id) == person) {
+                commitMemoryDraft(person, currentMemoryTitleInput, currentMemoryTextInput, "Запись добавлена в память");
+            }
             if (currentPersonDialog == dialog) {
                 currentPersonDialog = null;
                 currentMemoryPersonId = "";
@@ -711,6 +705,28 @@ final class MainActivityEditor {
             : "Файлы прикреплены к черновику: " + added;
         if (failedCount > 0) message += " · не удалось: " + failedCount;
         toast(message);
+    }
+
+    private boolean hasMemoryDraft(EditText title, EditText body) {
+        return !text(title).isEmpty() || !text(body).isEmpty() || !currentMemoryDraftAttachments.isEmpty();
+    }
+
+    private void commitMemoryDraft(Person person, EditText title, EditText body, String message) {
+        recordUndo("Добавлена запись памяти", person.name);
+        Memory memory = new Memory();
+        memory.id = "m_" + java.util.UUID.randomUUID().toString().replace("-", "");
+        memory.title = text(title).isEmpty()
+            ? activity.tr("Воспоминание")
+            : text(title);
+        memory.text = text(body);
+        memory.at = String.valueOf(System.currentTimeMillis());
+        memory.attachments.addAll(currentMemoryDraftAttachments);
+        syncLegacyAttachment(memory);
+        person.memories.add(0, memory);
+        currentMemoryDraftAttachments.clear();
+        renderMemoryDraft();
+        saveToast(message);
+        refreshMemorySection(person.id);
     }
 
     private void renderMemoryDraft() {

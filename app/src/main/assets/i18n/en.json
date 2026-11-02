@@ -1652,5 +1652,19 @@
   "Исправлены сохранение больших альбомов и воспоминаний, отмена изменений альбомов и обработка дат. Синхронизация защищает свежие локальные правки от замены устаревшим результатом. Загруженные фотографии обновляются на дереве и в галереях даже после частичного сбоя передачи.": "Fixed saving large albums and memories, undoing album changes, and date handling. Sync protects recent local edits from being replaced by an outdated result. Downloaded photos refresh in the tree and galleries even after a partial transfer failure.",
   "Уменьшен размер приложения. При синхронизации больших наборов фотографий устранены лишние операции, а сетевые соединения используются повторно.": "Reduced the app size. Removed unnecessary work when syncing large photo collections and enabled network connection reuse.",
   "Загрузка дерева…": "Loading family tree…",
-  "Оптимизирована работа с большими деревьями: ускорены поиск, подсказки, проверка данных и отрисовка. Каталог, галереи, импорт и экспорт стали отзывчивее. Миниатюры используют общий кэш, а большие альбомы прокручиваются без создания всех плиток сразу. При отдалении содержимое карточек сохраняется.": "Optimized large family trees: faster search, suggestions, data checks and rendering. The people list, galleries, import and export are more responsive. Thumbnails share a cache, and large albums scroll without creating every tile at once. Card content remains visible when zoomed out."
+  "Оптимизирована работа с большими деревьями: ускорены поиск, подсказки, проверка данных и отрисовка. Каталог, галереи, импорт и экспорт стали отзывчивее. Миниатюры используют общий кэш, а большие альбомы прокручиваются без создания всех плиток сразу. При отдалении содержимое карточек сохраняется.": "Optimized large family trees: faster search, suggestions, data checks and rendering. The people list, galleries, import and export are more responsive. Thumbnails share a cache, and large albums scroll without creating every tile at once. Card content remains visible when zoomed out.",
+  "Отменить действие": "Undo",
+  "Повторить действие": "Redo",
+  "Показать всё дерево": "Fit tree to screen",
+  "Добавить человека": "Add person",
+  "Приблизить": "Zoom in",
+  "Отдалить": "Zoom out",
+  "Родитель и ребёнок — ровесники": "Parent and child are the same age",
+  " и ребёнок родились в одном году: ": " and the child were born in the same year: ",
+  " младше ребёнка на ": " is younger than the child by ",
+  " при рождении ребёнка.": " at the child's birth.",
+  "Добавить": "Add",
+  "Запись добавлена": "Entry added",
+  "Запись добавлена в память": "Entry added to memories",
+  "Добавлена запись памяти": "Memory entry added"
 }

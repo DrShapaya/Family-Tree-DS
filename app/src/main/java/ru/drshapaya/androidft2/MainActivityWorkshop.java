@@ -316,7 +316,9 @@ final class MainActivityWorkshop {
     private void updateWorkshopUi() {
         long now = System.currentTimeMillis();
         if (workshopBalanceText != null) {
-            workshopBalanceText.setText(rewardWallet.balance() + " жетонов");
+            workshopBalanceText.setText(RussianWordForms.count(
+                AppLanguage.isEnglish(activity), rewardWallet.balance(),
+                "жетон", "жетона", "жетонов", "token", "tokens"));
         }
         if (workshopRewardAdButton != null) {
             boolean allowed = rewardWallet.canEarnRewardedAd(now);
@@ -413,7 +415,14 @@ final class MainActivityWorkshop {
         title.setGravity(Gravity.CENTER_VERTICAL);
         tile.addView(title, new LinearLayout.LayoutParams(-1, ui.dp(27)));
         TextView detail = new LocalizedTextView(activity);
-        detail.setText(RewardCatalog.itemsFor(category.id).size() + " вариантов оформления");
+        detail.setText(RussianWordForms.count(
+            AppLanguage.isEnglish(activity),
+            RewardCatalog.itemsFor(category.id).size(),
+            "вариант оформления",
+            "варианта оформления",
+            "вариантов оформления",
+            "style option",
+            "style options"));
         detail.setTextColor(Color.rgb(101, 113, 122));
         detail.setTextSize(9);
         detail.setSingleLine(true);

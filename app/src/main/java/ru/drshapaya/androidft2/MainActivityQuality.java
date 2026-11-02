@@ -150,7 +150,12 @@ final class MainActivityQuality {
         report = TreeQualityAnalyzer.analyze(state());
         return showQualityDialog(
             "Оценка здоровья дерева",
-            state().people.size() + " карточек · " + state().links.size() + " связей",
+            RussianWordForms.count(
+                AppLanguage.isEnglish(activity), state().people.size(),
+                "карточка", "карточки", "карточек", "card", "cards")
+                + " · " + RussianWordForms.count(
+                AppLanguage.isEnglish(activity), state().links.size(),
+                "связь", "связи", "связей", "connection", "connections"),
             report.score,
             report.issues,
             "");
@@ -388,17 +393,25 @@ final class MainActivityQuality {
         for (TreeQualityAnalyzer.Issue issue : issues) {
             groups.computeIfAbsent(issue.title, key -> new java.util.ArrayList<>()).add(issue);
         }
-        for (java.util.Map.Entry<String, java.util.List<TreeQualityAnalyzer.Issue>> group : groups.entrySet()) {
+        java.util.List<java.util.Map.Entry<String, java.util.List<TreeQualityAnalyzer.Issue>>> ordered =
+            new java.util.ArrayList<>(groups.entrySet());
+        // Errors first, then warnings, then tips; equal groups keep analyzer order.
+        ordered.sort((left, right) -> Integer.compare(
+            maxSeverity(right.getValue()), maxSeverity(left.getValue())));
+        for (java.util.Map.Entry<String, java.util.List<TreeQualityAnalyzer.Issue>> group : ordered) {
             java.util.Set<String> cards = new java.util.LinkedHashSet<>();
-            int severity = 0;
-            for (TreeQualityAnalyzer.Issue issue : group.getValue()) {
-                cards.add(issue.personId);
-                severity = Math.max(severity, issue.severity);
-            }
+            for (TreeQualityAnalyzer.Issue issue : group.getValue()) cards.add(issue.personId);
             shell.addView(
-                qualityProblemAccordion(group.getKey(), cards.size(), severity, group.getValue(), dialog),
+                qualityProblemAccordion(
+                    group.getKey(), cards.size(), maxSeverity(group.getValue()), group.getValue(), dialog),
                 qualityProblemHeaderParams());
         }
+    }
+
+    private static int maxSeverity(java.util.List<TreeQualityAnalyzer.Issue> issues) {
+        int severity = 0;
+        for (TreeQualityAnalyzer.Issue issue : issues) severity = Math.max(severity, issue.severity);
+        return severity;
     }
 
     private View qualityProblemAccordion(

@@ -1176,7 +1176,8 @@ final class MainActivityFiles {
         TextView date = versionText(versionDate(version.savedAt), 14, Color.rgb(28, 34, 38), true);
         String counts = version.peopleCount < 0 || version.linkCount < 0
             ? "Локальная резервная копия"
-            : version.peopleCount + " человек, " + version.linkCount + " связей";
+            : RussianWordForms.peopleAndLinks(
+                AppLanguage.isEnglish(activity), version.peopleCount, version.linkCount);
         TextView details = versionText(counts, 11, Color.rgb(83, 94, 103), false);
         text.addView(date);
         text.addView(details);
@@ -1203,7 +1204,8 @@ final class MainActivityFiles {
             versionDate(version.savedAt) + "\n"
                 + (version.peopleCount < 0 || version.linkCount < 0
                     ? "Локальная резервная копия"
-                    : version.peopleCount + " человек, " + version.linkCount + " связей"),
+                    : RussianWordForms.peopleAndLinks(
+                        AppLanguage.isEnglish(activity), version.peopleCount, version.linkCount)),
             "Восстановить",
             false,
             () -> restoreVersion(versionsDialog, version));
@@ -1408,8 +1410,10 @@ final class MainActivityFiles {
         content.setPadding(0, activity.dp(4), 0, activity.dp(4));
         TextView filename = versionText(sourceName, 14, Color.rgb(71,82,89), false);
         filename.setTextIsSelectable(true); content.addView(filename);
-        TextView stats = versionText(imported.people.size() + (english ? " people  ·  " : " персон  ·  ")
-            + imported.links.size() + (english ? " relationships" : " связей"), 20, Color.rgb(30,105,82), true);
+        TextView stats = versionText(RussianWordForms.count(english, imported.people.size(),
+                "человек", "человека", "человек", "person", "people")
+            + "  ·  " + RussianWordForms.count(english, imported.links.size(),
+                "связь", "связи", "связей", "relationship", "relationships"), 20, Color.rgb(30,105,82), true);
         stats.setPadding(activity.dp(14),activity.dp(16),activity.dp(14),activity.dp(16));
         stats.setBackground(new MainUiKit(activity,() -> activity.uiScale).softAccentGradientBg(activity.dp(14)));
         LinearLayout.LayoutParams statsParams=new LinearLayout.LayoutParams(-1,-2);

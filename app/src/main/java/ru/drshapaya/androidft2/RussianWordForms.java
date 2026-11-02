@@ -13,4 +13,25 @@ final class RussianWordForms {
         if (mod10 >= 2 && mod10 <= 4) return few;
         return many;
     }
+
+    /** Formats "count word" in the interface language, e.g. "4 человека" or "1 person". */
+    static String count(
+        boolean english,
+        int count,
+        String one,
+        String few,
+        String many,
+        String englishOne,
+        String englishMany) {
+        String word = english
+            ? (Math.abs(count) == 1 ? englishOne : englishMany)
+            : forCount(count, one, few, many);
+        return count + " " + word;
+    }
+
+    static String peopleAndLinks(boolean english, int people, int links) {
+        return count(english, people, "человек", "человека", "человек", "person", "people")
+            + ", "
+            + count(english, links, "связь", "связи", "связей", "connection", "connections");
+    }
 }

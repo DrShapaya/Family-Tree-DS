@@ -1444,7 +1444,7 @@ final class MainActivityPeople {
     private View albumCard(String name, List<Person> people) {
         int photos = people.size() + albumMedia(name).size();
         int folders = albumFolders(name).size();
-        String detail = photos + " фото" + (folders == 0 ? "" : " · " + folders + " папок");
+        String detail = photos + " фото" + (folders == 0 ? "" : " · " + RussianWordForms.forCount(folders, folders + " папка", folders + " папки", folders + " папок"));
         LinearLayout card = (LinearLayout) collectionCard(name, detail, R.drawable.ic_menu_image,
             Color.rgb(240, 168, 95), () -> showCustomAlbum(name));
         card.setOnLongClickListener(v -> {
@@ -2875,9 +2875,10 @@ final class MainActivityPeople {
         return "человек";
     }
     private String peopleCountText(int count) {
-        return AppLanguage.isEnglish(activity)
-            ? count + " people in the family tree"
-            : count + " человек в семейном дереве";
+        boolean english = AppLanguage.isEnglish(activity);
+        return RussianWordForms.count(
+            english, count, "человек", "человека", "человек", "person", "people")
+            + (english ? " in the family tree" : " в семейном дереве");
     }
     private int dp(int value) { return activity.dp(value); }
 

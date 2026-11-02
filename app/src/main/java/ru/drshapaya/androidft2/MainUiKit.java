@@ -177,6 +177,7 @@ final class MainUiKit {
         button.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
         button.setForeground(centeredIcon(R.drawable.ic_menu_close, Color.rgb(28, 34, 38)));
         button.setForegroundGravity(Gravity.CENTER);
+        button.setContentDescription(AppLanguage.text(activity, "Закрыть"));
         button.setOnClickListener(listener);
         PressFeedback.install(button);
         return button;

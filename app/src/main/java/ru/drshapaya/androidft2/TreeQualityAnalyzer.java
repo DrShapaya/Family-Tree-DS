@@ -355,15 +355,25 @@ final class TreeQualityAnalyzer {
         if (parentBorn > 0 && childBorn > 0) {
             int age = childBorn - parentBorn;
             String parentName = displayName(parent);
-            if (age <= 0) {
+            if (age == 0) {
                 add(issues, child.id, ERROR, CATEGORY_PARENT_AGE,
-                    "Родитель младше ребёнка", parentName + ": возраст при рождении ребёнка " + age + ".");
+                    "Родитель и ребёнок — ровесники",
+                    parentName + " и ребёнок родились в одном году: " + childBorn + ".");
+            } else if (age < 0) {
+                add(issues, child.id, ERROR, CATEGORY_PARENT_AGE,
+                    "Родитель младше ребёнка",
+                    parentName + " младше ребёнка на " + -age + " "
+                        + RussianWordForms.forCount(-age, "год", "года", "лет") + ".");
             } else if (age < 14 || age > 80) {
                 add(issues, child.id, ERROR, CATEGORY_PARENT_AGE,
-                    "Недопустимый возраст родителя", parentName + ": " + age + " лет при рождении ребёнка.");
+                    "Недопустимый возраст родителя",
+                    parentName + ": " + age + " " + RussianWordForms.forCount(age, "год", "года", "лет")
+                        + " при рождении ребёнка.");
             } else if (age < 16 || age > 65) {
                 add(issues, child.id, WARNING, CATEGORY_PARENT_AGE,
-                    "Необычный возраст родителя", parentName + ": " + age + " лет при рождении ребёнка.");
+                    "Необычный возраст родителя",
+                    parentName + ": " + age + " " + RussianWordForms.forCount(age, "год", "года", "лет")
+                        + " при рождении ребёнка.");
             }
         }
         if (parentDied > 0 && childBorn > parentDied + 1) {
