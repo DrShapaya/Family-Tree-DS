@@ -172,8 +172,8 @@ final class MainActivitySettings {
         prepareTrainingStep(step[0]);
         ensureTrainingOverlay();
         String progress = AppLanguage.isEnglish(activity)
-            ? "TRAINING  ·  STEP " + (index + 1) + " OF " + MainActivity.TRAINING_STEPS.length
-            : "ОБУЧЕНИЕ  ·  ШАГ " + (index + 1) + " ИЗ " + MainActivity.TRAINING_STEPS.length;
+            ? "Step " + (index + 1) + " of " + MainActivity.TRAINING_STEPS.length
+            : "Шаг " + (index + 1) + " из " + MainActivity.TRAINING_STEPS.length;
         LocalizedViews.setRaw(trainingProgress, progress);
         trainingTitle.setText(step[1]);
         trainingDetail.setText(step[2]);

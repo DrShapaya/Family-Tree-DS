@@ -143,6 +143,12 @@ final class TreeCanvasView extends View {
     private TreeMediaStore mediaStore;
     private Listener listener;
     private float rightInset;
+    private DashPathEffect endedPartnerDash;
+    private Map<String, String> kinshipTags = java.util.Collections.emptyMap();
+    private final Paint kinshipTagFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint kinshipTagText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF kinshipTagRect = new RectF();
+    private float endedPartnerDashScale;
     private String filter = "";
     private SmartPeopleSearch.Query smartFilter;
     private final ExecutorService filterWorker = Executors.newSingleThreadExecutor();
@@ -621,6 +627,43 @@ final class TreeCanvasView extends View {
      */
     void setRightInset(float inset) {
         rightInset = Math.max(0f, inset);
+    }
+
+    /** Kinship term per person id, drawn as a tag on the card's top edge; empty hides them. */
+    void setKinshipTags(Map<String, String> tags) {
+        kinshipTags = tags == null ? java.util.Collections.emptyMap() : tags;
+        invalidate();
+    }
+
+    private void drawKinshipTag(Canvas canvas, Person person) {
+        String label = kinshipTags.get(person.id);
+        if (label == null || label.isEmpty()) return;
+        // Same size as the name on the card, so the tag reads at the same zoom levels.
+        float textSize = 13f * scale;
+        if (textSize < 7f) return;
+        float cardWidth = cardWidthWorld() * scale;
+        float paddingX = 8f * scale;
+        float height = textSize + 9f * scale;
+        kinshipTagText.setTextSize(textSize);
+        kinshipTagText.setTypeface(textPaint.getTypeface());
+        kinshipTagText.setFakeBoldText(true);
+        String text = android.text.TextUtils.ellipsize(
+            label, new android.text.TextPaint(kinshipTagText), cardWidth - 2f * paddingX - 16f * scale,
+            android.text.TextUtils.TruncateAt.END).toString();
+        float width = kinshipTagText.measureText(text) + 2f * paddingX;
+        float left = sx(person.x) + 10f * scale;
+        float top = sy(person.y) - height * 0.55f;
+        kinshipTagRect.set(left, top, left + width, top + height);
+        boolean dark = AppThemePalette.isDark();
+        kinshipTagFill.setStyle(Paint.Style.FILL);
+        kinshipTagFill.setColor(dark ? Color.rgb(30, 41, 46) : Color.WHITE);
+        canvas.drawRoundRect(kinshipTagRect, height / 2f, height / 2f, kinshipTagFill);
+        kinshipTagFill.setStyle(Paint.Style.STROKE);
+        kinshipTagFill.setStrokeWidth(Math.max(1f, 1.2f * scale));
+        kinshipTagFill.setColor(blend(person.color, dark ? Color.WHITE : Color.BLACK, 0.18f));
+        canvas.drawRoundRect(kinshipTagRect, height / 2f, height / 2f, kinshipTagFill);
+        kinshipTagText.setColor(dark ? Color.rgb(232, 240, 242) : Color.rgb(28, 34, 38));
+        canvas.drawText(text, left + paddingX, top + height / 2f - (kinshipTagText.descent() + kinshipTagText.ascent()) / 2f, kinshipTagText);
     }
 
     private float visibleCenterX() {
@@ -1383,7 +1426,19 @@ final class TreeCanvasView extends View {
 
     private DashPathEffect linkPathEffect(Relation link, boolean onPath) {
         if (onPath) return null;
-        return "sibling".equals(link.type) ? siblingDashEffect() : null;
+        if ("sibling".equals(link.type)) return siblingDashEffect();
+        if ("partner".equals(link.type) && PartnerStatus.ended(link.status)) return endedPartnerDashEffect();
+        return null;
+    }
+
+    private DashPathEffect endedPartnerDashEffect() {
+        if (endedPartnerDash == null || Math.abs(endedPartnerDashScale - scale) > 0.015f) {
+            endedPartnerDashScale = scale;
+            endedPartnerDash = new DashPathEffect(
+                new float[] {Math.max(1f, 5f * scale), Math.max(1f, 8f * scale)},
+                0f);
+        }
+        return endedPartnerDash;
     }
 
     private int styledLinkColor(Relation link, int color, boolean selected, boolean onPath) {
@@ -1738,6 +1793,8 @@ final class TreeCanvasView extends View {
                 || "card_edge_smoke".equals(cardEdgeStyle)
                 || "card_theme_fire".equals(cardStyle);
         }
+        // Tags go in a second pass so a neighbour card never covers them.
+        if(!kinshipTags.isEmpty())for(Person person:effectPeopleScratch)drawKinshipTag(canvas,person);
         if(!exportMode &&cardRasterCache.needsAnotherFrame() &&isShown() &&getWindowVisibility()==VISIBLE)postInvalidateOnAnimation();
         if (drewFire && !exportMode && isShown() && getWindowVisibility() == VISIBLE
                 && (gpuFireForFrame || !animatedCardAtlas.hasActiveFrame()))postInvalidateOnAnimation();

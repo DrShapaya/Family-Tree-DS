@@ -31,6 +31,7 @@ final class GedcomReader {
     }
 
     private static final class Family {
+        String status = PartnerStatus.PARTNERS;
         final Set<String> parents = new LinkedHashSet<>();
         final Set<String> children = new LinkedHashSet<>();
     }
@@ -189,6 +190,11 @@ final class GedcomReader {
                         f.parents.add(field.value);
                         parentGenders.put(field.value, "HUSB".equals(field.tag) ? PersonGender.MALE : PersonGender.FEMALE);
                     } else if ("CHIL".equals(field.tag) && !(gedcom7 && "@VOID@".equals(field.value))) f.children.add(field.value);
+                    // The strongest event wins: a divorce or separation ends a marriage or engagement.
+                    else if ("DIV".equals(field.tag)) f.status = PartnerStatus.DIVORCED;
+                    else if ("_SEPR".equals(field.tag) && !PartnerStatus.DIVORCED.equals(f.status)) f.status = PartnerStatus.SEPARATED;
+                    else if ("MARR".equals(field.tag) && !PartnerStatus.ended(f.status)) f.status = PartnerStatus.MARRIED;
+                    else if ("ENGA".equals(field.tag) && PartnerStatus.PARTNERS.equals(f.status)) f.status = PartnerStatus.ENGAGED;
                 }
             }
         }
@@ -226,7 +232,10 @@ final class GedcomReader {
         }
         for (Family f : families.values()) {
             List<Person> parents = resolvePeople(f.parents, people, result), children = resolvePeople(f.children, people, result);
-            for (int i = 1; i < parents.size(); i++) link(result.state, links, "partner", parents.get(0), parents.get(i));
+            for (int i = 1; i < parents.size(); i++) {
+                Relation partner = link(result.state, links, "partner", parents.get(0), parents.get(i));
+                if (partner != null) partner.status = f.status;
+            }
             for (Person parent : parents) for (Person child : children) link(result.state, links, "parent", parent, child);
             // A family may contain siblings whose parents were not exported or are unknown.
             if (parents.isEmpty()) for (int i = 1; i < children.size(); i++) link(result.state, links, "sibling", children.get(i - 1), children.get(i));
@@ -240,10 +249,13 @@ final class GedcomReader {
         return result;
     }
 
-    private static void link(TreeState state, Set<String> seen, String type, Person a, Person b) {
-        if (a == b) return;
+    private static Relation link(TreeState state, Set<String> seen, String type, Person a, Person b) {
+        if (a == b) return null;
         String key = type + ":" + ("parent".equals(type) || a.id.compareTo(b.id) < 0 ? a.id + ":" + b.id : b.id + ":" + a.id);
-        if (seen.add(key)) state.links.add(new Relation("l_" + UUID.randomUUID().toString().replace("-", ""), type, a.id, b.id));
+        if (!seen.add(key)) return null;
+        Relation relation = new Relation("l_" + UUID.randomUUID().toString().replace("-", ""), type, a.id, b.id);
+        state.links.add(relation);
+        return relation;
     }
 
     private static List<Person> resolvePeople(Set<String> refs, Map<String, Person> people, Result result) {

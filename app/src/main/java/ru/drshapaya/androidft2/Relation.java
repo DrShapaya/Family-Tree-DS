@@ -6,6 +6,8 @@ final class Relation {
     String from;
     String to;
     String side = "right";
+    /** Partner links only: see {@link PartnerStatus}. */
+    String status = PartnerStatus.PARTNERS;
 
     Relation(String id, String type, String from, String to) {
         this.id = id;

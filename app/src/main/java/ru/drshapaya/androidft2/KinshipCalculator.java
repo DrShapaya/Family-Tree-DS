@@ -68,6 +68,29 @@ final class KinshipCalculator {
         finally { if (previous==null) ACTIVE_INDEX.remove(); else ACTIVE_INDEX.set(previous); }
     }
 
+    /**
+     * Who every person is to {@code referenceId}, for kinship tags on cards. One relations
+     * index serves the whole tree; people without a known relationship are left out.
+     */
+    static java.util.Map<String, String> labelsRelativeTo(TreeState state, String referenceId, boolean terminological) {
+        java.util.Map<String, String> labels = new java.util.HashMap<>();
+        if (state == null || referenceId == null || !state.people.containsKey(referenceId)) return labels;
+        TreeRelationsIndex previous=ACTIVE_INDEX.get();
+        ACTIVE_INDEX.set(new TreeRelationsIndex(state,false));
+        try {
+            for (String personId : new java.util.ArrayList<>(state.people.keySet())) {
+                if (personId.equals(referenceId)) continue;
+                Description description = describe(state, personId, referenceId, true, terminological);
+                if (description.found && description.label != null && !description.label.isEmpty()) {
+                    labels.put(personId, withPartnerStatus(state, personId, referenceId, description.label));
+                }
+            }
+        } finally {
+            if (previous==null) ACTIVE_INDEX.remove(); else ACTIVE_INDEX.set(previous);
+        }
+        return labels;
+    }
+
     private static Result calculateIndexed(TreeState state, String firstId, String secondId, boolean terminological) {
         if (state == null || firstId == null || secondId == null
             || !state.people.containsKey(firstId) || !state.people.containsKey(secondId)) {
@@ -86,9 +109,37 @@ final class KinshipCalculator {
         }
         return new Result(
             true,
-            first.found ? first.label : "родство не определено",
-            second.found ? second.label : "родство не определено",
+            first.found ? withPartnerStatus(state, firstId, secondId, first.label) : "родство не определено",
+            second.found ? withPartnerStatus(state, secondId, firstId, second.label) : "родство не определено",
             path);
+    }
+
+    /**
+     * Spouse terms follow the couple's relationship kind: an engaged wife is a bride,
+     * a divorced one a former wife. Plain "partners" keeps the existing wording.
+     */
+    static String withPartnerStatus(TreeState state, String subjectId, String referenceId, String label) {
+        if (state == null || label == null) return label;
+        String status = PartnerStatus.PARTNERS;
+        for (Relation link : state.links) {
+            if (!"partner".equals(link.type)) continue;
+            if (subjectId.equals(link.from) && referenceId.equals(link.to)
+                || referenceId.equals(link.from) && subjectId.equals(link.to)) {
+                status = PartnerStatus.normalize(link.status);
+                break;
+            }
+        }
+        boolean wife = "жена".equals(label);
+        boolean husband = "муж".equals(label);
+        // Gender unknown: the calculator says "партнёр".
+        boolean spouse = wife || husband || "партнёр".equals(label);
+        if (!spouse) return label;
+        switch (status) {
+            case PartnerStatus.ENGAGED: return wife ? "невеста" : husband ? "жених" : "жених или невеста";
+            case PartnerStatus.DIVORCED: return wife ? "бывшая жена" : husband ? "бывший муж" : "бывший супруг";
+            case PartnerStatus.SEPARATED: return wife ? "бывшая партнёрша" : husband ? "бывший партнёр" : "бывший партнёр";
+            default: return label;
+        }
     }
 
     /**

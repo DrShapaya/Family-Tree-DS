@@ -65,7 +65,7 @@ final class MainActivityQuickStart {
         header.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout heading = new LinearLayout(activity);
         heading.setOrientation(LinearLayout.VERTICAL);
-        TextView eyebrow = caption("НОВОЕ СЕМЕЙНОЕ ДЕРЕВО");
+        TextView eyebrow = caption("Новое семейное дерево");
         TextView title = new LocalizedTextView(activity);
         title.setText("Быстрый старт");
         title.setTextColor(Color.rgb(28, 34, 38));

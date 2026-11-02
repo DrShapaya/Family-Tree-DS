@@ -1188,7 +1188,7 @@ final class MainActivityFiles {
         }
         row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
 
-        Button restoreButton = activity.actionButton("Загрузить", v -> restore.run());
+        Button restoreButton = activity.actionButton("Восстановить", v -> restore.run());
         restoreButton.setTextColor(Color.rgb(8, 122, 115));
         restoreButton.setBackground(activity.panelBg(Color.rgb(232, 248, 246), activity.dp(8), Color.argb(72, 24, 169, 153)));
         row.addView(restoreButton, new LinearLayout.LayoutParams(activity.dp(104), activity.dp(42)));

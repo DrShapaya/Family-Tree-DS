@@ -57,7 +57,9 @@ final class TreeXmlReader {
             if(!state.people.containsKey(from) || !state.people.containsKey(to) || from.equals(to)
                 || !("parent".equals(type)||"partner".equals(type)||"sibling".equals(type)||"family".equals(type)) || id.isEmpty() || !ids.add(id))
                 throw new IOException("В XML обнаружена некорректная связь: " + id);
-            state.links.add(new Relation(id,type,from,to,e.hasAttribute("side")?e.getAttribute("side"):"right"));
+            Relation relation=new Relation(id,type,from,to,e.hasAttribute("side")?e.getAttribute("side"):"right");
+            relation.status=PartnerStatus.normalize(e.getAttribute("status"));
+            state.links.add(relation);
         }
         state.useMaidenNames="true".equals(value(root,"use-maiden-names"));
         state.showQualityBadge=!"false".equals(value(root,"show-quality-badge"));

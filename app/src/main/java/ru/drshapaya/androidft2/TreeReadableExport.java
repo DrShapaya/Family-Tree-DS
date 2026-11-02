@@ -72,7 +72,7 @@ final class TreeReadableExport {
         out.write("</people>\n<relationships>\n");
         for (Relation r : state.links) if (state.people.containsKey(r.from) && state.people.containsKey(r.to)) {
             out.write("<relationship id=\"" + escape(r.id) + "\" type=\"" + escape(r.type)
-                + "\" from=\"" + escape(r.from) + "\" to=\"" + escape(r.to) + "\" side=\"" + escape(r.side) + "\"/>\n");
+                + "\" from=\"" + escape(r.from) + "\" to=\"" + escape(r.to) + "\" side=\"" + escape(r.side) + "\" status=\"" + escape(PartnerStatus.normalize(r.status)) + "\"/>\n");
         }
         out.write("</relationships>\n");
         field(out, "use-maiden-names", String.valueOf(state.useMaidenNames));

@@ -110,6 +110,11 @@ final class AppThemePalette {
         if (b > g * 1.08f && r > g * 0.68f && light < 170) {
             return withAlpha(alpha, 184, 160, 255);
         }
+        // Amber warnings (red and green both well above blue) stay amber; without
+        // this rule they fell into the red branch and a warning read as an error.
+        if (r > b * 2f && g > b * 2.5f && light < 170) {
+            return withAlpha(alpha, 240, 190, 92);
+        }
         if (r > g * 1.35f && r > b * 1.25f && light < 170) {
             return withAlpha(alpha, 255, 139, 130);
         }

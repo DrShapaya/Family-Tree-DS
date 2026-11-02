@@ -340,7 +340,9 @@ final class TreeStore {
                 String from = remapId(idMap, item.optString("from", ""));
                 String to = remapId(idMap, item.optString("to", ""));
                 if (!state.people.containsKey(from) || !state.people.containsKey(to) || from.equals(to)) continue;
-                state.links.add(new Relation(item.optString("id", makeId("l")), type, from, to, item.optString("side", "right")));
+                Relation relation = new Relation(item.optString("id", makeId("l")), type, from, to, item.optString("side", "right"));
+                relation.status = PartnerStatus.normalize(item.optString("status", ""));
+                state.links.add(relation);
             }
         }
 
@@ -403,12 +405,15 @@ final class TreeStore {
 
         JSONArray links = new JSONArray();
         for (Relation relation : state.links) {
-            links.put(new JSONObject()
+            JSONObject link = new JSONObject()
                 .put("id", relation.id)
                 .put("type", relation.type)
                 .put("from", relation.from)
                 .put("to", relation.to)
-                .put("side", "left".equals(relation.side) ? "left" : "right"));
+                .put("side", "left".equals(relation.side) ? "left" : "right");
+            String status = PartnerStatus.normalize(relation.status);
+            if (!status.isEmpty()) link.put("status", status);
+            links.put(link);
         }
 
         root.put("format", "ru.drshapaya.familytree.ftree");

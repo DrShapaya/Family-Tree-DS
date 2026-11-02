@@ -22,7 +22,7 @@ final class MenuRowSubtitles {
         SUBTITLES.put("Импорт", ".ftree, GEDCOM, JSON, ZIP с фото");
         SUBTITLES.put("Отправить в другом формате", "GEDCOM, PDF, HTML и другие");
         // Connections
-        SUBTITLES.put("Партнёрская связь", "Выберите две карточки");
+        SUBTITLES.put("Связь: партнёры", "Выберите две карточки");
         SUBTITLES.put("Кто кому приходится", "Родство между двумя людьми");
         SUBTITLES.put("Убрать связь", "Выберите две связанные карточки");
         // Tree
@@ -37,6 +37,8 @@ final class MenuRowSubtitles {
         // Settings
         SUBTITLES.put("Обучение", "Пошаговые подсказки по кнопкам");
         SUBTITLES.put("Степень родства", "Как называть дальнюю родню");
+        SUBTITLES.put("Родство на карточках", "Метка над каждой карточкой");
+        SUBTITLES.put("Kinship on cards", "Метка над каждой карточкой");
         SUBTITLES.put("История действий", "Панель последних действий");
         SUBTITLES.put("Защита правок", "Защита от случайных изменений");
         SUBTITLES.put("Только просмотр", "Глава дерева отключил правки");

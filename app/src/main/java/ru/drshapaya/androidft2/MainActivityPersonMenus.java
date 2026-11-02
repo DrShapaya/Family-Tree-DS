@@ -58,7 +58,7 @@ final class MainActivityPersonMenus {
             activity.dp(7),
             activity.dp(7)));
 
-        menu.addView(views.personMenuSection("ПОКАЗАТЬ ВЕТКУ"), new LinearLayout.LayoutParams(-1, activity.dp(30)));
+        menu.addView(views.personMenuSection("Показать ветку"), new LinearLayout.LayoutParams(-1, activity.dp(30)));
         Person rootPerson = activity.state.people.get(activity.state.rootId);
         KinshipCalculator.Result kinship = rootPerson == null
             ? null
@@ -77,7 +77,7 @@ final class MainActivityPersonMenus {
 
         menu.addView(personQualityDisclosure(person, report, popup));
 
-        menu.addView(views.personMenuSection("ДЕЙСТВИЯ"), new LinearLayout.LayoutParams(-1, activity.dp(30)));
+        menu.addView(views.personMenuSection("Действия"), new LinearLayout.LayoutParams(-1, activity.dp(30)));
         menu.addView(views.personMenuGridRow(
             views.personMenuGridTile(
                 R.drawable.ic_menu_pin,

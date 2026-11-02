@@ -154,7 +154,8 @@ final class TreeDeltaCommand implements TreeCommand {
                 || !Objects.equals(a.type, b.type)
                 || !Objects.equals(a.from, b.from)
                 || !Objects.equals(a.to, b.to)
-                || !Objects.equals(a.side, b.side)) return false;
+                || !Objects.equals(a.side, b.side)
+                || !Objects.equals(a.status, b.status)) return false;
         }
         return true;
     }

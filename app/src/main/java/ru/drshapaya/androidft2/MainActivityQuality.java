@@ -235,7 +235,7 @@ final class MainActivityQuality {
         metrics.addView(qualityMetric("Советы", recommendations, Color.rgb(101, 113, 122)), recommendationParams);
         shell.addView(metrics, qualityBlockParams());
 
-        TextView section = ui.sectionLabel(issues.isEmpty() ? "РЕЗУЛЬТАТ" : "ЧТО НУЖНО ПРОВЕРИТЬ");
+        TextView section = ui.sectionLabel(issues.isEmpty() ? "Результат" : "Что нужно проверить");
         shell.addView(section, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 24 : 34)));
         ScrollView scroll=new ScrollView(activity); scroll.setTag("quality.issues");
         LinearLayout problemList=new LinearLayout(activity); problemList.setOrientation(LinearLayout.VERTICAL);

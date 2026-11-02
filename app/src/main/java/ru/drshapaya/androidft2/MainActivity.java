@@ -79,6 +79,10 @@ public final class MainActivity extends Activity {
     private static final String TRAINING_OFFER_HANDLED = "training_offer_handled";
     private static final String PREF_TREE_HINT_DISMISSED = "tree_hint_dismissed";
     private static final String STATE_ACTIVE_PANEL = "active_panel";
+    private static final String PREF_KINSHIP_TAGS = "kinship_tags_mode";
+    static final String KINSHIP_TAGS_OFF = "off";
+    static final String KINSHIP_TAGS_ROOT = "root";
+    static final String KINSHIP_TAGS_SELECTED = "selected";
     private static final String STATE_SETTINGS_SCROLL = "settings_scroll";
     private static final String PREF_UI_SCALE = "ui_scale";
     private static final String PREF_FONT_SCALE = "font_scale";
@@ -113,6 +117,11 @@ public final class MainActivity extends Activity {
     LinearLayout settingsPanel;
     private ScrollView settingsScroll;
     private TextView guidesTileDetail;
+    /** Kinship tags on cards: off, relative to the tree centre, or to the selected card. */
+    String kinshipTagsMode = KINSHIP_TAGS_OFF;
+    private final java.util.concurrent.ExecutorService kinshipTagWorker =
+        java.util.concurrent.Executors.newSingleThreadExecutor();
+    private int kinshipTagsRequest;
     /** Settings scroll position to restore after a theme or language recreate; -1 if none. */
     private int pendingSettingsScrollY = -1;
     /** Scroll position taken when a theme or language change starts, before views reset it. */
@@ -319,6 +328,8 @@ public final class MainActivity extends Activity {
             .getBoolean(PREF_TREE_HINT_DISMISSED, false);
         kinshipTerminological = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
             .getBoolean("kinship_terminological", true);
+        kinshipTagsMode = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
+            .getString(PREF_KINSHIP_TAGS, KINSHIP_TAGS_OFF);
         filesModule = new MainActivityFiles(this);
         historyModule = new MainActivityHistory(this);
         headerModule = new MainActivityHeader(this);
@@ -507,6 +518,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (startupSplash != null) startupSplash.close();
+        kinshipTagWorker.shutdownNow();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && backInvokedCallback != null) {
             getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
@@ -614,6 +626,7 @@ public final class MainActivity extends Activity {
                 if (handlePendingBranch(person)) return;
                 selectedLinkId = "";
                 bindEditor(person);
+                if (KINSHIP_TAGS_SELECTED.equals(kinshipTagsMode)) refreshKinshipTags();
             }
             @Override public void onPersonMenu(Person person, float screenX, float screenY) {
                 state.selectedId = person.id;
@@ -625,8 +638,13 @@ public final class MainActivity extends Activity {
                 selectedLinkId = relation == null ? "" : relation.id;
                 pendingLinkType = "";
                 pendingLinkFrom = "";
-                toast("Связь выбрана");
                 bindState();
+                // A partner line opens the relationship kind right away; other links just select.
+                if (relation != null && "partner".equals(relation.type)) {
+                    choosePartnerStatus(relation, null);
+                } else {
+                    toast("Связь выбрана");
+                }
             }
             @Override public void onSelectionChanged(int count) {
                 updateSelectionToolbar();
@@ -1050,7 +1068,7 @@ public final class MainActivity extends Activity {
 
         canvasModeAction = selectionActionButton(
             R.drawable.ic_menu_stop,
-            "Стоп",
+            "Отмена",
             v -> cancelActiveCanvasMode());
         panel.addView(canvasModeAction, new LinearLayout.LayoutParams(dp(82), dp(42)));
         panel.setVisibility(View.GONE);
@@ -1334,7 +1352,7 @@ public final class MainActivity extends Activity {
         bubbles.addView(moreBubble(R.drawable.ic_nav_more, "Параметры", "Вид, защита и оформление", () -> {
             showPanel("settings");
         }), moreBubbleParams(false));
-        bubbles.addView(moreBubble(R.drawable.ic_menu_search, "Обучение", "Подсказки по возможностям", () -> {
+        bubbles.addView(moreBubble(R.drawable.ic_menu_training, "Обучение", "Подсказки по возможностям", () -> {
             showPanel("");
             startTraining();
         }), moreBubbleParams(false));
@@ -1353,8 +1371,9 @@ public final class MainActivity extends Activity {
             scroll.addView(bubbles, new ScrollView.LayoutParams(-1, -2));
             overlay.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         } else {
-            int menuWidth = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(24));
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.RIGHT | Gravity.BOTTOM);
+            // Same 12dp gutter on both sides on phones; tablets keep a readable width.
+            int menuWidth = Math.min(dp(420), getResources().getDisplayMetrics().widthPixels - dp(24));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
             params.setMargins(dp(12), dp(12), dp(12), dp(86));
             ScrollView scroll = new ScrollView(this);
             scroll.setClipToPadding(false);
@@ -1744,7 +1763,7 @@ public final class MainActivity extends Activity {
         primary.setOrientation(LinearLayout.HORIZONTAL);
         primary.addView(cardActionTile(
             R.drawable.ic_menu_parent_line,
-            "Родительская линия",
+            "Связь: родитель",
             "Первый выбранный станет родителем",
             v -> startLink("parent"),
             true), new LinearLayout.LayoutParams(0, dp(112), 1));
@@ -1752,7 +1771,7 @@ public final class MainActivity extends Activity {
         siblingParams.setMargins(dp(10), 0, 0, 0);
         primary.addView(cardActionTile(
             R.drawable.ic_menu_people,
-            "Братская линия",
+            "Связь: брат/сестра",
             "Связь брат/сестра",
             v -> startLink("sibling"),
             true), siblingParams);
@@ -1762,7 +1781,7 @@ public final class MainActivity extends Activity {
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(0, dp(8), 0, 0);
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
-        rows.addView(menuRow(R.drawable.ic_menu_heart, "Партнёрская связь", "Нажмите пункт, затем выберите две карточки для связи партнёров.", v -> startLink("family")));
+        rows.addView(menuRow(R.drawable.ic_menu_heart, "Связь: партнёры", "Нажмите пункт, затем выберите две карточки для связи партнёров.", v -> startLink("family")));
         rows.addView(menuRow(
             R.drawable.ic_menu_route,
             "Кто кому приходится",
@@ -1796,7 +1815,7 @@ public final class MainActivity extends Activity {
         panel.addView(guideToggleRow(), formFieldParams());
         panel.addView(guideDraftRow());
         panel.addView(guideColorRow(), formFieldParams());
-        panel.addView(guideCaption("ОДНОРАЗОВОЕ ДЕЙСТВИЕ НА ПОЛОТНЕ"), new LinearLayout.LayoutParams(-1, dp(24)));
+        panel.addView(guideCaption("Одноразовое действие на полотне"), new LinearLayout.LayoutParams(-1, dp(24)));
 
         LinearLayout modes = new LinearLayout(this);
         modes.setOrientation(LinearLayout.HORIZONTAL);
@@ -1924,7 +1943,7 @@ public final class MainActivity extends Activity {
         block.setOrientation(LinearLayout.VERTICAL);
         block.setPadding(dp(10), dp(7), dp(10), dp(7));
         block.setBackground(panelBg(Color.WHITE, dp(8), Color.rgb(217, 224, 229)));
-        TextView caption = guideCaption("ЦВЕТ ЛИНИИ");
+        TextView caption = guideCaption("Цвет линии");
         block.addView(caption, new LinearLayout.LayoutParams(-1, dp(20)));
 
         LinearLayout row = new LinearLayout(this);
@@ -2417,6 +2436,11 @@ public final class MainActivity extends Activity {
             "Степень родства",
             KinshipModeDialog.HELP,
             v -> showKinshipModeDialog()));
+        panel.addView(settingActionRow(
+            R.drawable.ic_nav_links,
+            tr("Родство на карточках") + ": " + tr(kinshipTagsLabel(kinshipTagsMode)),
+            tr("Показывает над карточками, кем каждый человек приходится центру дерева или выбранной карточке. Названия следуют настройке «Степень родства»."),
+            v -> showKinshipTagsDialog()));
         panel.addView(settingSwitchRow(R.drawable.ic_menu_history, "История действий", state == null || !state.historyHidden, "Показывает или скрывает панель последних действий на поле дерева.", v -> toggleHistoryPanel()));
         boolean editingBlocked = editingBlocked();
         panel.addView(settingSwitchRow(
@@ -2434,7 +2458,7 @@ public final class MainActivity extends Activity {
         panel.addView(settingSwitchRow(R.drawable.ic_life_heart_outline, "Значок статуса жизни", state.showLifeStatusBadge,
             "Значок располагается над качеством карточки или на его месте, если качество скрыто. Статус можно указать в профиле человека, а иконки и цвета — выбрать ниже.",
             v -> { state.showLifeStatusBadge = !state.showLifeStatusBadge; saveOnly(); treeView.invalidate(); refreshSettingsIfVisible(); }));
-        View lifeAppearanceRow = settingActionRow(R.drawable.ic_menu_paint_can, "Иконки и цвета статуса жизни",
+        View lifeAppearanceRow = settingActionRow(R.drawable.ic_menu_palette, "Иконки и цвета статуса жизни",
             "Выберите символы для живых, умерших и неизвестного статуса, их цвет и фон. Изменения сразу видны на карточках.",
             v -> LifeStatusAppearanceDialog.show(this));
         lifeAppearanceRow.setTag("settings.lifeStatusAppearance");
@@ -2636,7 +2660,7 @@ public final class MainActivity extends Activity {
             selectAuto));
         choices.addView(languageChoiceRow(
             "РУ",
-            english ? "Russian" : "Русский",
+            "Русский",
             english ? "Russian interface" : "Интерфейс на русском языке",
             AppLanguage.RUSSIAN.equals(current),
             selectRussian));
@@ -2755,6 +2779,7 @@ public final class MainActivity extends Activity {
     void bindState() {
         syncSettingsToState();
         treeView.setState(state);
+        refreshKinshipTags();
         if (qualityModule != null) qualityModule.refresh();
         treeView.setEditLocked(editingBlocked());
         treeView.setGenerationLines(generationLines);
@@ -3126,6 +3151,70 @@ public final class MainActivity extends Activity {
 
     KinshipCalculator.Result calculateKinship(String firstId, String secondId) {
         return KinshipCalculator.calculate(state, firstId, secondId, kinshipTerminological);
+    }
+
+    static String kinshipTagsLabel(String mode) {
+        if (KINSHIP_TAGS_ROOT.equals(mode)) return "От центра дерева";
+        if (KINSHIP_TAGS_SELECTED.equals(mode)) return "От выбранной карточки";
+        return "Выключено";
+    }
+
+    void showKinshipTagsDialog() {
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_route, "Родство на карточках")
+            .message("Над каждой карточкой видно, кем человек приходится выбранной точке отсчёта.");
+        String[] modes = {KINSHIP_TAGS_OFF, KINSHIP_TAGS_ROOT, KINSHIP_TAGS_SELECTED};
+        String[] details = {
+            "Карточки без меток",
+            "Относительно карточки с короной",
+            "Меняется при выборе другой карточки"
+        };
+        for (int i = 0; i < modes.length; i++) {
+            String mode = modes[i];
+            dialog.choice(
+                i == 0 ? R.drawable.ic_menu_eye_off : i == 1 ? R.drawable.ic_tree_crown_outline : R.drawable.ic_nav_card,
+                kinshipTagsLabel(mode),
+                mode.equals(kinshipTagsMode) ? "Выбрано сейчас" : details[i],
+                () -> {
+                    kinshipTagsMode = mode;
+                    getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE).edit().putString(PREF_KINSHIP_TAGS, mode).apply();
+                    refreshKinshipTags();
+                    refreshSettingsIfVisible();
+                });
+        }
+        dialog.show();
+    }
+
+    /** Recomputes kinship tags off the main thread; a newer request makes older results stale. */
+    void refreshKinshipTags() {
+        if (treeView == null) return;
+        treeView.removeCallbacks(kinshipTagsRefresh);
+        treeView.postDelayed(kinshipTagsRefresh, 200L);
+    }
+
+    private final Runnable kinshipTagsRefresh = this::computeKinshipTags;
+
+    private void computeKinshipTags() {
+        if (treeView == null || state == null || isDestroyed()) return;
+        int request = ++kinshipTagsRequest;
+        String anchor = KINSHIP_TAGS_ROOT.equals(kinshipTagsMode) ? state.rootId
+            : KINSHIP_TAGS_SELECTED.equals(kinshipTagsMode) ? state.selectedId : "";
+        if (anchor == null || anchor.isEmpty() || !state.people.containsKey(anchor)) {
+            treeView.setKinshipTags(null);
+            return;
+        }
+        TreeState snapshot = TreeStateCopier.copy(state);
+        boolean terminological = kinshipTerminological;
+        kinshipTagWorker.execute(() -> {
+            java.util.Map<String, String> labels = KinshipCalculator.labelsRelativeTo(snapshot, anchor, terminological);
+            runOnUiThread(() -> {
+                if (request != kinshipTagsRequest || isDestroyed() || treeView == null) return;
+                java.util.Map<String, String> shown = new java.util.HashMap<>();
+                for (java.util.Map.Entry<String, String> entry : labels.entrySet()) {
+                    shown.put(entry.getKey(), tr(entry.getValue()));
+                }
+                treeView.setKinshipTags(shown);
+            });
+        });
     }
 
     Dialog showKinshipModeDialog() {
@@ -4068,6 +4157,39 @@ public final class MainActivity extends Activity {
         settingsScroll.requestLayout();
     }
 
+    /** Lets the person mark a couple as married, engaged, partners, divorced or separated. */
+    void choosePartnerStatus(Relation link, Runnable after) {
+        if (link == null || state == null) return;
+        Person first = state.people.get(link.from);
+        Person second = state.people.get(link.to);
+        String couple = (first == null || first.name.isEmpty() ? tr("Без имени") : first.name)
+            + (AppLanguage.isEnglish(this) ? " and " : " и ")
+            + (second == null || second.name.isEmpty() ? tr("Без имени") : second.name);
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_heart, "Отношения").message(couple);
+        String current = PartnerStatus.normalize(link.status);
+        for (String status : PartnerStatus.ALL) {
+            String detail = status.equals(current)
+                ? "Выбрано сейчас"
+                : PartnerStatus.ended(status) ? "Линия пунктиром" : "Сплошная линия";
+            dialog.choice(
+                PartnerStatus.ended(status) ? R.drawable.ic_life_heart_outline : R.drawable.ic_menu_heart,
+                PartnerStatus.label(status),
+                detail,
+                () -> {
+                    if (!status.equals(PartnerStatus.normalize(link.status)) && requireEditingEnabled()) {
+                        recordUndo("Изменены отношения", couple);
+                        link.status = status;
+                        saveOnly();
+                        if (treeView != null) treeView.invalidate();
+                        refreshKinshipTags();
+                        toast(PartnerStatus.label(status));
+                    }
+                    if (after != null) after.run();
+                });
+        }
+        dialog.show();
+    }
+
     private void updateTreeRightInset() {
         if (treeView == null || zoomRail == null || stage == null) return;
         boolean railShown = zoomRail.getVisibility() == View.VISIBLE && zoomRail.getWidth() > 0;
@@ -4513,7 +4635,7 @@ public final class MainActivity extends Activity {
         canvasModePanel.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) return;
         if (guideActive) {
-            canvasModeAction.setText("Стоп");
+            canvasModeAction.setText("Отмена");
             styleCanvasModeAction(true);
             canvasModeTitle.setText(guideModeBannerTitle(activeGuideMode));
             canvasModeDetail.setText("erase".equals(activeGuideMode)
@@ -4522,7 +4644,7 @@ public final class MainActivity extends Activity {
             return;
         }
         if (linkActive) {
-            canvasModeAction.setText("Стоп");
+            canvasModeAction.setText("Отмена");
             styleCanvasModeAction(true);
             canvasModeTitle.setText(linkModeTitle(pendingLinkType));
             if (pendingLinkFrom.isEmpty()) {
@@ -4598,8 +4720,9 @@ public final class MainActivity extends Activity {
         String firstName = first == null || first.name.isEmpty() ? tr("Первый человек") : first.name;
         String secondName = second == null || second.name.isEmpty() ? tr("Второй человек") : second.name;
         if (result != null && result.found) {
-            addKinshipStatusLine(firstName + " → " + secondName + ": " + tr(result.firstToSecond));
-            addKinshipStatusLine(secondName + " → " + firstName + ": " + tr(result.secondToFirst));
+            // Both people are named on screen, so "name — role" reads unambiguously.
+            addKinshipStatusLine(firstName + " — " + tr(result.firstToSecond));
+            addKinshipStatusLine(secondName + " — " + tr(result.secondToFirst));
         } else {
             addKinshipStatusLine(firstName + " ↔ " + secondName);
         }

@@ -81,7 +81,9 @@ final class TreeStateCopier {
     }
 
     static Relation copyRelation(Relation source) {
-        return new Relation(source.id, source.type, source.from, source.to, source.side);
+        Relation copy = new Relation(source.id, source.type, source.from, source.to, source.side);
+        copy.status = source.status;
+        return copy;
     }
 
     static Guide copyGuide(Guide source) {

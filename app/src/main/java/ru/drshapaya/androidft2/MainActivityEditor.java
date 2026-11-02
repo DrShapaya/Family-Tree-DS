@@ -91,7 +91,7 @@ final class MainActivityEditor {
         header.setPadding(dp(2), 0, 0, dp(4));
         LinearLayout heading = new LinearLayout(activity);
         heading.setOrientation(LinearLayout.VERTICAL);
-        TextView eyebrow = editorText("КАРТОЧКА ЧЕЛОВЕКА", 10, Color.rgb(76, 83, 88), true);
+        TextView eyebrow = editorText("Карточка человека", 10, Color.rgb(76, 83, 88), true);
         TextView title = editorText(person.name.isEmpty() ? "Без имени" : person.name, 20, Color.rgb(28, 34, 38), true);
         title.setSingleLine(false);
         title.setMaxLines(3);
@@ -279,7 +279,7 @@ final class MainActivityEditor {
         basicHeading.setGravity(Gravity.CENTER_VERTICAL);
         basicHeading.addView(editorSectionHeading(
             R.drawable.ic_field_note,
-            "ОСНОВНОЕ",
+            "Основное",
             "Имя, даты и места"), new LinearLayout.LayoutParams(0, -2, 1));
         TextView genderChip = genderChip(person);
         genderChip.setOnClickListener(v -> chooseGender(person, genderChip));
@@ -303,10 +303,10 @@ final class MainActivityEditor {
         TextView birthdayValue = editorText(editorBirthdayLabel(person), 13, Color.rgb(28, 34, 38), true);
         LinearLayout agePanel = new LinearLayout(activity);
         agePanel.setOrientation(LinearLayout.HORIZONTAL);
-        agePanel.addView(editorMetric("ВОЗРАСТ", ageValue), new LinearLayout.LayoutParams(0, -1, 1));
+        agePanel.addView(editorMetric("Возраст", ageValue), new LinearLayout.LayoutParams(0, -1, 1));
         LinearLayout.LayoutParams birthdayParams = new LinearLayout.LayoutParams(0, -1, 1);
         birthdayParams.setMargins(dp(8), 0, 0, 0);
-        agePanel.addView(editorMetric("ДО ДНЯ РОЖДЕНИЯ", birthdayValue), birthdayParams);
+        agePanel.addView(editorMetric("До дня рождения", birthdayValue), birthdayParams);
         profileForm.addView(agePanel, editorMetricParams());
 
         Button lifeStatus = actionButton("", v -> {});
@@ -343,7 +343,7 @@ final class MainActivityEditor {
         place.setSingleLine(true);
         LocalizedViews.setRaw(place, person.place);
         styleEditorField(place, R.drawable.ic_field_location);
-        profileForm.addView(labeledEditor("Место", place), editorBlockParams());
+        profileForm.addView(labeledEditor("Место рождения", place), editorBlockParams());
 
         EditText notes = field("Добавить заметку…");
         notes.setMinLines(2);
@@ -354,11 +354,11 @@ final class MainActivityEditor {
         profileForm.addView(labeledEditor("Заметки", notes), editorBlockParams());
 
         memoryForm.addView(editorSectionHeading(
-            "АРХИВ ПАМЯТИ",
+            "Архив памяти",
             person.memories.isEmpty()
                 ? "Сохраните первую семейную историю"
                 : memoryCountLabel(person.memories.size()) + " в карточке"), editorBlockParams());
-        LinearLayout memoryPanel = editorSectionPanel("ЗАПИСИ И ФАЙЛЫ · " + person.memories.size());
+        LinearLayout memoryPanel = editorSectionPanel("Записи и файлы · " + person.memories.size());
         currentMemoryPanelTitle = (TextView) memoryPanel.getChildAt(0);
         LinearLayout memoryListHost = new LinearLayout(activity);
         memoryListHost.setOrientation(LinearLayout.VERTICAL);
@@ -432,14 +432,14 @@ final class MainActivityEditor {
 
         LinearLayout colorDisclosure = new LinearLayout(activity);
         colorDisclosure.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout colorPanel = editorSectionPanel("ЦВЕТ КАРТОЧКИ");
+        LinearLayout colorPanel = editorSectionPanel("Цвет карточки");
         colorPanel.setBackground(softAccentGradientBg(dp(14)));
         colorPanel.setVisibility(View.GONE);
         LinearLayout colorHeading = new LinearLayout(activity);
         colorHeading.setOrientation(LinearLayout.HORIZONTAL);
         colorHeading.setGravity(Gravity.CENTER_VERTICAL);
         colorHeading.setPadding(0, 0, dp(6), 0);
-        colorHeading.addView(editorSectionHeading("ОФОРМЛЕНИЕ", "Цвет карточки"), new LinearLayout.LayoutParams(0, -2, 1));
+        colorHeading.addView(editorSectionHeading("Оформление", "Цвет карточки"), new LinearLayout.LayoutParams(0, -2, 1));
         DisclosureChevron colorArrow = new DisclosureChevron(activity, AppThemePalette.secondary());
         colorArrow.setPadding(dp(7), dp(7), dp(7), dp(7));
         colorArrow.setBackground(panelBg(AppThemePalette.primarySurface(), dp(999), AppThemePalette.alpha(AppThemePalette.primaryBright(), 64)));
@@ -532,9 +532,9 @@ final class MainActivityEditor {
 
 
         relationsForm.addView(editorSectionHeading(
-            "СЕМЬЯ И СВЯЗИ",
+            "Семья и связи",
             "Переходите к родственникам прямо из карточки"), editorBlockParams());
-        LinearLayout relationActions = editorSectionPanel("ДОБАВИТЬ В СЕМЬЮ");
+        LinearLayout relationActions = editorSectionPanel("Добавить в семью");
         LinearLayout relationActionsTop = new LinearLayout(activity);
         relationActionsTop.setOrientation(LinearLayout.HORIZONTAL);
         relationActionsTop.addView(editorQuickAction(
@@ -561,17 +561,17 @@ final class MainActivityEditor {
         relationActionBottomEnd.setMargins(dp(8), 0, 0, 0);
         relationActionsBottom.addView(editorQuickAction(
             R.drawable.ic_menu_people,
-            "Брата / сестру",
+            "Брата/сестру",
             dialog,
             "add-sibling"), relationActionBottomEnd);
         relationActions.addView(relationActionsBottom, formFieldParams());
         relationsForm.addView(relationActions, editorBlockParams());
 
-        LinearLayout kinshipPanel = editorSectionPanel("СВЯЗИ");
+        LinearLayout kinshipPanel = editorSectionPanel("Связи");
         addKinshipRows(kinshipPanel, person, dialog);
         relationsForm.addView(kinshipPanel, editorBlockParams());
 
-        LinearLayout validationPanel = editorSectionPanel("ЧТО МОЖНО ДОПОЛНИТЬ");
+        LinearLayout validationPanel = editorSectionPanel("Что можно дополнить");
         TextView validationHint = editorText(
             "Небольшие шаги, которые сделают семейную карточку полнее",
             11,
@@ -765,7 +765,7 @@ final class MainActivityEditor {
         }
         currentMemoryDraftHost.setVisibility(View.VISIBLE);
         TextView heading = editorText(
-            "ВЛОЖЕНИЯ К НОВОЙ ЗАПИСИ · " + currentMemoryDraftAttachments.size(),
+            "Вложения к новой записи · " + currentMemoryDraftAttachments.size(),
             10,
             Color.rgb(8, 122, 115),
             true);
@@ -826,7 +826,7 @@ final class MainActivityEditor {
             .start();
         if (currentMemoryTab != null) currentMemoryTab.setText("Память · " + person.memories.size());
         if (currentMemoryPanelTitle != null) {
-            currentMemoryPanelTitle.setText("ЗАПИСИ И ФАЙЛЫ · " + person.memories.size());
+            currentMemoryPanelTitle.setText("Записи и файлы · " + person.memories.size());
         }
         if (clearDraft) {
             if (currentMemoryTitleInput != null) currentMemoryTitleInput.setText("");
@@ -1021,12 +1021,19 @@ final class MainActivityEditor {
         return "Дата рождения";
     }
 
+    private static String genderChipLabel(Person person) {
+        String gender = PersonGender.resolve(person);
+        if (PersonGender.MALE.equals(gender)) return "Мужской";
+        if (PersonGender.FEMALE.equals(gender)) return "Женский";
+        return "Указать пол";
+    }
+
     private void updateGenderChip(TextView chip, Person person) {
         if (currentBornCaption != null) currentBornCaption.setText(bornCaption(person));
         if (chip == null) return;
-        chip.setText("Пол: " + PersonGender.shortLabel(person));
+        chip.setText(genderChipLabel(person));
         chip.setContentDescription(activity.tr(
-            "Пол: " + PersonGender.shortLabel(person) + ". Нажмите, чтобы изменить"));
+            "Пол: " + genderChipLabel(person) + ". Нажмите, чтобы изменить"));
     }
 
     private void chooseGender(Person person, TextView chip) {
@@ -1039,7 +1046,7 @@ final class MainActivityEditor {
         shell.setPadding(dp(18), dp(18), dp(18), dp(16));
         shell.setBackground(panelBg(Color.WHITE, dp(18), Color.argb(56, 63, 82, 94)));
 
-        TextView eyebrow = editorText("КАРТОЧКА ЧЕЛОВЕКА", 10, Color.rgb(8, 122, 115), true);
+        TextView eyebrow = editorText("Карточка человека", 10, Color.rgb(8, 122, 115), true);
         eyebrow.setGravity(Gravity.CENTER);
         shell.addView(eyebrow, new LinearLayout.LayoutParams(-1, dp(20)));
         TextView title = editorText("Выберите пол", 21, Color.rgb(28, 34, 38), true);
@@ -1219,7 +1226,9 @@ final class MainActivityEditor {
         edit.setInputType(InputType.TYPE_CLASS_NUMBER);
         edit.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(maxLength)});
         edit.setText(value);
-        styleEditorField(edit, R.drawable.ic_field_calendar);
+        // The row is already captioned as a date; one icon per field only took width.
+        styleEditorField(edit, 0);
+        edit.setGravity(Gravity.CENTER);
         return edit;
     }
 
@@ -1253,7 +1262,7 @@ final class MainActivityEditor {
         metric.setOrientation(LinearLayout.HORIZONTAL);
         metric.setGravity(Gravity.CENTER_VERTICAL);
         metric.setPadding(dp(10), dp(7), dp(10), dp(7));
-        boolean birthday = caption != null && caption.contains("ДО ДНЯ");
+        boolean birthday = caption != null && caption.contains("До дня");
         int accent = birthday ? AppThemePalette.secondary() : AppThemePalette.primary();
         int surface = birthday ? AppThemePalette.secondarySurface() : AppThemePalette.primarySurface();
         int bright = birthday ? AppThemePalette.secondaryBright() : AppThemePalette.primaryBright();
@@ -1262,7 +1271,7 @@ final class MainActivityEditor {
         FrameLayout iconPlate = new FrameLayout(activity);
         iconPlate.setBackground(ovalBg(AppThemePalette.alpha(bright, 32), Color.TRANSPARENT, 0));
         ImageView icon = new ImageView(activity);
-        icon.setImageResource("ВОЗРАСТ".equals(caption) ? R.drawable.ic_field_person : R.drawable.ic_field_calendar);
+        icon.setImageResource("Возраст".equals(caption) ? R.drawable.ic_field_person : R.drawable.ic_field_calendar);
         icon.setColorFilter(accent);
         iconPlate.addView(icon, new FrameLayout.LayoutParams(dp(23), dp(23), Gravity.CENTER));
         metric.addView(iconPlate, new LinearLayout.LayoutParams(dp(44), dp(44)));
@@ -1281,8 +1290,8 @@ final class MainActivityEditor {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(14), dp(12), dp(14), dp(12));
         panel.setElevation(0f);
-        boolean memory = title != null && title.startsWith("ЗАПИСИ");
-        boolean relationEditor = "ДОБАВИТЬ В СЕМЬЮ".equals(title) || "СВЯЗИ".equals(title);
+        boolean memory = title != null && title.startsWith("Записи");
+        boolean relationEditor = "Добавить в семью".equals(title) || "Связи".equals(title);
         panel.setBackground(memory
             ? softAccentGradientBg(dp(12))
             : relationEditor
@@ -1469,12 +1478,17 @@ final class MainActivityEditor {
             }
         }
         panel.addView(kinshipRow("Родители", parents, dialog), formFieldParams());
-        panel.addView(kinshipRow("Партнёры", new java.util.ArrayList<>(partners), dialog), formFieldParams());
+        panel.addView(kinshipRow("Партнёры", new java.util.ArrayList<>(partners), dialog, person), formFieldParams());
         panel.addView(kinshipRow("Дети", children, dialog), formFieldParams());
         panel.addView(kinshipRow("Братья/сёстры", new java.util.ArrayList<>(siblings), dialog), formFieldParams());
     }
 
     private View kinshipRow(String title, java.util.List<String> ids, Dialog dialog) {
+        return kinshipRow(title, ids, dialog, null);
+    }
+
+    /** With {@code partnersOf} set, each partner also shows the relationship kind, which opens a picker. */
+    private View kinshipRow(String title, java.util.List<String> ids, Dialog dialog, Person partnersOf) {
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(10), dp(7), dp(10), dp(7));
@@ -1482,7 +1496,7 @@ final class MainActivityEditor {
         TextView heading = editorText(title + "  " + ids.size(), 12, Color.rgb(28, 34, 38), true);
         row.addView(heading, new LinearLayout.LayoutParams(-1, dp(24)));
         if (ids.isEmpty()) {
-            row.addView(editorText("Нет связей", 11, Color.rgb(101, 113, 122), false), new LinearLayout.LayoutParams(-1, dp(24)));
+            row.addView(editorText("Не указаны", 11, Color.rgb(101, 113, 122), false), new LinearLayout.LayoutParams(-1, dp(24)));
         } else {
             for (String id : ids) {
                 Person relative = activity.state.people.get(id);
@@ -1502,9 +1516,29 @@ final class MainActivityEditor {
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(36));
                 params.setMargins(0, 0, 0, dp(5));
                 row.addView(link, params);
+                Relation couple = partnersOf == null ? null : partnerLink(partnersOf.id, relative.id);
+                if (couple != null) {
+                    TextView status = editorText(
+                        "Отношения: " + PartnerStatus.label(couple.status) + "  ›", 11, Color.rgb(76, 83, 88), true);
+                    status.setPadding(dp(8), 0, dp(8), 0);
+                    status.setGravity(Gravity.CENTER_VERTICAL);
+                    status.setOnClickListener(v -> activity.choosePartnerStatus(couple, () -> status.setText(
+                        "Отношения: " + PartnerStatus.label(couple.status) + "  ›")));
+                    LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, dp(36));
+                    statusParams.setMargins(0, 0, 0, dp(8));
+                    row.addView(status, statusParams);
+                }
             }
         }
         return row;
+    }
+
+    private Relation partnerLink(String a, String b) {
+        for (Relation link : activity.state.links) {
+            if (!"partner".equals(link.type)) continue;
+            if (a.equals(link.from) && b.equals(link.to) || b.equals(link.from) && a.equals(link.to)) return link;
+        }
+        return null;
     }
 
     private void addPersonValidation(

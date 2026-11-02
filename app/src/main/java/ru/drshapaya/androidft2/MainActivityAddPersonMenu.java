@@ -61,7 +61,7 @@ final class MainActivityAddPersonMenu {
             views.personMenuHeader(selected, "Выбрана карточка"),
             new LinearLayout.LayoutParams(-1, activity.dp(64)));
         menu.addView(
-            views.personMenuSection("ДОБАВИТЬ К ВЫБРАННОЙ КАРТОЧКЕ"),
+            views.personMenuSection("Добавить к выбранной карточке"),
             new LinearLayout.LayoutParams(-1, activity.dp(30)));
         menu.addView(views.personMenuAction(
             R.drawable.ic_menu_add_person,
@@ -88,7 +88,7 @@ final class MainActivityAddPersonMenu {
             popup,
             () -> showRelativeCountDialog(selected, "siblings", 3)));
         menu.addView(
-            views.personMenuSection("ОТДЕЛЬНАЯ КАРТОЧКА"),
+            views.personMenuSection("Отдельная карточка"),
             new LinearLayout.LayoutParams(-1, activity.dp(30)));
         menu.addView(views.personMenuAction(
             R.drawable.ic_menu_add_box,
@@ -97,7 +97,7 @@ final class MainActivityAddPersonMenu {
             popup,
             activity::addLoosePerson));
         menu.addView(
-            views.personMenuSection("АВТОМАТИЧЕСКОЕ РАЗМЕЩЕНИЕ"),
+            views.personMenuSection("Автоматическое размещение"),
             new LinearLayout.LayoutParams(-1, activity.dp(30)));
         menu.addView(views.personMenuToggleAction(
             R.drawable.ic_menu_layout,
@@ -138,7 +138,7 @@ final class MainActivityAddPersonMenu {
         shell.setBackground(activity.panelBg(Color.WHITE, activity.dp(20), Color.argb(60, 63, 82, 94)));
 
         TextView eyebrow = new LocalizedTextView(activity);
-        eyebrow.setText("ВЫБРАНА КАРТОЧКА");
+        eyebrow.setText("Выбрана карточка");
         eyebrow.setTextSize(9);
         eyebrow.setTypeface(activity.uiBold());
         eyebrow.setTextColor(Color.rgb(8, 122, 115));
@@ -241,7 +241,7 @@ final class MainActivityAddPersonMenu {
             }));
         showChoiceDialog(
             selected,
-            activity.tr("ДОБАВЛЕНИЕ ПАРТНЁРА"),
+            activity.tr("Добавление партнёра"),
             activity.tr("Связать партнёра с детьми?"),
             activity.tr("У выбранной персоны уже есть дети: ") + children,
             options);
@@ -280,7 +280,7 @@ final class MainActivityAddPersonMenu {
             () -> addChildren(selected, count, "")));
         showChoiceDialog(
             selected,
-            activity.tr("ДОБАВЛЕНИЕ ДЕТЕЙ"),
+            activity.tr("Добавление детей"),
             activity.tr("Выберите второго родителя"),
             activity.tr("У выбранной персоны несколько партнёров. С кем связать новых детей?"),
             options);

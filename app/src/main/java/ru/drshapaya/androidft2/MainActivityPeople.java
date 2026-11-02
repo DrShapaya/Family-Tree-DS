@@ -225,13 +225,14 @@ final class MainActivityPeople {
 
     private void styleTab(Button button, boolean selected) {
         if (button == null) return;
-        int color = selected ? Color.WHITE : Color.rgb(83, 94, 103);
+        int color = selected ? AppThemePalette.primary() : Color.rgb(83, 94, 103);
         button.setTextColor(color);
         activity.tintDrawables(button, color);
         button.setBackground(selected
-            ? activity.tealGradientBg(dp(14))
+            ? activity.panelBg(AppThemePalette.primarySurface(), dp(14),
+                AppThemePalette.alpha(AppThemePalette.primaryBright(), 150))
             : activity.panelBg(Color.WHITE, dp(14), Color.argb(42, 63, 82, 94)));
-        button.setElevation(selected ? dp(3) : 0f);
+        button.setElevation(0f);
     }
 
     private void renderList() {
@@ -654,7 +655,7 @@ final class MainActivityPeople {
     }
 
     private String currentSearchSummary(String gender, String life, String photo) {
-        if (activity.state == null) return "Люди → все записи → показать 0 " + peopleWord(0);
+        if (activity.state == null) return "Найдено: 0 человек";
         String rawQuery = query == null ? "" : query.getText().toString().trim();
         SmartPeopleSearch.Query smart = SmartPeopleSearch.parse(activity.state, rawQuery, activity.state.selectedId, activity.kinshipTerminological);
         SmartPeopleSearch.Query quick = SmartPeopleSearch.parse(activity.state, quickFilterQuery, activity.state.selectedId, activity.kinshipTerminological);
@@ -673,7 +674,7 @@ final class MainActivityPeople {
         }
         String summary = smart != null && smart.active
             ? SmartPeopleSearch.explanation(smart, count)
-            : "Люди → все записи → показать " + count + " " + peopleWord(count);
+            : "Найдено: " + count + " " + RussianWordForms.forCount(count, "человек", "человека", "человек");
         return quickFilterQuery.isEmpty() ? summary : summary + " · фильтр: " + quickFilterQuery;
     }
 
@@ -752,7 +753,8 @@ final class MainActivityPeople {
         row.setPadding(dp(8), dp(6), dp(7), dp(6));
         row.setBackground(activity.panelBg(Color.WHITE, dp(14), Color.rgb(217, 224, 229)));
         LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(-1, dp(66));
-        outer.setMargins(0, 0, 0, dp(5));
+        // 8dp between rows, the same rhythm as menu and settings lists.
+        outer.setMargins(0, 0, 0, dp(8));
         row.setLayoutParams(outer);
         row.setOnClickListener(v -> openPerson(person, false));
         row.addView(avatar(person, 48), new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -815,7 +817,7 @@ final class MainActivityPeople {
             new String[]{"all", "living", "dead"}, value -> { pending[1] = value; updateSummary.run(); }));
         host.addView(choiceSection("Фотография", new String[]{"Любые", "С фото", "Без фото"}, pending[2],
             new String[]{"all", "with", "without"}, value -> { pending[2] = value; updateSummary.run(); }));
-        host.addView(menuAction("Данные", "Заполненность даты рождения", R.drawable.ic_menu_data_object, () -> {
+        host.addView(menuAction("Данные", "Заполненность даты рождения", R.drawable.ic_field_note, () -> {
             showDataFilters();
         }));
         host.addView(menuAction("Даты", "День, месяц, год и ближайшие дни рождения", R.drawable.ic_field_calendar, () -> {
@@ -845,7 +847,7 @@ final class MainActivityPeople {
     }
 
     private void showDataFilters() {
-        Dialog dialog = styledChoiceDialog("Данные", "Быстрые условия по заполненности карточек", R.drawable.ic_menu_data_object);
+        Dialog dialog = styledChoiceDialog("Данные", "Быстрые условия по заполненности карточек", R.drawable.ic_field_note);
         LinearLayout host = dialogHost(dialog);
         host.addView(menuAction("Без даты рождения", "Нет дня, месяца, года или текстовой даты", R.drawable.ic_field_calendar, () -> {
             dialog.dismiss();
@@ -1391,7 +1393,7 @@ final class MainActivityPeople {
 
         Map<String, List<String>> albums = loadAlbums();
         if (!albums.isEmpty()) {
-            TextView label = section("МОИ АЛЬБОМЫ");
+            TextView label = section("Мои альбомы");
             label.setPadding(dp(4), dp(12), 0, 0);
             body.addView(label, new LinearLayout.LayoutParams(-1, dp(44)));
             for (Map.Entry<String, List<String>> entry : albums.entrySet()) {
@@ -2718,10 +2720,13 @@ final class MainActivityPeople {
         return view;
     }
 
+    // Selected options use a quiet tint; the gradient is kept for the main action buttons.
     private void styleChoicePill(TextView view, boolean selected) {
-        view.setTextColor(selected ? Color.WHITE : AppThemePalette.text(Color.rgb(83, 94, 103)));
+        view.setTextColor(selected ? AppThemePalette.primary() : AppThemePalette.text(Color.rgb(83, 94, 103)));
+        view.setTypeface(selected ? activity.uiBold() : activity.ui());
         view.setBackground(selected
-            ? activity.tealGradientBg(dp(12))
+            ? activity.panelBg(AppThemePalette.primarySurface(), dp(12),
+                AppThemePalette.alpha(AppThemePalette.primaryBright(), 150))
             : activity.panelBg(Color.rgb(245, 248, 249), dp(12), Color.argb(48, 63, 82, 94)));
     }
 
@@ -2870,13 +2875,6 @@ final class MainActivityPeople {
     private static String value(String value) { return value == null ? "" : value.trim(); }
     private static int year(String value) { try { return Integer.parseInt(value(value).replaceAll("[^0-9]", "")); } catch (Exception ignored) { return 0; } }
     private static String capitalize(String value) { return value.isEmpty() ? value : value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1); }
-    private static String peopleWord(int count) {
-        int mod10 = Math.abs(count) % 10;
-        int mod100 = Math.abs(count) % 100;
-        if (mod10 == 1 && mod100 != 11) return "человека";
-        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "человека";
-        return "человек";
-    }
     private String peopleCountText(int count) {
         boolean english = AppLanguage.isEnglish(activity);
         return RussianWordForms.count(

@@ -6,6 +6,7 @@ import java.util.*;
 final class GedcomWriter {
     private static final class Family {
         String id;
+        String status = PartnerStatus.PARTNERS;
         final List<String> parents = new ArrayList<>();
         final Set<String> children = new LinkedHashSet<>();
     }
@@ -27,6 +28,7 @@ final class GedcomWriter {
             if ("partner".equals(r.type)) {
                 Family f = new Family();
                 f.parents.add(r.from); f.parents.add(r.to);
+                f.status = PartnerStatus.normalize(r.status);
                 families.add(f);
             }
         }
@@ -112,6 +114,11 @@ final class GedcomWriter {
                 && PersonGender.MALE.equals(PersonGender.resolve(state.people.get(slots.get(1))))) Collections.reverse(slots);
             for(int i=0;i<slots.size();i++) out.append(i==0 && !(slots.size()==1 && PersonGender.FEMALE.equals(PersonGender.resolve(state.people.get(slots.get(0)))))?"1 HUSB @":"1 WIFE @").append(ids.get(slots.get(i))).append("@\n");
             for(String child:f.children) out.append("1 CHIL @").append(ids.get(child)).append("@\n");
+            // Relationship kind as standard family events; a divorce implies an earlier marriage.
+            if(PartnerStatus.MARRIED.equals(f.status) || PartnerStatus.DIVORCED.equals(f.status)) out.append("1 MARR Y\n");
+            if(PartnerStatus.ENGAGED.equals(f.status)) out.append("1 ENGA Y\n");
+            if(PartnerStatus.DIVORCED.equals(f.status)) out.append("1 DIV Y\n");
+            if(PartnerStatus.SEPARATED.equals(f.status)) out.append("1 _SEPR Y\n");
         }
         return out.append("0 TRLR\n").toString();
     }

@@ -176,7 +176,7 @@ final class MainActivityAbout {
         LinearLayout notesCard = aboutCard();
         String notesTitle = AppLanguage.isEnglish(activity)
             ? "Update " + releaseNotesVersion() + " since " + releaseNotesBaseVersion()
-            : "Обновление " + releaseNotesVersion() + " по сравнению с " + releaseNotesBaseVersion();
+            : "Что нового в " + releaseNotesVersion();
         notesCard.addView(aboutText(notesTitle, 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
         LinearLayout notesList = new LinearLayout(activity);
         notesList.setOrientation(LinearLayout.VERTICAL);
@@ -189,7 +189,7 @@ final class MainActivityAbout {
         LinearLayout teamMembers = new LinearLayout(activity);
         teamMembers.setOrientation(LinearLayout.HORIZONTAL);
         TextView developer = aboutText("DrShapaya", 13, Color.rgb(8, 122, 115), true, Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        developer.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_people, 0, 0, 0);
+        developer.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_field_person, 0, 0, 0);
         developer.setCompoundDrawablePadding(ui.dp(9));
         ui.tintDrawables(developer, Color.rgb(8, 122, 115));
         installHoldTooltip(developer, "Оригинальный создатель, разработчик и дизайнер приложения");
@@ -199,7 +199,7 @@ final class MainActivityAbout {
         developerParams.setMargins(0, 0, ui.dp(3), 0);
         teamMembers.addView(developer, developerParams);
         TextView videoEditor = aboutText("Sankorex", 13, Color.rgb(8, 122, 115), true, Gravity.LEFT | Gravity.CENTER_VERTICAL);
-        videoEditor.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_people, 0, 0, 0);
+        videoEditor.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_field_person, 0, 0, 0);
         videoEditor.setCompoundDrawablePadding(ui.dp(9));
         ui.tintDrawables(videoEditor, Color.rgb(8, 122, 115));
         installHoldTooltip(videoEditor, "Специалист по видеомонтажу");
@@ -220,7 +220,7 @@ final class MainActivityAbout {
         body.addView(fundraiserCard, aboutCardParams());
 
         LinearLayout donorsCard = aboutCard();
-        donorsCard.addView(aboutText("Топ донатеры", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
+        donorsCard.addView(aboutText("Лучшие спонсоры", 14, Color.rgb(28, 34, 38), true, Gravity.LEFT));
         bindSupporters(donorsCard, initialData.supporters, initialData.displayLimit);
         body.addView(donorsCard, aboutCardParams());
 
@@ -304,7 +304,7 @@ final class MainActivityAbout {
                 ui.tintDrawables(heart, accentText);
                 heart.setContentDescription(AppLanguage.isEnglish(activity)
                     ? "Featured supporter"
-                    : "Особый донатер");
+                    : "Спонсор");
                 row.addView(heart, new LinearLayout.LayoutParams(ui.dp(25), -1));
             }
 
@@ -329,8 +329,8 @@ final class MainActivityAbout {
         long recordAmount = SupporterCatalog.amountToBeat(leader);
         String suggested = formatDonationAmount(recordAmount, leader.currency);
         String buttonLabel = AppLanguage.isEnglish(activity)
-            ? "Beat the record · " + suggested
-            : "Побить рекорд · " + suggested;
+            ? "Support · " + suggested
+            : "Поддержать · " + suggested;
         Button beatRecord = ui.actionButton(buttonLabel, v -> openRecordDonation(recordAmount, leader.currency));
         LocalizedViews.setRaw(beatRecord, buttonLabel);
         beatRecord.setTextSize(10);
@@ -614,8 +614,8 @@ final class MainActivityAbout {
         if (notes.isEmpty()) return;
         String label = expanded
             ? AppLanguage.text(activity, "Свернуть")
-            : (AppLanguage.isEnglish(activity) ? "View list" : "Посмотреть список")
-                + " · " + notes.size();
+            : RussianWordForms.count(AppLanguage.isEnglish(activity), notes.size(),
+                "изменение", "изменения", "изменений", "change", "changes");
         Button toggle = ui.actionButton(label, v -> bindReleaseNotes(host, notes, !expanded));
         toggle.setTextColor(Color.rgb(8, 122, 115));
         toggle.setBackground(ui.panelBg(Color.rgb(235, 248, 246), ui.dp(13), Color.argb(52, 24, 169, 153)));

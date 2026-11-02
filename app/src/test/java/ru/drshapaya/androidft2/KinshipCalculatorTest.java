@@ -37,6 +37,32 @@ public class KinshipCalculatorTest {
         }
     }
 
+    @Test public void cardLabelsMatchPairwiseCalculationAndSkipTheReference() {
+        TreeState state = cousins(4, 5, false);
+        java.util.Map<String, String> labels = KinshipCalculator.labelsRelativeTo(state, "a4", true);
+        assertFalse(labels.containsKey("a4"));
+        for (String id : state.people.keySet()) {
+            if (id.equals("a4")) continue;
+            assertEquals(KinshipCalculator.calculate(state, id, "a4", true).firstToSecond, labels.get(id));
+        }
+    }
+
+    @Test public void spouseTermsFollowPartnerStatus() {
+        TreeState state = new TreeState();
+        person(state, "wife");
+        Person husband = new Person("husband"); husband.name = "husband"; husband.gender = PersonGender.MALE;
+        state.people.put("husband", husband);
+        state.addRelation("partner", "husband", "wife");
+        Relation couple = state.links.get(0);
+        assertEquals("жена", KinshipCalculator.calculate(state, "wife", "husband", true).firstToSecond);
+        couple.status = PartnerStatus.ENGAGED;
+        assertEquals("невеста", KinshipCalculator.calculate(state, "wife", "husband", true).firstToSecond);
+        assertEquals("жених", KinshipCalculator.labelsRelativeTo(state, "wife", true).get("husband"));
+        couple.status = PartnerStatus.DIVORCED;
+        assertEquals("бывшая жена", KinshipCalculator.calculate(state, "wife", "husband", true).firstToSecond);
+        assertEquals("бывший муж", KinshipCalculator.calculate(state, "wife", "husband", true).secondToFirst);
+    }
+
     @Test public void parametricModePreservesGenerationDirection() {
         TreeState state = cousins(4, 6, false);
         KinshipCalculator.Result result = KinshipCalculator.calculate(state, "b6", "a4", false);

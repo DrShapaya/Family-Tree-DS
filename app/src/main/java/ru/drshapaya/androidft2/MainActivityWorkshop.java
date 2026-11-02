@@ -137,7 +137,9 @@ final class MainActivityWorkshop {
         workshopBalanceText.setTypeface(ui.uiBold());
         workshopBalanceText.setIncludeFontPadding(false);
         balanceLine.addView(workshopBalanceText, new LinearLayout.LayoutParams(0, ui.dp(38), 1));
-        Button topButton = ui.actionButton("Топ", v -> messages.accept("Скоро"));
+        Button topButton = ui.actionButton("Рейтинг", v -> messages.accept("Скоро"));
+        // The leaderboard is not built yet; a button that only says "soon" is hidden.
+        topButton.setVisibility(View.GONE);
         topButton.setTextSize(10);
         topButton.setTextColor(AppThemePalette.primary());
         topButton.setPadding(ui.dp(12), 0, ui.dp(12), 0);

@@ -4,6 +4,7 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -26,10 +27,10 @@ final class PersonNameFields extends LinearLayout {
         patronymic = field("Отчество", parts[2], "person.patronymic");
         maidenVisible = person.maidenNameEnabled && ("maiden".equals(person.surnameDisplay)
             || ("inherit".equals(person.surnameDisplay) && activity.state.useMaidenNames));
-        caption("Девичья фамилия");
+        TextView maidenCaption = caption("Девичья фамилия");
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        maiden = makeField("Девичья фамилия", person.maidenName, "person.maidenName");
+        maiden = makeField(maidenCaption, person.maidenName, "person.maidenName");
         row.addView(maiden, new LinearLayout.LayoutParams(0, activity.dp(48), 1));
         maidenEye = activity.iconButton(R.drawable.ic_menu_eye_off, v -> {});
         maidenEye.setTag("person.maidenVisibility");
@@ -75,24 +76,27 @@ final class PersonNameFields extends LinearLayout {
         maidenEye.setEnabled(!activity.editingBlocked());
     }
 
-    private void caption(String label) {
+    private TextView caption(String label) {
         TextView caption = new LocalizedTextView(activity);
         caption.setText(label); caption.setTextSize(12); caption.setTypeface(activity.uiBold());
         caption.setTextColor(activity.uiColor(Color.rgb(76, 87, 96)));
         caption.setPadding(0, 0, 0, activity.dp(5)); addView(caption);
+        return caption;
     }
 
     private EditText field(String label, String value, String tag) {
-        caption(label);
-        EditText field = makeField(label, value, tag);
+        EditText field = makeField(caption(label), value, tag);
         field.setBackground(gradient(false, false));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, activity.dp(48));
         params.setMargins(0, 0, 0, activity.dp(12)); addView(field, params);
         return field;
     }
 
-    private EditText makeField(String label, String value, String tag) {
-        EditText field = activity.field(label);
+    /** The caption above names the field, so the field itself carries no repeated placeholder. */
+    private EditText makeField(TextView caption, String value, String tag) {
+        EditText field = activity.field("");
+        field.setId(View.generateViewId());
+        caption.setLabelFor(field.getId());
         LocalizedViews.setRaw(field, value); field.setTag(tag); field.setSingleLine(true);
         field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS | android.text.InputType.TYPE_TEXT_VARIATION_PERSON_NAME);
         field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(160)});

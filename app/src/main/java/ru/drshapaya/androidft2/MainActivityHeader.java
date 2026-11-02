@@ -33,7 +33,7 @@ final class MainActivityHeader {
         brand.setGravity(Gravity.CENTER_VERTICAL);
         brand.setPadding(
             activity.dp(12),
-            activity.dp(landscape ? 1 : 6),
+            activity.dp(landscape ? 1 : 2),
             activity.dp(12),
             activity.dp(landscape ? 4 : 8));
         brand.setBackgroundColor(AppThemePalette.surface(Color.WHITE));
@@ -43,7 +43,8 @@ final class MainActivityHeader {
 
         header.setOnApplyWindowInsetsListener((view, insets) -> {
             int topInset = insets == null ? 0 : insets.getSystemWindowInsetTop();
-            int topPadding = activity.dp(landscape ? 1 : 6);
+            // A small gap under the status bar: the brand row sits close without touching it.
+            int topPadding = activity.dp(landscape ? 1 : 2);
             int bottomPadding = activity.dp(landscape ? 4 : 8);
             brand.setPadding(
                 activity.dp(12),

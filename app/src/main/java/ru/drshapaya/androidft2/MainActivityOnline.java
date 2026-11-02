@@ -82,7 +82,7 @@ final class MainActivityOnline {
         LinearLayout titles = new LinearLayout(activity);
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView eyebrow = label(
-            activity.tr("ПРИВАТНЫЙ РАЗДЕЛ"),
+            activity.tr("Приватный раздел"),
             9,
             Color.argb(210, 255, 255, 255),
             true);
@@ -732,7 +732,7 @@ final class MainActivityOnline {
                     confirm(
                         "Загрузить дерево из GitHub?",
                         "Текущее локальное дерево на телефоне будет заменено выбранной онлайн-копией.",
-                        "Загрузить",
+                        "Восстановить",
                         () -> restoreOnlineTree(tree));
                 }));
         }
@@ -1066,7 +1066,7 @@ final class MainActivityOnline {
     }
 
     private TextView sectionTitle(String value) {
-        TextView title = label(value.toUpperCase(Locale.ROOT), 10, TEAL, true);
+        TextView title = label(value, 11, TEAL, true);
         title.setPadding(activity.dp(3), activity.dp(10), 0, activity.dp(8));
         return title;
     }

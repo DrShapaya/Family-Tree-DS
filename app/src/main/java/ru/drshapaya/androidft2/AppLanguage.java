@@ -80,7 +80,7 @@ final class AppLanguage {
 
     static String modeLabel(Context context) {
         String selected = mode(context);
-        if (RUSSIAN.equals(selected)) return isEnglish(context) ? "Russian" : "Русский";
+        if (RUSSIAN.equals(selected)) return "Русский";
         if (ENGLISH.equals(selected)) return "English";
         return isEnglish(context) ? "Automatic" : "Автоматически";
     }

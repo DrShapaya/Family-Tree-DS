@@ -179,4 +179,15 @@ public class GedcomCompatibilityTest {
     @Test(expected=java.io.IOException.class) public void refusesTruncatedUtf16InsteadOfReplacingCharacter() throws Exception {
         TreeImportIO.decodeText(new byte[]{(byte)0xff,(byte)0xfe,'0',0,' '});
     }
+    @Test public void partnerStatusSurvivesGedcomRoundTrip() {
+        for (String status : PartnerStatus.ALL) {
+            GedcomReader.Result r=GedcomReader.read("0 HEAD\n0 @A@ INDI\n1 NAME Anna\n0 @B@ INDI\n1 NAME Boris\n"
+                +"0 @F@ FAM\n1 HUSB @B@\n1 WIFE @A@\n0 TRLR\n");
+            Relation partner=r.state.links.get(0);
+            assertEquals("partner",partner.type);assertEquals(PartnerStatus.PARTNERS,partner.status);
+            partner.status=status;
+            Relation restored=GedcomReader.read(GedcomWriter.write(r.state)).state.links.get(0);
+            assertEquals(status,restored.status);
+        }
+    }
 }
