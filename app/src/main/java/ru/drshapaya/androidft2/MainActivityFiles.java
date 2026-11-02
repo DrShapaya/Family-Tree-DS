@@ -282,9 +282,9 @@ final class MainActivityFiles {
 
         String badgeText = title.startsWith("Family") ? "FT" : title.replaceAll("[^A-Za-z]", "");
         if (badgeText.length() > 4) badgeText = badgeText.substring(0, 4);
-        TextView badge = versionText(badgeText, badgeText.length() > 3 ? 9 : 11, Color.WHITE, true);
+        TextView badge = versionText(badgeText, badgeText.length() > 3 ? 9 : 11, AppThemePalette.primary(), true);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(activity.tealGradientBg(activity.dp(11)));
+        badge.setBackground(activity.softIconBg(activity.dp(11)));
         row.addView(badge, new LinearLayout.LayoutParams(activity.dp(46), activity.dp(46)));
 
         LinearLayout copy = new LinearLayout(activity);

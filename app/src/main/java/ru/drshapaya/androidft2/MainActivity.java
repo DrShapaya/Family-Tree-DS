@@ -93,10 +93,10 @@ public final class MainActivity extends Activity {
         {"add-person", "Добавление человека", "Кнопка + создаёт первую карточку или открывает выбор родственника. В обучении мы ничего добавлять не будем.", "next"},
         {"card-menu", "Карточка человека", "Нажмите «Карточка»: здесь редактируются ФИО, даты, фото, заметки и другие сведения выбранного человека.", "tap"},
         {"people-menu", "Люди и фотографии", "Нажмите «Люди»: здесь находятся общий каталог, поиск, фильтры, аватары, семейные и собственные альбомы.", "tap"},
-        {"links-menu", "Семейные связи", "Нажмите «Связи»: отсюда создаются родительские, родственные и братские линии, а также определяется родство.", "tap"},
+        {"links-menu", "Семейные связи", "Нажмите «Связи»: отсюда связываются родители, партнёры, братья и сёстры, а также определяется родство.", "tap"},
         {"tree-menu", "Инструменты дерева", "Нажмите «Дерево»: здесь находятся упорядочивание, выделение, ветки и линии поколений.", "tap"},
-        {"more-menu", "Остальные возможности", "Нажмите «Ещё», чтобы открыть файлы, сохранённые версии, параметры, обучение и информацию о приложении.", "tap"},
-        {"more-overview", "Всё важное под рукой", "Файлы и экспорт, резервные версии, параметры и повторный запуск обучения находятся в этом меню.", "finish"}
+        {"more-menu", "Остальные возможности", "Нажмите «Ещё», чтобы открыть файлы и версии, параметры, обучение и информацию о приложении.", "tap"},
+        {"more-overview", "Всё важное под рукой", "Файлы и сохранённые версии, параметры и повторный запуск обучения находятся в этом меню.", "finish"}
     };
 
     TreeStore store;
@@ -454,12 +454,27 @@ public final class MainActivity extends Activity {
         if (startupSplash != null) startupSplash.onTreeReady(headerIdentityIcon, afterStartup);
         else afterStartup.run();
         treeView.post(() -> {
-            if (state == null || state.people.isEmpty()) treeView.focusWorkspaceCenter();
-            else treeView.fit();
+            fitTreeToView();
             stage.postDelayed(() -> {
                 if (!editingBlocked()) hideTreeHintForSession();
             }, TREE_HINT_AUTO_HIDE_MS);
         });
+        // The first fit can run while Settings is reopened over the canvas after a theme or
+        // language change, with the canvas at a temporary size. Until the person touches the
+        // tree, every size change fits it again, after the tool rail has updated its inset.
+        treeView.addOnLayoutChangeListener(startupRefit);
+    }
+
+    private final View.OnLayoutChangeListener startupRefit =
+        (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (right - left == oldRight - oldLeft && bottom - top == oldBottom - oldTop) return;
+            if (treeView != null) treeView.post(this::fitTreeToView);
+        };
+
+    private void fitTreeToView() {
+        if (treeView == null) return;
+        if (state == null || state.people.isEmpty()) treeView.focusWorkspaceCenter();
+        else treeView.fit();
     }
 
     @Override
@@ -475,6 +490,12 @@ public final class MainActivity extends Activity {
         if (state != null && headerModule != null && panelsModule != null) {
             if (startupSplash != null) startupSplash.dismiss();
             rebuildUiKeepingPanel();
+            // The rebuilt canvas starts with a default camera; fit the tree to the new
+            // orientation once it is laid out (and again if the panels resize it).
+            if (treeView != null) {
+                treeView.post(this::fitTreeToView);
+                treeView.addOnLayoutChangeListener(startupRefit);
+            }
         }
     }
 
@@ -670,6 +691,7 @@ public final class MainActivity extends Activity {
                 updateCanvasModePanel();
             }
             @Override public void onCanvasTouched() {
+                if (treeView != null) treeView.removeOnLayoutChangeListener(startupRefit);
                 clearSearchFocus();
             }
             @Override public void onEditBlocked() {
@@ -1331,7 +1353,9 @@ public final class MainActivity extends Activity {
         LinearLayout bubbles = new LinearLayout(this);
         bubbles.setOrientation(LinearLayout.VERTICAL);
         bubbles.setGravity(Gravity.RIGHT);
-        bubbles.setPadding(dp(10), dp(10), dp(10), dp(10));
+        // Phones get the 16dp edge used by windows; the narrow landscape side panel keeps 10dp.
+        int menuEdge = dp(isLandscapeLayout() ? 10 : 16);
+        bubbles.setPadding(menuEdge, menuEdge, menuEdge, menuEdge);
         bubbles.setBackground(panelBg(Color.argb(246, 248, 251, 252), dp(24), Color.argb(72, 24, 169, 153)));
         bubbles.setElevation(dp(14));
         bubbles.setOnClickListener(v -> { });
@@ -1342,7 +1366,8 @@ public final class MainActivity extends Activity {
             openWorkshop();
         }), moreBubbleParams(false));
         bubbles.addView(moreBubble(R.drawable.ic_nav_files, "Файлы и экспорт", "Сохранение, импорт и отправка", () -> {
-            showPanel("files");
+            showPanel("");
+            showFilesDialog();
         }), moreBubbleParams(false));
         bubbles.addView(moreBubble(R.drawable.ic_menu_statistics, "Статистика дерева",
             "Родство, возраст и дети", () -> {
@@ -1405,17 +1430,20 @@ public final class MainActivity extends Activity {
             Color.argb(42, 255, 255, 255),
             dp(999),
             Color.argb(68, 255, 255, 255)));
-        bubble.addView(icon, new LinearLayout.LayoutParams(dp(50), dp(50)));
+        boolean narrow = isLandscapeLayout();
+        bubble.addView(icon, new LinearLayout.LayoutParams(dp(narrow ? 40 : 50), dp(narrow ? 40 : 50)));
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
-        copy.setPadding(dp(12), 0, dp(6), 0);
+        copy.setPadding(dp(narrow ? 10 : 12), 0, dp(6), 0);
         TextView title = new LocalizedTextView(this);
         title.setText("Онлайн-дерево");
         title.setTextColor(Color.WHITE);
-        title.setTextSize(15);
+        // The landscape side panel is narrow; a smaller title fits instead of being cut off.
+        title.setTextSize(isLandscapeLayout() ? 13 : 15);
         title.setTypeface(uiBold());
         title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
         copy.addView(title, new LinearLayout.LayoutParams(-1, dp(27)));
         TextView detail = new LocalizedTextView(this);
         detail.setText("Синхронизация, резервные копии и доступ близких");
@@ -1431,13 +1459,14 @@ public final class MainActivity extends Activity {
         arrow.setTextColor(Color.WHITE);
         arrow.setTextSize(28);
         arrow.setGravity(Gravity.CENTER);
-        bubble.addView(arrow, new LinearLayout.LayoutParams(dp(24), dp(48)));
+        // The whole row is tappable; in the narrow panel the title needs the arrow's width.
+        if (!narrow) bubble.addView(arrow, new LinearLayout.LayoutParams(dp(24), dp(48)));
         return bubble;
     }
 
     private LinearLayout.LayoutParams onlineTreeBubbleParams() {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(78));
-        params.setMargins(0, 0, 0, dp(12));
+        params.setMargins(0, 0, 0, dp(8));
         return params;
     }
 
@@ -1455,9 +1484,9 @@ public final class MainActivity extends Activity {
 
         ImageView icon = new ImageView(this);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.WHITE);
+        icon.setColorFilter(AppThemePalette.primary());
         icon.setPadding(dp(12), dp(12), dp(12), dp(12));
-        icon.setBackground(tealGradientBg(dp(999)));
+        icon.setBackground(softIconBg(dp(999)));
         bubble.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         LinearLayout copy = new LinearLayout(this);
@@ -1482,7 +1511,7 @@ public final class MainActivity extends Activity {
 
     private LinearLayout.LayoutParams moreBubbleParams(boolean last) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(62));
-        params.setMargins(0, 0, 0, last ? 0 : dp(10));
+        params.setMargins(0, 0, 0, last ? 0 : dp(8));
         return params;
     }
 
@@ -1581,7 +1610,7 @@ public final class MainActivity extends Activity {
             v -> openPersonEditor(),
             true), new LinearLayout.LayoutParams(0, dp(112), 1));
         LinearLayout.LayoutParams quickParams = new LinearLayout.LayoutParams(0, dp(112), 1);
-        quickParams.setMargins(dp(10), 0, 0, 0);
+        quickParams.setMargins(dp(8), 0, 0, 0);
         actions.addView(cardActionTile(
             R.drawable.ic_menu_add_person,
             "Добавить родственника",
@@ -1720,40 +1749,58 @@ public final class MainActivity extends Activity {
     private LinearLayout buildFilesPanel() {
         LinearLayout panel = basePanel();
         panel.setPadding(dp(10), dp(8), dp(10), dp(2));
+        addFilesActions(panel, null);
+        return panel;
+    }
+
+    /** "Файлы и экспорт" opens as its own window, like the other items of the More menu. */
+    private void showFilesDialog() {
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_nav_files, "Файлы и экспорт");
+        addFilesActions(body, dialog::dismiss);
+        dialog.content(body).show();
+    }
+
+    /** Builds the file actions; {@code beforeAction} closes the hosting window first when set. */
+    private void addFilesActions(LinearLayout panel, Runnable beforeAction) {
+        java.util.function.Function<Runnable, View.OnClickListener> run = action -> v -> {
+            if (beforeAction != null) beforeAction.run();
+            action.run();
+        };
         LinearLayout primary = new LinearLayout(this);
         primary.setOrientation(LinearLayout.HORIZONTAL);
         primary.addView(cardActionTile(
             R.drawable.ic_menu_upload,
             "Поделиться деревом",
             "Один файл со всеми вложениями",
-            v -> filesModule.shareTreePackage(),
+            run.apply(() -> filesModule.shareTreePackage()),
             true), new LinearLayout.LayoutParams(0, dp(112), 1));
         LinearLayout.LayoutParams pngParams = new LinearLayout.LayoutParams(0, dp(112), 1);
-        pngParams.setMargins(dp(10), 0, 0, 0);
+        pngParams.setMargins(dp(8), 0, 0, 0);
         primary.addView(cardActionTile(
             R.drawable.ic_menu_image,
             "Сохранить PNG",
             "Предпросмотр и точные настройки",
-            v -> filesModule.showPngSaveSettings(),
+            run.apply(() -> filesModule.showPngSaveSettings()),
             true), pngParams);
         panel.addView(primary, new LinearLayout.LayoutParams(-1, dp(112)));
         LinearLayout rows = new LinearLayout(this);
         rows.setOrientation(LinearLayout.VERTICAL);
         rows.setPadding(0, dp(8), 0, 0);
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
-        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить на телефон", "Сохраняет файл дерева в выбранную папку на телефоне: .ftree, GEDCOM, HTML, PDF и другие форматы.", v -> filesModule.showSaveMenu()));
+        rows.addView(menuRow(R.drawable.ic_menu_save, "Сохранить на телефон", "Сохраняет файл дерева в выбранную папку на телефоне: .ftree, GEDCOM, HTML, PDF и другие форматы.", run.apply(() -> filesModule.showSaveMenu())));
         rows.addView(menuRow(
             R.drawable.ic_editor_archive,
             "Сохранённые версии",
             "Показывает 10 последних локальных версий и позволяет восстановить любую из них.",
-            v -> filesModule.openVersions()));
-        rows.addView(menuRow(R.drawable.ic_menu_import, "Импорт", "Загружает .ftree, JSON, GEDCOM и ZIP с фотографиями.", v -> openImport()));
+            run.apply(() -> filesModule.openVersions())));
+        rows.addView(menuRow(R.drawable.ic_menu_import, "Импорт", "Загружает .ftree, JSON, GEDCOM и ZIP с фотографиями.", run.apply(this::openImport)));
         rows.addView(menuRow(
             R.drawable.ic_menu_export,
             "Отправить в другом формате",
             "Отправляет дерево в формате GEDCOM, HTML, PDF, JSON, XML или PNG в мессенджер, облако или другое приложение.",
-            v -> filesModule.showExportMenu()));
-        return panel;
+            run.apply(() -> filesModule.showExportMenu())));
     }
 
     private LinearLayout buildLinksPanel() {
@@ -1987,7 +2034,7 @@ public final class MainActivity extends Activity {
             v -> startManualArrange(),
             true), new LinearLayout.LayoutParams(0, dp(112), 1));
         LinearLayout.LayoutParams guidesParams = new LinearLayout.LayoutParams(0, dp(112), 1);
-        guidesParams.setMargins(dp(10), 0, 0, 0);
+        guidesParams.setMargins(dp(8), 0, 0, 0);
         View guidesTile = cardActionTile(
             R.drawable.ic_menu_grid_lines,
             "Линии поколений",
@@ -2007,7 +2054,7 @@ public final class MainActivity extends Activity {
     }
 
     private String guidesTileDetail() {
-        return generationLines ? "Включены · направляющие и подписи" : "Выключены · направляющие и подписи";
+        return generationLines ? "Сейчас включены" : "Сейчас выключены";
     }
 
     void refreshGuidesTile() {
@@ -4192,7 +4239,9 @@ public final class MainActivity extends Activity {
 
     private void updateTreeRightInset() {
         if (treeView == null || zoomRail == null || stage == null) return;
-        boolean railShown = zoomRail.getVisibility() == View.VISIBLE && zoomRail.getWidth() > 0;
+        boolean railShown = zoomRail.getVisibility() == View.VISIBLE && zoomRail.getWidth() > 0
+            && zoomRail.getLeft() > stage.getWidth() / 2;
+        // Only a rail on the right edge narrows the canvas; landscape puts it on the left.
         treeView.setRightInset(railShown ? stage.getWidth() - zoomRail.getLeft() : 0f);
     }
 
@@ -5842,6 +5891,12 @@ public final class MainActivity extends Activity {
         bg.setCornerRadius(radius);
         bg.setStroke(dp(1), Color.argb(104, 255, 255, 255));
         return bg;
+    }
+
+    /** Background for decorative icon badges: a tinted surface instead of the action gradient. */
+    GradientDrawable softIconBg(int radius) {
+        return panelBg(AppThemePalette.primarySurface(), radius,
+            AppThemePalette.alpha(AppThemePalette.primaryBright(), 60));
     }
 
     GradientDrawable tealGradientBg(int radius) {

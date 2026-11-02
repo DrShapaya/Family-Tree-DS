@@ -104,18 +104,14 @@ final class PersonNameFields extends LinearLayout {
         return field;
     }
 
+    /**
+     * Name fields share the white style of every other form field; only a hidden maiden
+     * name keeps a grey fill so its "not shown on the card" state stays visible.
+     */
     private GradientDrawable gradient(boolean green, boolean hidden) {
-        boolean dark = AppThemePalette.isDark();
-        int start = hidden ? (dark ? Color.rgb(51, 57, 65) : Color.rgb(239, 241, 244))
-            : green ? (dark ? Color.rgb(32, 66, 55) : Color.rgb(235, 250, 240))
-            : dark ? Color.rgb(58, 46, 77) : Color.rgb(247, 240, 255);
-        int end = hidden ? (dark ? Color.rgb(44, 50, 57) : Color.rgb(227, 231, 236))
-            : green ? (dark ? Color.rgb(38, 77, 62) : Color.rgb(218, 244, 229))
-            : dark ? Color.rgb(69, 55, 92) : Color.rgb(233, 222, 250);
-        GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{start, end});
-        background.setCornerRadius(activity.dp(10));
-        background.setStroke(activity.dp(1), AppThemePalette.stroke(hidden ? Color.rgb(205, 214, 220)
-            : green ? Color.rgb(177, 215, 194) : Color.rgb(208, 192, 231)));
-        return background;
+        return activity.panelBg(
+            hidden ? Color.rgb(239, 241, 244) : Color.WHITE,
+            activity.dp(10),
+            Color.rgb(217, 224, 229));
     }
 }

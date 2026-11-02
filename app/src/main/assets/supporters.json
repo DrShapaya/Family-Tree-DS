@@ -19,6 +19,17 @@
       "color": "#F3A45F",
       "showHeart": true,
       "order": 0
+    },
+    {
+      "id": "fa7c338c-60f4-3411-b906-ed057419fd51",
+      "amountRevision": 0,
+      "donationLinks": [],
+      "name": "Тест",
+      "amount": 67,
+      "currency": "RUB",
+      "color": "#8B7CFF",
+      "showHeart": false,
+      "order": 1
     }
   ]
 }

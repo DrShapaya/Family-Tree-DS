@@ -40,7 +40,7 @@ final class AppDialog extends Dialog {
         this.activity=activity; this.ui=ui;
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         shell=column(); shell.setTag("appDialog.shell");
-        shell.setPadding(ui.dp(18),ui.dp(18),ui.dp(18),ui.dp(16));
+        shell.setPadding(ui.dp(16),ui.dp(16),ui.dp(16),ui.dp(16));
         shell.setBackground(ui.panelBg(Color.WHITE,ui.dp(22),Color.argb(56,63,82,94)));
         LinearLayout header=new LinearLayout(activity); header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0,0,0,ui.dp(12));

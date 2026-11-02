@@ -1779,5 +1779,11 @@
   "бывший муж": "former husband",
   "бывший супруг": "former spouse",
   "бывшая партнёрша": "former partner",
-  "бывший партнёр": "former partner"
+  "бывший партнёр": "former partner",
+  "Нажмите «Связи»: отсюда связываются родители, партнёры, братья и сёстры, а также определяется родство.": "Tap Connections to link parents, partners and siblings, and to see how two people are related.",
+  "Нажмите «Ещё», чтобы открыть файлы и версии, параметры, обучение и информацию о приложении.": "Tap More to open files and versions, settings, training and app information.",
+  "Файлы и сохранённые версии, параметры и повторный запуск обучения находятся в этом меню.": "Files and saved versions, settings and the training restart are in this menu.",
+  "Сейчас включены": "Currently on",
+  "Сейчас выключены": "Currently off",
+  "Закрыть параметры": "Close settings"
 }

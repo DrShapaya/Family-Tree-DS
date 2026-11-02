@@ -127,9 +127,9 @@ final class MainActivityPeople {
 
         ImageView mark = new ImageView(activity);
         mark.setImageResource(R.drawable.ic_menu_people);
-        mark.setColorFilter(Color.WHITE);
+        mark.setColorFilter(AppThemePalette.primary());
         mark.setPadding(dp(13), dp(13), dp(13), dp(13));
-        mark.setBackground(activity.tealGradientBg(dp(16)));
+        mark.setBackground(activity.softIconBg(dp(16)));
         header.addView(mark, new LinearLayout.LayoutParams(dp(52), dp(52)));
 
         LinearLayout heading = new LinearLayout(activity);
@@ -2648,9 +2648,9 @@ final class MainActivityPeople {
         top.setGravity(Gravity.CENTER_VERTICAL);
         ImageView icon = new ImageView(activity);
         icon.setImageResource(iconRes);
-        icon.setColorFilter(Color.WHITE);
+        icon.setColorFilter(AppThemePalette.primary());
         icon.setPadding(dp(11), dp(11), dp(11), dp(11));
-        icon.setBackground(activity.tealGradientBg(dp(14)));
+        icon.setBackground(activity.softIconBg(dp(14)));
         top.addView(icon, new LinearLayout.LayoutParams(dp(48), dp(48)));
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(LinearLayout.VERTICAL);

@@ -1793,8 +1793,9 @@ final class TreeCanvasView extends View {
                 || "card_edge_smoke".equals(cardEdgeStyle)
                 || "card_theme_fire".equals(cardStyle);
         }
-        // Tags go in a second pass so a neighbour card never covers them.
-        if(!kinshipTags.isEmpty())for(Person person:effectPeopleScratch)drawKinshipTag(canvas,person);
+        // Tags go in a second pass so a neighbour card never covers them. They are a viewing
+        // aid for the screen, so exported images (and their previews) stay without them.
+        if(!exportMode&&!kinshipTags.isEmpty())for(Person person:effectPeopleScratch)drawKinshipTag(canvas,person);
         if(!exportMode &&cardRasterCache.needsAnotherFrame() &&isShown() &&getWindowVisibility()==VISIBLE)postInvalidateOnAnimation();
         if (drewFire && !exportMode && isShown() && getWindowVisibility() == VISIBLE
                 && (gpuFireForFrame || !animatedCardAtlas.hasActiveFrame()))postInvalidateOnAnimation();
@@ -2092,7 +2093,9 @@ final class TreeCanvasView extends View {
             textPaint.setFakeBoldText(false);
             textPaint.setTypeface(uiRegular);
             textPaint.setColor(cardSecondaryTextColor());
-            textPaint.setTextSize((compactCards ? 13f : 15f) * textScale);
+            // Dates and place are what people read most after the name; one step larger
+            // than before still leaves 15+ world units under the avatar.
+            textPaint.setTextSize((compactCards ? 14f : 16.5f) * textScale);
             CardMeta meta = cardMeta;
             String date = meta.date;
             String place = meta.place;
@@ -2103,12 +2106,12 @@ final class TreeCanvasView extends View {
                 : 0f;
             float metaWidth = Math.max(1f, width - pad * 2f - qualityReserve);
             float bottomBaseline = top + height - pad - 2f * scale;
-            float iconSize = (compactCards ? 10.5f : 12.5f) * textScale;
+            float iconSize = (compactCards ? 11.5f : 13.5f) * textScale;
             float iconGap = 5f * textScale;
             float metaTextLeft = metaLeft + iconSize + iconGap;
             float metaTextWidth = Math.max(1f, metaWidth - iconSize - iconGap);
             if (!date.isEmpty() && !place.isEmpty()) {
-                float dateBaseline = bottomBaseline - 19f * textScale;
+                float dateBaseline = bottomBaseline - (compactCards ? 19f : 21f) * textScale;
                 drawCalendarMetaIcon(canvas, metaLeft, dateBaseline, iconSize);
                 drawFittedSingleLine(canvas, date, metaTextLeft, dateBaseline, metaTextWidth);
                 drawLocationMetaIcon(canvas, metaLeft, bottomBaseline, iconSize);

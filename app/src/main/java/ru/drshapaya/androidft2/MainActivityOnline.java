@@ -1137,9 +1137,9 @@ final class MainActivityOnline {
     ) {
         LinearLayout row = new LinearLayout(activity);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView icon = label(glyph, 18, Color.WHITE, true);
+        TextView icon = label(glyph, 18, AppThemePalette.primary(), true);
         icon.setGravity(Gravity.CENTER);
-        icon.setBackground(activity.tealGradientBg(activity.dp(13)));
+        icon.setBackground(activity.softIconBg(activity.dp(13)));
         row.addView(icon, new LinearLayout.LayoutParams(activity.dp(46), activity.dp(46)));
         LinearLayout text = new LinearLayout(activity);
         text.setOrientation(LinearLayout.VERTICAL);
