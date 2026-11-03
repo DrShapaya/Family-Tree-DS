@@ -1785,5 +1785,10 @@
   "Файлы и сохранённые версии, параметры и повторный запуск обучения находятся в этом меню.": "Files and saved versions, settings and the training restart are in this menu.",
   "Сейчас включены": "Currently on",
   "Сейчас выключены": "Currently off",
-  "Закрыть параметры": "Close settings"
+  "Закрыть параметры": "Close settings",
+  "Вид отношений": "Relationship kind",
+  "В браке, помолвлены, партнёры, бывшие супруги или не в отношениях — для пары выбранной карточки. Тот же выбор открывается нажатием на линию между партнёрами.": "Married, engaged, partners, former spouses or not together, for the selected card's couple. Tapping the line between partners opens the same choice.",
+  "У выбранной карточки нет партнёра": "The selected card has no partner",
+  "С кем отношения?": "Which partner?",
+  "Брак, помолвка, бывшие супруги": "Married, engaged, former spouses"
 }

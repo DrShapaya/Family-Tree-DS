@@ -1353,9 +1353,7 @@ public final class MainActivity extends Activity {
         LinearLayout bubbles = new LinearLayout(this);
         bubbles.setOrientation(LinearLayout.VERTICAL);
         bubbles.setGravity(Gravity.RIGHT);
-        // Phones get the 16dp edge used by windows; the narrow landscape side panel keeps 10dp.
-        int menuEdge = dp(isLandscapeLayout() ? 10 : 16);
-        bubbles.setPadding(menuEdge, menuEdge, menuEdge, menuEdge);
+        bubbles.setPadding(dp(10), dp(10), dp(10), dp(10));
         bubbles.setBackground(panelBg(Color.argb(246, 248, 251, 252), dp(24), Color.argb(72, 24, 169, 153)));
         bubbles.setElevation(dp(14));
         bubbles.setOnClickListener(v -> { });
@@ -1396,9 +1394,8 @@ public final class MainActivity extends Activity {
             scroll.addView(bubbles, new ScrollView.LayoutParams(-1, -2));
             overlay.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         } else {
-            // Same 12dp gutter on both sides on phones; tablets keep a readable width.
-            int menuWidth = Math.min(dp(420), getResources().getDisplayMetrics().widthPixels - dp(24));
-            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
+            int menuWidth = Math.min(dp(320), getResources().getDisplayMetrics().widthPixels - dp(24));
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(menuWidth, -2, Gravity.RIGHT | Gravity.BOTTOM);
             params.setMargins(dp(12), dp(12), dp(12), dp(86));
             ScrollView scroll = new ScrollView(this);
             scroll.setClipToPadding(false);
@@ -1759,7 +1756,22 @@ public final class MainActivity extends Activity {
         body.setOrientation(LinearLayout.VERTICAL);
         AppDialog dialog = AppDialog.create(this, R.drawable.ic_nav_files, "Файлы и экспорт");
         addFilesActions(body, dialog::dismiss);
+        View last = lastLeaf(body);
+        if (last != null && last.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+            ((ViewGroup.MarginLayoutParams) last.getLayoutParams()).bottomMargin = 0;
+        }
         dialog.content(body).show();
+    }
+
+    /** The last row inside nested containers, whose bottom margin would pad the window. */
+    private static View lastLeaf(ViewGroup group) {
+        View last = group.getChildCount() == 0 ? null : group.getChildAt(group.getChildCount() - 1);
+        if (last instanceof ViewGroup && !(last.getLayoutParams() instanceof LinearLayout.LayoutParams
+            && ((LinearLayout.LayoutParams) last.getLayoutParams()).bottomMargin > 0)) {
+            View inner = lastLeaf((ViewGroup) last);
+            return inner == null ? last : inner;
+        }
+        return last;
     }
 
     /** Builds the file actions; {@code beforeAction} closes the hosting window first when set. */
@@ -1829,6 +1841,11 @@ public final class MainActivity extends Activity {
         rows.setPadding(0, dp(8), 0, 0);
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
         rows.addView(menuRow(R.drawable.ic_menu_heart, "Связь: партнёры", "Нажмите пункт, затем выберите две карточки для связи партнёров.", v -> startLink("family")));
+        rows.addView(menuRow(
+            R.drawable.ic_life_heart_outline,
+            "Вид отношений",
+            "В браке, помолвлены, партнёры, бывшие супруги или не в отношениях — для пары выбранной карточки. Тот же выбор открывается нажатием на линию между партнёрами.",
+            v -> choosePartnerStatusForSelected()));
         rows.addView(menuRow(
             R.drawable.ic_menu_route,
             "Кто кому приходится",
@@ -4202,6 +4219,38 @@ public final class MainActivity extends Activity {
             }
         });
         settingsScroll.requestLayout();
+    }
+
+    /** Relationship kind for the selected card's couple; asks which partner when there are several. */
+    private void choosePartnerStatusForSelected() {
+        Person selected = state == null ? null : state.selectedPerson();
+        if (selected == null) {
+            toast("Выберите карточку");
+            return;
+        }
+        java.util.List<Relation> couples = new java.util.ArrayList<>();
+        for (Relation link : state.links) {
+            if ("partner".equals(link.type) && (selected.id.equals(link.from) || selected.id.equals(link.to))) {
+                couples.add(link);
+            }
+        }
+        if (couples.isEmpty()) {
+            toast("У выбранной карточки нет партнёра");
+            return;
+        }
+        if (couples.size() == 1) {
+            choosePartnerStatus(couples.get(0), null);
+            return;
+        }
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_heart, "Вид отношений")
+            .message("С кем отношения?");
+        for (Relation couple : couples) {
+            Person partner = state.people.get(selected.id.equals(couple.from) ? couple.to : couple.from);
+            String name = partner == null || partner.name.isEmpty() ? tr("Без имени") : partner.name;
+            dialog.choice(R.drawable.ic_field_person, name, PartnerStatus.label(couple.status),
+                () -> choosePartnerStatus(couple, null));
+        }
+        dialog.show();
     }
 
     /** Lets the person mark a couple as married, engaged, partners, divorced or separated. */

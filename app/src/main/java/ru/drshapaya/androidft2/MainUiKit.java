@@ -140,12 +140,17 @@ final class MainUiKit {
         title.setTypeface(uiBold());
         heading.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
 
-        TextView subtitle = new LocalizedTextView(activity);
-        subtitle.setText(subtitleText);
-        subtitle.setTextSize(10);
-        subtitle.setTextColor(AppThemePalette.text(Color.rgb(101, 113, 122)));
-        subtitle.setTypeface(ui());
-        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
+        // An empty subtitle leaves the title alone, vertically centred next to the icon.
+        if (subtitleText != null && !subtitleText.isEmpty()) {
+            TextView subtitle = new LocalizedTextView(activity);
+            subtitle.setText(subtitleText);
+            subtitle.setTextSize(10);
+            subtitle.setTextColor(AppThemePalette.text(Color.rgb(101, 113, 122)));
+            subtitle.setTypeface(ui());
+            heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
+        } else {
+            heading.setGravity(Gravity.CENTER_VERTICAL);
+        }
         top.addView(heading, new LinearLayout.LayoutParams(0, dp(44), 1));
         top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
         return top;

@@ -148,6 +148,7 @@ final class TreeCanvasView extends View {
     private final Paint kinshipTagFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint kinshipTagText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF kinshipTagRect = new RectF();
+    private final Map<String, TagLayout> kinshipTagLayouts = new HashMap<>();
     private float endedPartnerDashScale;
     private String filter = "";
     private SmartPeopleSearch.Query smartFilter;
@@ -632,38 +633,64 @@ final class TreeCanvasView extends View {
     /** Kinship term per person id, drawn as a tag on the card's top edge; empty hides them. */
     void setKinshipTags(Map<String, String> tags) {
         kinshipTags = tags == null ? java.util.Collections.emptyMap() : tags;
+        kinshipTagLayouts.clear();
         invalidate();
     }
 
+    private static final float TAG_TEXT = 13f, TAG_PAD_X = 8f, TAG_HEIGHT = 22f, TAG_LEFT = 10f;
+
+    /**
+     * Draws the tag in tree (world) units under the camera matrix, like the cards. Measuring
+     * in screen pixels at a new font size every frame made the pill width jump while zooming.
+     */
     private void drawKinshipTag(Canvas canvas, Person person) {
         String label = kinshipTags.get(person.id);
         if (label == null || label.isEmpty()) return;
-        // Same size as the name on the card, so the tag reads at the same zoom levels.
-        float textSize = 13f * scale;
-        if (textSize < 7f) return;
-        float cardWidth = cardWidthWorld() * scale;
-        float paddingX = 8f * scale;
-        float height = textSize + 9f * scale;
-        kinshipTagText.setTextSize(textSize);
-        kinshipTagText.setTypeface(textPaint.getTypeface());
-        kinshipTagText.setFakeBoldText(true);
-        String text = android.text.TextUtils.ellipsize(
-            label, new android.text.TextPaint(kinshipTagText), cardWidth - 2f * paddingX - 16f * scale,
-            android.text.TextUtils.TruncateAt.END).toString();
-        float width = kinshipTagText.measureText(text) + 2f * paddingX;
-        float left = sx(person.x) + 10f * scale;
-        float top = sy(person.y) - height * 0.55f;
-        kinshipTagRect.set(left, top, left + width, top + height);
+        if (TAG_TEXT * scale < 7f) return;
+        TagLayout layout = kinshipTagLayouts.get(label);
+        if (layout == null) {
+            kinshipTagText.setTextSize(TAG_TEXT);
+            kinshipTagText.setTypeface(textPaint.getTypeface());
+            kinshipTagText.setFakeBoldText(true);
+            kinshipTagText.setSubpixelText(true);
+            kinshipTagText.setLinearText(true);
+            String text = android.text.TextUtils.ellipsize(
+                label, new android.text.TextPaint(kinshipTagText),
+                cardWidthWorld() - 2f * TAG_PAD_X - 2f * TAG_LEFT,
+                android.text.TextUtils.TruncateAt.END).toString();
+            layout = new TagLayout(text, kinshipTagText.measureText(text) + 2f * TAG_PAD_X,
+                TAG_HEIGHT / 2f - (kinshipTagText.descent() + kinshipTagText.ascent()) / 2f);
+            kinshipTagLayouts.put(label, layout);
+        }
+        int save = canvas.save();
+        canvas.translate(sx(person.x), sy(person.y));
+        canvas.scale(scale, scale);
+        float top = -TAG_HEIGHT * 0.55f;
+        kinshipTagRect.set(TAG_LEFT, top, TAG_LEFT + layout.width, top + TAG_HEIGHT);
         boolean dark = AppThemePalette.isDark();
         kinshipTagFill.setStyle(Paint.Style.FILL);
         kinshipTagFill.setColor(dark ? Color.rgb(30, 41, 46) : Color.WHITE);
-        canvas.drawRoundRect(kinshipTagRect, height / 2f, height / 2f, kinshipTagFill);
+        canvas.drawRoundRect(kinshipTagRect, TAG_HEIGHT / 2f, TAG_HEIGHT / 2f, kinshipTagFill);
         kinshipTagFill.setStyle(Paint.Style.STROKE);
-        kinshipTagFill.setStrokeWidth(Math.max(1f, 1.2f * scale));
+        kinshipTagFill.setStrokeWidth(1.2f);
         kinshipTagFill.setColor(blend(person.color, dark ? Color.WHITE : Color.BLACK, 0.18f));
-        canvas.drawRoundRect(kinshipTagRect, height / 2f, height / 2f, kinshipTagFill);
+        canvas.drawRoundRect(kinshipTagRect, TAG_HEIGHT / 2f, TAG_HEIGHT / 2f, kinshipTagFill);
+        kinshipTagText.setTextSize(TAG_TEXT);
         kinshipTagText.setColor(dark ? Color.rgb(232, 240, 242) : Color.rgb(28, 34, 38));
-        canvas.drawText(text, left + paddingX, top + height / 2f - (kinshipTagText.descent() + kinshipTagText.ascent()) / 2f, kinshipTagText);
+        canvas.drawText(layout.text, TAG_LEFT + TAG_PAD_X, top + layout.baseline, kinshipTagText);
+        canvas.restoreToCount(save);
+    }
+
+    private static final class TagLayout {
+        final String text;
+        final float width;
+        final float baseline;
+
+        TagLayout(String text, float width, float baseline) {
+            this.text = text;
+            this.width = width;
+            this.baseline = baseline;
+        }
     }
 
     private float visibleCenterX() {

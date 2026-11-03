@@ -96,7 +96,7 @@ final class MainActivityAbout {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout shell = ui.editorDialogShell();
-        shell.addView(ui.editorDialogHeader(dialog, R.drawable.ic_menu_info, "О нас", "Family Tree DS"));
+        shell.addView(ui.editorDialogHeader(dialog, R.drawable.ic_menu_info, "О нас", ""));
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
@@ -181,7 +181,7 @@ final class MainActivityAbout {
         LinearLayout notesList = new LinearLayout(activity);
         notesList.setOrientation(LinearLayout.VERTICAL);
         notesCard.addView(notesList, new LinearLayout.LayoutParams(-1, -2));
-        bindReleaseNotes(notesList, releaseNotes(), false);
+        bindReleaseNotes(notesList, releaseNotes(), notesTitle);
         body.addView(notesCard, aboutCardParams());
 
         LinearLayout teamCard = aboutCard();
@@ -596,32 +596,32 @@ final class MainActivityAbout {
         openExternalUrl(SUPPORT_URL);
     }
 
-    private void bindReleaseNotes(LinearLayout host, List<String> notes, boolean expanded) {
+    /** The About card keeps only a button; the full list opens in its own window on top. */
+    private void bindReleaseNotes(LinearLayout host, List<String> notes, String title) {
         host.removeAllViews();
-        int visible = expanded ? notes.size() : 0;
-        for (int index = 0; index < visible; index++) {
-            String translatedNote = AppLanguage.translateFully(activity, notes.get(index));
-            String value = "•  " + translatedNote;
-            TextView noteView = aboutText(value, 10, Color.rgb(70, 83, 92), false, Gravity.LEFT);
-            LocalizedViews.setRaw(noteView, value);
-            noteView.setPadding(0, ui.dp(5), 0, 0);
-            if (!expanded) {
-                noteView.setMaxLines(2);
-                noteView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            }
-            host.addView(noteView, new LinearLayout.LayoutParams(-1, -2));
-        }
         if (notes.isEmpty()) return;
-        String label = expanded
-            ? AppLanguage.text(activity, "Свернуть")
-            : RussianWordForms.count(AppLanguage.isEnglish(activity), notes.size(),
-                "изменение", "изменения", "изменений", "change", "changes");
-        Button toggle = ui.actionButton(label, v -> bindReleaseNotes(host, notes, !expanded));
-        toggle.setTextColor(Color.rgb(8, 122, 115));
-        toggle.setBackground(ui.panelBg(Color.rgb(235, 248, 246), ui.dp(13), Color.argb(52, 24, 169, 153)));
+        String label = RussianWordForms.count(AppLanguage.isEnglish(activity), notes.size(),
+            "изменение", "изменения", "изменений", "change", "changes");
+        Button open = ui.actionButton(label, v -> showReleaseNotesWindow(notes, title));
+        open.setTextColor(Color.rgb(8, 122, 115));
+        open.setBackground(ui.panelBg(Color.rgb(235, 248, 246), ui.dp(13), Color.argb(52, 24, 169, 153)));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, ui.dp(36));
-        params.setMargins(0, ui.dp(expanded ? 7 : 3), 0, 0);
-        host.addView(toggle, params);
+        params.setMargins(0, ui.dp(3), 0, 0);
+        host.addView(open, params);
+    }
+
+    private void showReleaseNotesWindow(List<String> notes, String title) {
+        LinearLayout list = new LinearLayout(activity);
+        list.setOrientation(LinearLayout.VERTICAL);
+        for (String note : notes) {
+            String value = "•  " + AppLanguage.translateFully(activity, note);
+            TextView noteView = aboutText(value, 13, Color.rgb(70, 83, 92), false, Gravity.LEFT);
+            LocalizedViews.setRaw(noteView, value);
+            noteView.setLineSpacing(ui.dp(2), 1f);
+            noteView.setPadding(0, 0, 0, ui.dp(10));
+            list.addView(noteView, new LinearLayout.LayoutParams(-1, -2));
+        }
+        new AppDialog(activity, ui, R.drawable.ic_menu_info, title).content(list).show();
     }
 
     @SuppressLint("ClickableViewAccessibility")

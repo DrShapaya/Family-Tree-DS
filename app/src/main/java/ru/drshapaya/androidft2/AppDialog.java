@@ -125,6 +125,12 @@ final class AppDialog extends Dialog {
 
     @Override public void show() {
         if(activity.isFinishing() || activity.isDestroyed()) return;
+        // Without buttons the empty action row and the body's bottom padding only added a gap
+        // below the content; the shell's own padding then matches the sides.
+        if(actions.getChildCount()==0) {
+            actions.setVisibility(View.GONE);
+            body.setPadding(body.getPaddingLeft(),body.getPaddingTop(),body.getPaddingRight(),0);
+        }
         bodyView.setLayoutParams(new LinearLayout.LayoutParams(-1,preferredBodyHeight));
         int width=Math.min(activity.getResources().getDisplayMetrics().widthPixels-ui.dp(24),ui.dp(520));
         shell.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
