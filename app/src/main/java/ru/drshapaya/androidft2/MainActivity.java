@@ -1709,13 +1709,12 @@ public final class MainActivity extends Activity {
         }
         tile.addView(text, new LinearLayout.LayoutParams(-1, dp(landscape ? 34 : 28)));
         TextView sub = cardActionDetail(detail, false);
-        sub.setGravity(Gravity.CENTER);
-        if (landscape) {
-            sub.setSingleLine(false);
-            sub.setMaxLines(2);
-            sub.setTextSize(8);
-        }
-        tile.addView(sub, new LinearLayout.LayoutParams(-1, dp(landscape ? 30 : 22)));
+        sub.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.TOP);
+        sub.setSingleLine(false);
+        sub.setMaxLines(2);
+        sub.setEllipsize(TextUtils.TruncateAt.END);
+        if (landscape) sub.setTextSize(8);
+        tile.addView(sub, new LinearLayout.LayoutParams(-1, dp(landscape ? 30 : 30)));
         return tile;
     }
 
@@ -1831,7 +1830,7 @@ public final class MainActivity extends Activity {
         primary.addView(cardActionTile(
             R.drawable.ic_menu_people,
             "Связь: брат/сестра",
-            "Связь брат/сестра",
+            "Выберите двух людей",
             v -> startLink("sibling"),
             true), siblingParams);
         panel.addView(primary, new LinearLayout.LayoutParams(-1, dp(112)));
@@ -1883,9 +1882,9 @@ public final class MainActivity extends Activity {
 
         LinearLayout modes = new LinearLayout(this);
         modes.setOrientation(LinearLayout.HORIZONTAL);
-        modes.addView(guideModeTile("h", R.drawable.ic_menu_horizontal_guide, "Гориз.", "Линия слева направо"), new LinearLayout.LayoutParams(0, dp(70), 1));
-        modes.addView(guideModeTile("v", R.drawable.ic_guide_vertical, "Вертик.", "Линия сверху вниз"), spacedTileParams());
-        modes.addView(guideModeTile("erase", R.drawable.ic_menu_eraser, "Удалять", "Тап рядом с линией"), spacedTileParams());
+        modes.addView(guideModeTile("h", R.drawable.ic_menu_horizontal_guide, "Горизонталь", "Слева направо"), new LinearLayout.LayoutParams(0, dp(70), 1));
+        modes.addView(guideModeTile("v", R.drawable.ic_guide_vertical, "Вертикаль", "Сверху вниз"), spacedTileParams());
+        modes.addView(guideModeTile("erase", R.drawable.ic_menu_eraser, "Удалить", "Нажмите у линии"), spacedTileParams());
         panel.addView(modes, formFieldParams());
 
         Button clear = actionButton("Очистить все направляющие", v -> clearGuides());

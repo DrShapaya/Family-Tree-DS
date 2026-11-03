@@ -25,7 +25,18 @@ final class LocalizedViews {
             : MainActivity.normalizeFontScale(context
                 .getSharedPreferences("androidft-ui", Context.MODE_PRIVATE)
                 .getFloat("font_scale", 1f));
-        return size * scale;
+        return readableSize(size) * scale;
+    }
+
+    /**
+     * Many captions were set at 8-10sp and were hard to read on a phone. Small sizes are
+     * lifted onto a readable floor (8 to 10, 9 to 10.5, 10 to 11) while keeping their order;
+     * 11sp and larger stay as written.
+     */
+    static float readableSize(float size) {
+        if (size <= 0f || size >= 11f) return size;
+        if (size <= 8f) return 10f;
+        return 10f + (size - 8f) * 0.5f;
     }
 }
 

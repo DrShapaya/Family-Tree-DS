@@ -302,6 +302,7 @@ final class MainActivityQuality {
         copy.addView(title, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 19 : 25)));
         TextView detail = ui.actionDetail("Оценка учитывает заполненность, даты и семейные связи.", false);
         detail.setTextSize(9);
+        detail.setSingleLine(false);
         detail.setMaxLines(2);
         copy.addView(detail, new LinearLayout.LayoutParams(-1, ui.dp(compactDialog() ? 20 : 34)));
         card.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));

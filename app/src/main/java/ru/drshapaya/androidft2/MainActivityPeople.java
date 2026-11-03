@@ -1200,7 +1200,7 @@ final class MainActivityPeople {
         Dialog dialog = styledChoiceDialog("Сортировка А–Я", "Выберите порядок людей в списке", R.drawable.ic_menu_sort_alpha);
         LinearLayout host = dialogHost(dialog);
         String[] pending = {sort};
-        host.addView(choiceSection("Порядок", new String[]{"По фамилии и имени", "По имени", "По году рождения"}, pending[0],
+        host.addView(choiceSection("Порядок", new String[]{"Фамилия и имя", "Имя", "Год рождения"}, pending[0],
             new String[]{"surname", "name", "birth"}, value -> pending[0] = value));
         host.addView(dialogActions("Отмена", dialog::dismiss, "Применить", () -> {
             sort = pending[0];
@@ -1473,7 +1473,15 @@ final class MainActivityPeople {
                 return tile;
             });
         }
-        host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
+        // An empty album list used to leave a blank screen above the button.
+        if (groups.isEmpty()) {
+            host.addView(emptyState("Семейных альбомов пока нет",
+                "Добавьте фото людям с общей фамилией или соберите семью кнопкой ниже"));
+            View spacer = new View(activity);
+            host.addView(spacer, new LinearLayout.LayoutParams(-1, 0, 1));
+        } else {
+            host.addView(grid, new LinearLayout.LayoutParams(-1, 0, 1));
+        }
         Button addFamily = activity.actionButton("+  Добавить семью из существующих", v -> chooseFamily(dialog));
         addFamily.setTextColor(Color.rgb(8, 122, 115));
         addFamily.setBackground(activity.panelBg(Color.rgb(232, 248, 246), dp(14), Color.argb(72, 24, 169, 153)));
