@@ -2598,6 +2598,15 @@ final class MainActivityPeople {
     }
 
     private Dialog fullDialog(String title) {
+        int icon = "Место".equals(title) ? R.drawable.ic_field_location
+            : "История поиска".equals(title) ? R.drawable.ic_menu_history
+            : "Выбор людей".equals(title) || "Кому добавить фото".equals(title) || "Добавить семью".equals(title)
+                ? R.drawable.ic_menu_people
+            : R.drawable.ic_menu_image;
+        return fullDialog(title, icon);
+    }
+
+    private Dialog fullDialog(String title, int icon) {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout shell = new LinearLayout(activity);
@@ -2606,10 +2615,20 @@ final class MainActivityPeople {
         shell.setBackgroundColor(AppThemePalette.surface(Color.rgb(243, 247, 248)));
         LinearLayout top = new LinearLayout(activity);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(text(title, 18, Color.rgb(28, 34, 38), true), new LinearLayout.LayoutParams(0, dp(48), 1));
-        Button close = activity.iconButton(R.drawable.ic_menu_close, v -> dialog.dismiss());
-        top.addView(close, new LinearLayout.LayoutParams(dp(46), dp(46)));
-        shell.addView(top);
+        ImageView mark = new ImageView(activity);
+        mark.setImageResource(icon);
+        mark.setColorFilter(AppThemePalette.primary());
+        mark.setPadding(dp(10), dp(10), dp(10), dp(10));
+        mark.setBackground(activity.softAccentGradientBg(dp(14)));
+        top.addView(mark, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        TextView heading = text(title, 18, Color.rgb(28, 34, 38), true);
+        heading.setPadding(dp(10), 0, dp(8), 0);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(heading, new LinearLayout.LayoutParams(0, dp(48), 1));
+        top.addView(activity.closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(44), dp(44)));
+        LinearLayout.LayoutParams topParams = new LinearLayout.LayoutParams(-1, -2);
+        topParams.setMargins(0, 0, 0, dp(8));
+        shell.addView(top, topParams);
         ScrollView scroll = new ScrollView(activity);
         LinearLayout host = new LinearLayout(activity);
         host.setOrientation(LinearLayout.VERTICAL);

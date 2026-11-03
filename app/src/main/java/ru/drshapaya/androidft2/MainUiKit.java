@@ -119,23 +119,22 @@ final class MainUiKit {
         LinearLayout top = new LinearLayout(activity);
         top.setGravity(Gravity.CENTER_VERTICAL);
 
+        // Same header as AppDialog windows: 44dp mark, 18sp title, 44dp close.
         ImageView mark = new ImageView(activity);
         mark.setImageResource(icon);
-        mark.setColorFilter(AppThemePalette.text(Color.rgb(8, 122, 115)));
-        mark.setPadding(dp(9), dp(9), dp(9), dp(9));
-        mark.setBackground(panelBg(
-            Color.rgb(232, 248, 246),
-            dp(999),
-            Color.TRANSPARENT));
-        top.addView(mark, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        mark.setColorFilter(AppThemePalette.primary());
+        mark.setPadding(dp(10), dp(10), dp(10), dp(10));
+        mark.setBackground(softAccentGradientBg(dp(14)));
+        top.addView(mark, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout heading = new LinearLayout(activity);
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(10), 0, dp(6), 0);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.setPadding(dp(10), 0, dp(8), 0);
 
         TextView title = new LocalizedTextView(activity);
         title.setText(titleText);
-        title.setTextSize(17);
+        title.setTextSize(18);
         title.setTextColor(AppThemePalette.text(Color.rgb(28, 34, 38)));
         title.setTypeface(uiBold());
         heading.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
@@ -147,12 +146,10 @@ final class MainUiKit {
             subtitle.setTextSize(10);
             subtitle.setTextColor(AppThemePalette.text(Color.rgb(101, 113, 122)));
             subtitle.setTypeface(ui());
-            heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
-        } else {
-            heading.setGravity(Gravity.CENTER_VERTICAL);
+            heading.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
         }
-        top.addView(heading, new LinearLayout.LayoutParams(0, dp(44), 1));
-        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
+        top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(44), dp(44)));
         return top;
     }
 

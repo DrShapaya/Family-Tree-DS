@@ -232,12 +232,10 @@ final class MainActivitySettings {
         heading.setGravity(Gravity.CENTER_VERTICAL);
         trainingProgress = trainingText(10, Color.rgb(8, 122, 115), true);
         heading.addView(trainingProgress, new LinearLayout.LayoutParams(0, activity.dp(32), 1));
-        Button close = activity.actionButton("Закрыть", v -> stopTraining(false));
-        close.setTextSize(10);
-        close.setElevation(0f);
+        TextView close = activity.closeButton(v -> stopTraining(false));
         close.setContentDescription(AppLanguage.text(activity, "Закрыть обучение"));
-        heading.addView(close, new LinearLayout.LayoutParams(activity.dp(82), activity.dp(32)));
-        trainingCard.addView(heading, new LinearLayout.LayoutParams(-1, activity.dp(32)));
+        heading.addView(close, new LinearLayout.LayoutParams(activity.dp(40), activity.dp(40)));
+        trainingCard.addView(heading, new LinearLayout.LayoutParams(-1, activity.dp(40)));
 
         trainingTitle = trainingText(17, Color.rgb(28, 34, 38), true);
         trainingCard.addView(trainingTitle, new LinearLayout.LayoutParams(-1, activity.dp(32)));

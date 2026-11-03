@@ -1411,7 +1411,9 @@ public final class MainActivity extends Activity {
         bubble.setGravity(Gravity.CENTER_VERTICAL);
         bubble.setPadding(dp(10), dp(8), dp(12), dp(8));
         bubble.setBackground(tealGradientBg(dp(20)));
-        bubble.setElevation(dp(8));
+        // Flat like the other rows: the menu panel clipped an elevation shadow into hard
+        // corners, and the gradient already marks this entry.
+        bubble.setElevation(0f);
         bubble.setContentDescription(tr(
             "Онлайн-дерево. Синхронизация, резервные копии и доступ близких"));
         bubble.setOnClickListener(v -> {
@@ -5297,18 +5299,20 @@ public final class MainActivity extends Activity {
     View editorDialogHeader(Dialog dialog, int icon, String titleText, String subtitleText) {
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
+        // Same header as AppDialog windows: 44dp mark, 18sp title, 44dp close.
         ImageView mark = new ImageView(this);
         mark.setImageResource(icon);
-        mark.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
-        mark.setPadding(dp(9), dp(9), dp(9), dp(9));
-        mark.setBackground(panelBg(Color.rgb(232, 248, 246), dp(999), Color.TRANSPARENT));
-        top.addView(mark, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        mark.setColorFilter(AppThemePalette.primary());
+        mark.setPadding(dp(10), dp(10), dp(10), dp(10));
+        mark.setBackground(softAccentGradientBg(dp(14)));
+        top.addView(mark, new LinearLayout.LayoutParams(dp(44), dp(44)));
         LinearLayout heading = new LinearLayout(this);
         heading.setOrientation(LinearLayout.VERTICAL);
-        heading.setPadding(dp(10), 0, dp(6), 0);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        heading.setPadding(dp(10), 0, dp(8), 0);
         TextView title = new LocalizedTextView(this);
         title.setText(titleText);
-        title.setTextSize(17);
+        title.setTextSize(18);
         title.setTextColor(uiColor(Color.rgb(28, 34, 38)));
         title.setTypeface(uiBold());
         heading.addView(title, new LinearLayout.LayoutParams(-1, dp(25)));
@@ -5317,9 +5321,9 @@ public final class MainActivity extends Activity {
         subtitle.setTextSize(10);
         subtitle.setTextColor(uiColor(Color.rgb(101, 113, 122)));
         subtitle.setTypeface(ui());
-        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, dp(19)));
-        top.addView(heading, new LinearLayout.LayoutParams(0, dp(44), 1));
-        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(40), dp(40)));
+        heading.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
+        top.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(closeButton(v -> dialog.dismiss()), new LinearLayout.LayoutParams(dp(44), dp(44)));
         return top;
     }
 
@@ -5406,16 +5410,38 @@ public final class MainActivity extends Activity {
         Person person = state.selectedPerson();
         if (ids.isEmpty() && person == null) return;
         if (!requireEditingEnabled()) return;
-        recordUndo("Изменён цвет карточек: " + (ids.isEmpty() ? 1 : ids.size()));
         if (ids.isEmpty()) ids.add(person.id);
+        // A card coloured by its full name already has this colour (it is the default), so
+        // say so instead of reporting an update nobody can see.
+        boolean changes = false;
+        for (String id : ids) {
+            Person item = state.people.get(id);
+            if (item == null) continue;
+            String mode = item.colorMode == null ? "" : item.colorMode;
+            if (item.color != colorByName(item) || !mode.isEmpty() && !"auto-name".equals(mode)) changes = true;
+        }
+        if (!changes) {
+            toast(ids.size() == 1
+                ? "У карточки уже цвет по ФИО"
+                : "Цвета уже подобраны по ФИО");
+            return;
+        }
+        recordUndo("Изменён цвет карточек: " + ids.size());
         for (String id : ids) {
             Person item = state.people.get(id);
             if (item == null) continue;
             item.colorMode = "auto-name";
             item.color = TreeState.displayColor(item, item.name.length());
         }
-        saveToast("Цвет карточек обновлён");
+        saveToast(ids.size() == 1 ? "Цвет карточки подобран по ФИО" : "Цвета карточек подобраны по ФИО");
         treeView.invalidate();
+    }
+
+    private static int colorByName(Person person) {
+        Person probe = new Person(person.id);
+        probe.name = person.name;
+        probe.colorMode = "auto-name";
+        return TreeState.displayColor(probe, person.name.length());
     }
 
     private void recolorByFamily() {

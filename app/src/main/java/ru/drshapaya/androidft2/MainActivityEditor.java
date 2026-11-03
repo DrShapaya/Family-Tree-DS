@@ -310,6 +310,7 @@ final class MainActivityEditor {
         profileForm.addView(agePanel, editorMetricParams());
 
         Button lifeStatus = actionButton("", v -> {});
+        styleFormRowButton(lifeStatus);
         profileForm.addView(lifeStatus, editorBlockParams());
 
         // The death date stays folded for living people so the form is not
@@ -327,9 +328,11 @@ final class MainActivityEditor {
             showDeathDate(true);
             diedDay.requestFocus();
         });
-        diedToggle.setTextSize(12);
-        diedToggle.setTextColor(Color.rgb(76, 83, 88));
-        diedToggle.setBackground(panelBg(Color.TRANSPARENT, dp(10), Color.rgb(217, 224, 229)));
+        styleFormRowButton(diedToggle);
+        diedToggle.setText(activity.tr("Указать дату смерти"));
+        diedToggle.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_menu_add_box, 0, 0, 0);
+        diedToggle.setCompoundDrawablePadding(dp(10));
+        tintDrawables(diedToggle, Color.rgb(8, 122, 115));
         profileForm.addView(diedToggle, editorBlockParams());
         profileForm.addView(diedBlock, new LinearLayout.LayoutParams(-1, -2));
         currentDiedBlock = diedBlock;
@@ -1007,6 +1010,19 @@ final class MainActivityEditor {
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels - dp(28), dp(480)), -2);
         }
+    }
+
+    /** Buttons inside the form read like its fields: left-aligned, white, same border and height. */
+    private void styleFormRowButton(Button button) {
+        button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        button.setPadding(dp(14), 0, dp(14), 0);
+        button.setMinHeight(dp(50));
+        button.setTextSize(14);
+        button.setTextColor(Color.rgb(28, 34, 38));
+        button.setTypeface(activity.ui());
+        button.setElevation(0f);
+        button.setStateListAnimator(null);
+        button.setBackground(panelBg(Color.WHITE, dp(10), Color.rgb(217, 224, 229)));
     }
 
     private void showDeathDate(boolean visible) {

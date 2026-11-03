@@ -93,13 +93,25 @@ final class MainActivityPersonMenus {
         menu.measure(
             View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
-        int popupHeight = Math.min(menu.getMeasuredHeight(), screenHeight - activity.dp(32));
+        // Keep the menu inside the canvas: it used to jump to the top of the screen and
+        // cover the app header whenever it fitted neither below nor above the card.
+        int[] canvas = new int[2];
+        activity.treeView.getLocationOnScreen(canvas);
+        int areaTop = canvas[1] + activity.dp(8);
+        int areaBottom = canvas[1] + activity.treeView.getHeight() - activity.dp(8);
+        if (activity.bottomNavigation != null && activity.bottomNavigation.isShown()) {
+            int[] nav = new int[2];
+            activity.bottomNavigation.getLocationOnScreen(nav);
+            // Portrait: the bottom bar overlays the canvas; landscape puts it at the side.
+            if (nav[1] > areaTop && nav[1] < areaBottom) areaBottom = nav[1] - activity.dp(8);
+        }
+        int popupHeight = Math.min(menu.getMeasuredHeight(), Math.max(activity.dp(160), areaBottom - areaTop));
         popup.setHeight(popupHeight);
         int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
         int x = Math.max(activity.dp(8), Math.min(screenWidth - popupWidth - activity.dp(8), Math.round(screenX) - popupWidth + activity.dp(18)));
         int y = Math.round(screenY) + activity.dp(8);
-        if (y + popupHeight > screenHeight - activity.dp(16)) y = Math.max(activity.dp(16), Math.round(screenY) - popupHeight - activity.dp(8));
+        if (y + popupHeight > areaBottom) y = Math.round(screenY) - popupHeight - activity.dp(8);
+        y = Math.max(areaTop, Math.min(y, areaBottom - popupHeight));
         PanelTransitions.popup(menu, y < screenY);
         popup.showAtLocation(activity.treeView, Gravity.TOP | Gravity.LEFT, x, y);
     }

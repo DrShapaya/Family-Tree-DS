@@ -1799,5 +1799,12 @@
   "Сверху вниз": "Top to bottom",
   "Нажмите у линии": "Tap near a line",
   "Семейных альбомов пока нет": "No family albums yet",
-  "Добавьте фото людям с общей фамилией или соберите семью кнопкой ниже": "Add photos to people with a shared surname, or gather a family with the button below"
+  "Добавьте фото людям с общей фамилией или соберите семью кнопкой ниже": "Add photos to people with a shared surname, or gather a family with the button below",
+  "Указать дату смерти": "Add date of death",
+  "Цвет уже подобран по ФИО. Пункт возвращает его после цвета по фамилии или своего цвета": "This card already uses its name colour. The option brings it back after a surname or custom colour",
+  "Цвета уже подобраны по ФИО": "These cards already use their name colours",
+  "Цвет карточки подобран по ФИО": "Card colour set from the name",
+  "Цвета карточек подобраны по ФИО": "Card colours set from the names",
+  "Оценка учитывает заполненность, даты и семейные связи.": "The score reflects completeness, dates and family links.",
+  "У карточки уже цвет по ФИО": "This card already uses its name colour"
 }
