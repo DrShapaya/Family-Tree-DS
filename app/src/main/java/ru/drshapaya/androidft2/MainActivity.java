@@ -2796,7 +2796,8 @@ public final class MainActivity extends Activity {
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(12), 0, dp(8), 0);
         TextView heading = new LocalizedTextView(this);
-        heading.setText(title);
+        // Language names stay in their own language, so the dictionary must not translate them.
+        LocalizedViews.setRaw(heading, title);
         heading.setTextSize(15);
         heading.setTypeface(uiBold());
         heading.setTextColor(Color.rgb(28, 34, 38));
