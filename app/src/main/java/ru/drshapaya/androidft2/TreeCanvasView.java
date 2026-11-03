@@ -143,6 +143,10 @@ final class TreeCanvasView extends View {
     private TreeMediaStore mediaStore;
     private Listener listener;
     private float rightInset;
+    private final Set<Relation> siblingChainConsumed = new HashSet<>();
+    private final List<Relation> siblingChainLinks = new ArrayList<>();
+    private final Set<Relation> siblingChainSelected = new HashSet<>();
+    private final Map<String, Relation> siblingChainCache = new HashMap<>();
     private DashPathEffect endedPartnerDash;
     private Map<String, String> kinshipTags = java.util.Collections.emptyMap();
     private final Paint kinshipTagFill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -883,11 +887,7 @@ final class TreeCanvasView extends View {
             if ("canvas_background_botanical".equals(canvasStyle)) return Color.rgb(31, 29, 21);
             return Color.rgb(16, 23, 27);
         }
-        if ("clean".equals(theme)) {
-            return "canvas_background_paper".equals(canvasStyle)
-                ? Color.rgb(245, 241, 229)
-                : Color.WHITE;
-        }
+        if ("clean".equals(theme) && RewardCatalog.STANDARD.equals(canvasStyle)) return Color.WHITE;
         if ("canvas_background_paper".equals(canvasStyle)) return Color.rgb(245, 241, 229);
         if ("canvas_background_blueprint".equals(canvasStyle)) return Color.rgb(226, 238, 247);
         if ("canvas_background_deep_blueprint".equals(canvasStyle)) return Color.rgb(7, 55, 126);
@@ -906,7 +906,10 @@ final class TreeCanvasView extends View {
     }
 
     private void drawCanvasStyle(Canvas canvas, int width, int height) {
-        if ("clean".equals(theme) && !"canvas_background_paper".equals(canvasStyle)) return;
+        // The clean theme keeps workshop backgrounds but never draws a grid.
+        if ("clean".equals(theme) && RewardCatalog.STANDARD.equals(canvasStyle)) return;
+        if ("clean".equals(theme) && ("canvas_background_blueprint".equals(canvasStyle)
+            || "canvas_background_deep_blueprint".equals(canvasStyle))) return;
         paint.setPathEffect(null);
         if ("canvas_background_paper".equals(canvasStyle)) {
             drawPaperRelief(canvas, width, height);
@@ -1028,9 +1031,11 @@ final class TreeCanvasView extends View {
             drawStyledLink(canvas, path, representative, selected, onPath);
         }
         relationBounds.queryInto(visible.left,visible.top,visible.right,visible.bottom,relationCandidates);
+        buildSiblingChains();
         for (int linkIndex=0;linkIndex<relationCandidates.size();linkIndex++) {
             Relation link=relationCandidates.get(linkIndex);
             if (familyPlan.consumes(link)) continue;
+            if (siblingChainConsumed.contains(link)) continue;
             Person from = state.people.get(link.from);
             Person to = state.people.get(link.to);
             if (from == null || to == null || !matches(from) || !matches(to)) continue;
@@ -1045,8 +1050,92 @@ final class TreeCanvasView extends View {
             Path path = linkPath(link, from, to);
             drawStyledLink(canvas, path, link, selected, onPath);
         }
+        for (int i = 0; i < siblingChainLinks.size(); i++) {
+            Relation link = siblingChainLinks.get(i);
+            Person from = state.people.get(link.from);
+            Person to = state.people.get(link.to);
+            if (from == null || to == null) continue;
+            linkBoundsScratch.set(Math.min(from.x, to.x), Math.min(from.y, to.y),
+                Math.max(from.x, to.x) + cardWidthWorld(), Math.max(from.y, to.y) + cardHeightWorld());
+            if (!RectF.intersects(visible, linkBoundsScratch)) continue;
+            boolean selected = siblingChainSelected.contains(link);
+            boolean onPath = pathActive && highlightedPathEdges.contains(edgeKey(link.from, link.to));
+            drawStyledLink(canvas, linkPath(link, from, to), link, selected, onPath);
+        }
         paint.setPathEffect(null);
         if (pathActive) postInvalidateOnAnimation();
+    }
+
+    /**
+     * Brothers and sisters standing in one row are drawn as a chain of neighbour links.
+     * Drawing every explicit pair put the long A-C dash line over A-B and B-C, and the
+     * offset dashes merged into what looked like a solid line.
+     */
+    private void buildSiblingChains() {
+        siblingChainConsumed.clear();
+        siblingChainLinks.clear();
+        siblingChainSelected.clear();
+        if (state == null) return;
+        Map<String, String> root = new HashMap<>();
+        List<Relation> siblings = new ArrayList<>();
+        for (Relation link : state.links) {
+            if (!"sibling".equals(link.type)) continue;
+            Person a = state.people.get(link.from);
+            Person b = state.people.get(link.to);
+            if (a == null || b == null || !matches(a) || !matches(b)) continue;
+            siblings.add(link);
+            String ra = chainRoot(root, link.from);
+            String rb = chainRoot(root, link.to);
+            if (!ra.equals(rb)) root.put(ra, rb);
+        }
+        if (siblings.size() < 2) return;
+        Map<String, List<Person>> groups = new HashMap<>();
+        for (Relation link : siblings) {
+            for (String id : new String[] {link.from, link.to}) {
+                List<Person> group = groups.computeIfAbsent(chainRoot(root, id), key -> new ArrayList<>());
+                Person person = state.people.get(id);
+                if (!group.contains(person)) group.add(person);
+            }
+        }
+        float rowTolerance = cardHeightWorld() / 3f;
+        for (List<Person> group : groups.values()) {
+            if (group.size() < 3) continue;
+            group.sort((p, q) -> Float.compare(p.y, q.y));
+            int start = 0;
+            while (start < group.size()) {
+                int end = start + 1;
+                while (end < group.size() && Math.abs(group.get(end).y - group.get(start).y) <= rowTolerance) end++;
+                List<Person> row = new ArrayList<>(group.subList(start, end));
+                start = end;
+                if (row.size() < 3) continue;
+                row.sort((p, q) -> Float.compare(p.x, q.x));
+                Set<String> rowIds = new HashSet<>();
+                for (Person p : row) rowIds.add(p.id);
+                boolean selected = false;
+                for (Relation link : siblings) {
+                    if (rowIds.contains(link.from) && rowIds.contains(link.to)) {
+                        siblingChainConsumed.add(link);
+                        selected |= link.id != null && link.id.equals(selectedLinkId);
+                    }
+                }
+                for (int i = 1; i < row.size(); i++) {
+                    String key = row.get(i - 1).id + "|" + row.get(i).id;
+                    Relation chain = siblingChainCache.get(key);
+                    if (chain == null) {
+                        chain = new Relation("sibling-chain:" + key, "sibling", row.get(i - 1).id, row.get(i).id);
+                        siblingChainCache.put(key, chain);
+                    }
+                    siblingChainLinks.add(chain);
+                    if (selected) siblingChainSelected.add(chain);
+                }
+            }
+        }
+    }
+
+    private static String chainRoot(Map<String, String> root, String id) {
+        String current = id;
+        while (root.containsKey(current)) current = root.get(current);
+        return current;
     }
 
     private boolean familyRouteIntersects(

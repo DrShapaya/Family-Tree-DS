@@ -1806,5 +1806,6 @@
   "Цвет карточки подобран по ФИО": "Card colour set from the name",
   "Цвета карточек подобраны по ФИО": "Card colours set from the names",
   "Оценка учитывает заполненность, даты и семейные связи.": "The score reflects completeness, dates and family links.",
-  "У карточки уже цвет по ФИО": "This card already uses its name colour"
+  "У карточки уже цвет по ФИО": "This card already uses its name colour",
+  "Без цвета и сетки": "No colour, no grid"
 }

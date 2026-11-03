@@ -218,8 +218,12 @@ final class KinshipCalculator {
                     "жена брата или сестры",
                     "супруг или супруга брата или сестры"));
             }
-            return found(gendered(subject, "муж", "жена", "партнёр") + " человека, который приходится "
-                + partnerRelation.label);
+            String spouse = gendered(subject, "муж", "жена", "партнёр");
+            String relative = KinshipGenitive.of(partnerRelation.label);
+            // "жена дяди"; a term the declension does not know keeps the plain form in brackets.
+            return found(relative != null
+                ? spouse + " " + relative
+                : spouse + " (" + partnerRelation.label + ")");
         }
 
         for (String referencePartnerId : partnersOf(state, referenceId)) {
@@ -248,7 +252,9 @@ final class KinshipCalculator {
                 }
                 return found(gendered(subject, "брат супруга или супруги", "сестра супруга или супруги", "брат или сестра супруга или супруги"));
             }
-            return found(relationToPartner.label + " супруга или супруги");
+            String partnerGender = PersonGender.resolve(state.people.get(referencePartnerId));
+            return found(relationToPartner.label + (PersonGender.MALE.equals(partnerGender) ? " мужа"
+                : PersonGender.FEMALE.equals(partnerGender) ? " жены" : " супруга или супруги"));
         }
         return notFound();
     }

@@ -117,6 +117,7 @@ public final class MainActivity extends Activity {
     LinearLayout settingsPanel;
     private ScrollView settingsScroll;
     private TextView guidesTileDetail;
+    private ImageView canvasModeIcon;
     /** Kinship tags on cards: off, relative to the tree centre, or to the selected card. */
     String kinshipTagsMode = KINSHIP_TAGS_OFF;
     private final java.util.concurrent.ExecutorService kinshipTagWorker =
@@ -430,6 +431,7 @@ public final class MainActivity extends Activity {
             });
         applyStateSettings();
         AppThemePalette.setDark("dark".equals(theme));
+        AppThemePalette.setClean("clean".equals(theme));
         super.setTheme(AppThemePalette.isDark() ? R.style.AppThemeDark : R.style.AppTheme);
         applySystemBars();
         TreeLayoutEngine.ensurePositions(state);
@@ -1058,41 +1060,47 @@ public final class MainActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setGravity(Gravity.CENTER_VERTICAL);
         panel.setOrientation(LinearLayout.HORIZONTAL);
-        panel.setPadding(dp(12), dp(7), dp(7), dp(7));
-        panel.setBackground(panelBg(Color.argb(250, 232, 248, 246), dp(10), Color.argb(108, 24, 169, 153)));
-        panel.setElevation(dp(9));
+        panel.setPadding(dp(10), dp(10), dp(10), dp(10));
+        panel.setBackground(panelBg(Color.WHITE, dp(14), AppThemePalette.alpha(AppThemePalette.primaryBright(), 110)));
+        panel.setElevation(dp(6));
 
-        ImageView icon = new ImageView(this);
-        icon.setImageResource(R.drawable.ic_menu_target);
-        icon.setColorFilter(uiColor(Color.rgb(8, 122, 115)));
-        panel.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
+        // The icon follows the mode (parent, sibling, partners, kinship, erase, guides).
+        canvasModeIcon = new ImageView(this);
+        canvasModeIcon.setImageResource(R.drawable.ic_menu_route);
+        canvasModeIcon.setColorFilter(AppThemePalette.primary());
+        canvasModeIcon.setPadding(dp(10), dp(10), dp(10), dp(10));
+        canvasModeIcon.setBackground(softIconBg(dp(999)));
+        panel.addView(canvasModeIcon, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setGravity(Gravity.CENTER_VERTICAL);
         copy.setPadding(dp(10), 0, dp(8), 0);
         canvasModeTitle = new LocalizedTextView(this);
         canvasModeTitle.setTextColor(Color.rgb(28, 34, 38));
-        canvasModeTitle.setTextSize(12);
+        canvasModeTitle.setTextSize(14);
         canvasModeTitle.setTypeface(uiBold());
         canvasModeTitle.setSingleLine(true);
+        canvasModeTitle.setEllipsize(TextUtils.TruncateAt.END);
         canvasModeTitle.setIncludeFontPadding(false);
-        canvasModeTitle.setGravity(Gravity.CENTER_VERTICAL);
-        copy.addView(canvasModeTitle, new LinearLayout.LayoutParams(-1, dp(24)));
+        copy.addView(canvasModeTitle, new LinearLayout.LayoutParams(-1, -2));
         canvasModeDetail = new LocalizedTextView(this);
         canvasModeDetail.setTextColor(Color.rgb(76, 87, 96));
-        canvasModeDetail.setTextSize(8);
+        canvasModeDetail.setTextSize(12);
         canvasModeDetail.setSingleLine(false);
         canvasModeDetail.setMaxLines(2);
+        canvasModeDetail.setEllipsize(TextUtils.TruncateAt.END);
         canvasModeDetail.setIncludeFontPadding(false);
-        canvasModeDetail.setGravity(Gravity.CENTER_VERTICAL);
-        copy.addView(canvasModeDetail, new LinearLayout.LayoutParams(-1, dp(28)));
-        panel.addView(copy, new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout.LayoutParams detailParams = new LinearLayout.LayoutParams(-1, -2);
+        detailParams.setMargins(0, dp(4), 0, 0);
+        copy.addView(canvasModeDetail, detailParams);
+        panel.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
         canvasModeAction = selectionActionButton(
-            R.drawable.ic_menu_stop,
+            R.drawable.ic_menu_close,
             "Отмена",
             v -> cancelActiveCanvasMode());
-        panel.addView(canvasModeAction, new LinearLayout.LayoutParams(dp(82), dp(42)));
+        panel.addView(canvasModeAction, new LinearLayout.LayoutParams(-2, dp(40)));
         panel.setVisibility(View.GONE);
         return panel;
     }
@@ -1822,7 +1830,7 @@ public final class MainActivity extends Activity {
         LinearLayout primary = new LinearLayout(this);
         primary.setOrientation(LinearLayout.HORIZONTAL);
         primary.addView(cardActionTile(
-            R.drawable.ic_menu_parent_line,
+            R.drawable.ic_menu_parent_child,
             "Связь: родитель",
             "Первый выбранный станет родителем",
             v -> startLink("parent"),
@@ -1843,7 +1851,7 @@ public final class MainActivity extends Activity {
         panel.addView(rows, new LinearLayout.LayoutParams(-1, -2));
         rows.addView(menuRow(R.drawable.ic_menu_heart, "Связь: партнёры", "Нажмите пункт, затем выберите две карточки для связи партнёров.", v -> startLink("family")));
         rows.addView(menuRow(
-            R.drawable.ic_life_heart_outline,
+            R.drawable.ic_menu_rings,
             "Вид отношений",
             "В браке, помолвлены, партнёры, бывшие супруги или не в отношениях — для пары выбранной карточки. Тот же выбор открывается нажатием на линию между партнёрами.",
             v -> choosePartnerStatusForSelected()));
@@ -2502,7 +2510,7 @@ public final class MainActivity extends Activity {
             KinshipModeDialog.HELP,
             v -> showKinshipModeDialog()));
         panel.addView(settingActionRow(
-            R.drawable.ic_nav_links,
+            R.drawable.ic_menu_tag,
             tr("Родство на карточках") + ": " + tr(kinshipTagsLabel(kinshipTagsMode)),
             tr("Показывает над карточками, кем каждый человек приходится центру дерева или выбранной карточке. Названия следуют настройке «Степень родства»."),
             v -> showKinshipTagsDialog()));
@@ -2520,7 +2528,7 @@ public final class MainActivity extends Activity {
         panel.addView(settingSwitchRow(R.drawable.ic_menu_eye, "Значок качества карточки", state.showQualityBadge,
             "Показывает на карточках небольшой значок ошибок, предупреждений или полноты данных. Проверка качества дерева продолжает работать и при скрытых значках.",
             v -> { state.showQualityBadge = !state.showQualityBadge; saveOnly(); treeView.invalidate(); refreshSettingsIfVisible(); }));
-        panel.addView(settingSwitchRow(R.drawable.ic_life_heart_outline, "Значок статуса жизни", state.showLifeStatusBadge,
+        panel.addView(settingSwitchRow(R.drawable.ic_menu_heart_pulse, "Значок статуса жизни", state.showLifeStatusBadge,
             "Значок располагается над качеством карточки или на его месте, если качество скрыто. Статус можно указать в профиле человека, а иконки и цвета — выбрать ниже.",
             v -> { state.showLifeStatusBadge = !state.showLifeStatusBadge; saveOnly(); treeView.invalidate(); refreshSettingsIfVisible(); }));
         View lifeAppearanceRow = settingActionRow(R.drawable.ic_menu_palette, "Иконки и цвета статуса жизни",
@@ -3226,7 +3234,7 @@ public final class MainActivity extends Activity {
     }
 
     void showKinshipTagsDialog() {
-        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_route, "Родство на карточках")
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_tag, "Родство на карточках")
             .message("Над каждой карточкой видно, кем человек приходится выбранной точке отсчёта.");
         String[] modes = {KINSHIP_TAGS_OFF, KINSHIP_TAGS_ROOT, KINSHIP_TAGS_SELECTED};
         String[] details = {
@@ -4181,7 +4189,11 @@ public final class MainActivity extends Activity {
         StartupSplash.rememberTheme(this, theme);
         syncSettingsToState();
         if (saveCoordinator != null) saveCoordinator.saveThen(saved -> {
-            if (saved && !isDestroyed()) { AppThemePalette.setDark("dark".equals(theme)); recreate(); }
+            if (saved && !isDestroyed()) {
+                AppThemePalette.setDark("dark".equals(theme));
+                AppThemePalette.setClean("clean".equals(theme));
+                recreate();
+            }
         });
     }
 
@@ -4244,7 +4256,7 @@ public final class MainActivity extends Activity {
             choosePartnerStatus(couples.get(0), null);
             return;
         }
-        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_heart, "Вид отношений")
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_rings, "Вид отношений")
             .message("С кем отношения?");
         for (Relation couple : couples) {
             Person partner = state.people.get(selected.id.equals(couple.from) ? couple.to : couple.from);
@@ -4263,14 +4275,16 @@ public final class MainActivity extends Activity {
         String couple = (first == null || first.name.isEmpty() ? tr("Без имени") : first.name)
             + (AppLanguage.isEnglish(this) ? " and " : " и ")
             + (second == null || second.name.isEmpty() ? tr("Без имени") : second.name);
-        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_heart, "Отношения").message(couple);
+        AppDialog dialog = AppDialog.create(this, R.drawable.ic_menu_rings, "Отношения").message(couple);
         String current = PartnerStatus.normalize(link.status);
         for (String status : PartnerStatus.ALL) {
             String detail = status.equals(current)
                 ? "Выбрано сейчас"
                 : PartnerStatus.ended(status) ? "Линия пунктиром" : "Сплошная линия";
             dialog.choice(
-                PartnerStatus.ended(status) ? R.drawable.ic_life_heart_outline : R.drawable.ic_menu_heart,
+                PartnerStatus.ended(status) ? R.drawable.ic_menu_heart_crack
+                    : PartnerStatus.MARRIED.equals(status) || PartnerStatus.ENGAGED.equals(status) ? R.drawable.ic_menu_rings
+                    : R.drawable.ic_menu_heart,
                 PartnerStatus.label(status),
                 detail,
                 () -> {
@@ -4734,6 +4748,7 @@ public final class MainActivity extends Activity {
         boolean visible = (guideActive || linkActive) && activePanel.isEmpty();
         canvasModePanel.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) return;
+        if (canvasModeIcon != null) canvasModeIcon.setImageResource(canvasModeIconFor(pendingLinkType, activeGuideMode));
         if (guideActive) {
             canvasModeAction.setText("Отмена");
             styleCanvasModeAction(true);
@@ -4749,18 +4764,14 @@ public final class MainActivity extends Activity {
             canvasModeTitle.setText(linkModeTitle(pendingLinkType));
             if (pendingLinkFrom.isEmpty()) {
                 canvasModeDetail.setText("parent".equals(pendingLinkType)
-                    ? "Шаг 1/2: выберите первого родителя"
-                    : "kinship".equals(pendingLinkType)
-                        ? "Шаг 1/2: выберите первого человека"
-                        : "Шаг 1/2: выберите первую карточку");
+                    ? "Шаг 1 из 2: выберите родителя"
+                    : "Шаг 1 из 2: выберите первого человека");
             } else {
                 Person first = state == null ? null : state.people.get(pendingLinkFrom);
                 String name = first == null || first.name.isEmpty() ? "первая карточка" : first.name;
                 canvasModeDetail.setText("parent".equals(pendingLinkType)
-                    ? name + " — первый родитель. Шаг 2/2: выберите ребёнка"
-                    : name + ("kinship".equals(pendingLinkType)
-                        ? " → выберите второго человека"
-                        : " → выберите вторую карточку"));
+                    ? "Шаг 2 из 2: выберите ребёнка для " + name
+                    : "Шаг 2 из 2: выберите второго человека");
             }
             return;
         }
@@ -4768,25 +4779,32 @@ public final class MainActivity extends Activity {
 
     private void styleCanvasModeAction(boolean stop) {
         if (canvasModeAction == null) return;
-        int color = stop ? Color.rgb(184, 68, 62) : Color.rgb(8, 122, 115);
-        int icon = stop ? R.drawable.ic_menu_stop : R.drawable.ic_menu_unlock;
+        // Cancelling a pick is a neutral step, not a destructive one.
+        int color = Color.rgb(76, 87, 96);
+        int icon = stop ? R.drawable.ic_menu_close : R.drawable.ic_menu_unlock;
         canvasModeAction.setCompoundDrawablesWithIntrinsicBounds(icon, 0, 0, 0);
+        canvasModeAction.setCompoundDrawablePadding(dp(6));
+        canvasModeAction.setPadding(dp(10), 0, dp(12), 0);
         tintDrawables(canvasModeAction, color);
         canvasModeAction.setTextColor(color);
         canvasModeAction.setElevation(0f);
-        canvasModeAction.setBackground(panelBg(
-            stop ? Color.rgb(255, 244, 241) : Color.WHITE,
-            dp(12),
-            stop
-                ? Color.argb(90, 197, 83, 75)
-                : Color.argb(82, 24, 169, 153)));
+        canvasModeAction.setBackground(panelBg(Color.WHITE, dp(12), Color.rgb(217, 224, 229)));
+    }
+
+    private int canvasModeIconFor(String linkType, String guideMode) {
+        if (!guideMode.isEmpty()) return "erase".equals(guideMode) ? R.drawable.ic_menu_eraser : R.drawable.ic_menu_grid_lines;
+        if ("parent".equals(linkType)) return R.drawable.ic_menu_parent_child;
+        if ("sibling".equals(linkType)) return R.drawable.ic_menu_people;
+        if ("family".equals(linkType)) return R.drawable.ic_menu_heart;
+        if ("erase".equals(linkType)) return R.drawable.ic_menu_eraser;
+        return R.drawable.ic_menu_route;
     }
 
     private String linkModeTitle(String type) {
         if ("kinship".equals(type)) return "Кто кому приходится";
-        if ("parent".equals(type)) return "Родительская связь";
-        if ("family".equals(type)) return "Родственная связь";
-        if ("sibling".equals(type)) return "Братская связь";
+        if ("parent".equals(type)) return "Связь: родитель";
+        if ("family".equals(type)) return "Связь: партнёры";
+        if ("sibling".equals(type)) return "Связь: брат/сестра";
         if ("erase".equals(type)) return "Удаление связи";
         return "Работа со связями";
     }
@@ -5796,7 +5814,7 @@ public final class MainActivity extends Activity {
         row.addView(themeTile(
             R.drawable.ic_menu_sparkles,
             "Чистая",
-            "Белый, без сетки",
+            "Без цвета и сетки",
             "clean".equals(theme),
             v -> setTheme("clean"),
             AppThemePalette.blue(),
@@ -6070,7 +6088,7 @@ public final class MainActivity extends Activity {
     }
 
     private FrameLayout.LayoutParams canvasModeParams() {
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, dp(68), Gravity.TOP);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP);
         params.setMargins(
             dp(isLandscapeLayout() ? 64 : 12),
             dp(isLandscapeLayout() ? 56 : 76),

@@ -5,6 +5,15 @@ import android.graphics.Color;
 /** Maps the programmatic light UI palette to accessible dark surfaces and text. */
 final class AppThemePalette {
     private static volatile boolean dark;
+    /**
+     * The clean theme keeps one graphite accent: teal, violet and blue brand colours turn
+     * neutral and gradients become flat. Danger red, warning amber, green and card colours stay.
+     */
+    private static volatile boolean clean;
+    private static final int CLEAN_ACCENT = Color.rgb(45, 52, 58);
+    private static final int CLEAN_ACCENT_SOFT = Color.rgb(104, 113, 121);
+    private static final int CLEAN_SURFACE = Color.rgb(244, 245, 246);
+    private static final int CLEAN_STROKE = Color.rgb(214, 219, 222);
     private static final int PRIMARY = Color.rgb(8, 122, 115);
     private static final int PRIMARY_BRIGHT = Color.rgb(24, 169, 153);
     private static final int PRIMARY_SURFACE = Color.rgb(232, 248, 246);
@@ -30,6 +39,24 @@ final class AppThemePalette {
 
     static boolean isDark() {
         return dark;
+    }
+
+    static void setClean(boolean enabled) {
+        clean = enabled;
+    }
+
+    static boolean isClean() {
+        return clean;
+    }
+
+    /** Teal, blue and violet hues used for brand accents (not red, amber or green). */
+    private static boolean brandHue(int color) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        // Pale tints (mint and lavender panels) carry little saturation but are still brand colours.
+        if (hsv[1] < (hsv[2] > 0.85f ? 0.035f : 0.12f)) return false;
+        float hue = hsv[0];
+        return hue >= 160f && hue <= 300f;
     }
 
     static int primary() {
@@ -65,14 +92,17 @@ final class AppThemePalette {
     }
 
     static int ctaPrimary() {
+        if (clean) return CLEAN_ACCENT;
         return dark ? CTA_PRIMARY_DARK : CTA_PRIMARY;
     }
 
     static int ctaBlue() {
+        if (clean) return CLEAN_ACCENT;
         return dark ? CTA_BLUE_DARK : CTA_BLUE;
     }
 
     static int ctaSecondary() {
+        if (clean) return CLEAN_ACCENT;
         return dark ? CTA_SECONDARY_DARK : CTA_SECONDARY;
     }
 
@@ -89,6 +119,11 @@ final class AppThemePalette {
     }
 
     static int text(int color) {
+        if (clean && Color.alpha(color) != 0 && brandHue(color)) {
+            int light = (Color.red(color) * 299 + Color.green(color) * 587 + Color.blue(color) * 114) / 1000;
+            if (light >= 200) return alpha(CLEAN_SURFACE, Color.alpha(color));
+            return alpha(light >= 120 ? CLEAN_ACCENT_SOFT : CLEAN_ACCENT, Color.alpha(color));
+        }
         if (!dark || Color.alpha(color) == 0) return color;
         int alpha = Color.alpha(color);
         int r = Color.red(color);
@@ -122,6 +157,10 @@ final class AppThemePalette {
     }
 
     static int surface(int color) {
+        if (clean && Color.alpha(color) != 0 && brandHue(color)) {
+            int light = (Color.red(color) * 299 + Color.green(color) * 587 + Color.blue(color) * 114) / 1000;
+            return alpha(light >= 185 ? CLEAN_SURFACE : CLEAN_ACCENT, Color.alpha(color));
+        }
         if (!dark || Color.alpha(color) == 0) return color;
         int alpha = Color.alpha(color);
         int r = Color.red(color);
@@ -140,6 +179,10 @@ final class AppThemePalette {
     }
 
     static int stroke(int color) {
+        if (clean && Color.alpha(color) != 0 && brandHue(color)) {
+            int light = (Color.red(color) * 299 + Color.green(color) * 587 + Color.blue(color) * 114) / 1000;
+            return alpha(light >= 150 || Color.alpha(color) < 140 ? CLEAN_STROKE : CLEAN_ACCENT_SOFT, Math.max(Color.alpha(color), 160));
+        }
         if (!dark || Color.alpha(color) == 0) return color;
         int alpha = Color.alpha(color);
         int mapped = text(color);
