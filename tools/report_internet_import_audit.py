@@ -6,7 +6,7 @@ import pathlib
 
 PROJECT = pathlib.Path(__file__).resolve().parents[1]
 CORPUS = PROJECT / "app/build/internet-import-review"
-DOCS = PROJECT / "docs/diagnostics"
+DOCS = PROJECT.parent / "docs/diagnostics"
 manifest = json.loads((CORPUS / "manifest.json").read_text(encoding="utf-8"))
 jvm = {row["id"]: row for row in json.loads((CORPUS / "jvm-results.json").read_text(encoding="utf-8"))}
 android = {row["id"]: row for row in json.loads((CORPUS / "android-results.json").read_text(encoding="utf-8"))}

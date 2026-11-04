@@ -11,7 +11,7 @@ import shutil
 import urllib.request
 
 PROJECT = pathlib.Path(__file__).resolve().parents[1]
-MANIFEST = PROJECT / "docs/diagnostics/internet-import-corpus-2026-10-10.json"
+MANIFEST = PROJECT.parent / "docs/diagnostics/internet-import-corpus-2026-10-10.json"
 DESTINATION = PROJECT / "app/build/internet-import-review"
 
 
