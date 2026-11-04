@@ -3218,9 +3218,8 @@ public final class MainActivity extends Activity {
             toast("Ваша корневая карточка не найдена");
             return;
         }
-        KinshipCalculator.Result result = calculateKinship(person.id, root.id);
-        treeView.highlightKinshipPath(PersonPathFinder.shortestPath(state, person.id, root.id));
-        showKinshipResult(person, root, result);
+        // The panel highlights the chain the relationship was worked out along.
+        showKinshipResult(person, root, calculateKinship(person.id, root.id));
     }
 
     KinshipCalculator.Result calculateKinship(String firstId, String secondId) {
@@ -3284,7 +3283,11 @@ public final class MainActivity extends Activity {
                 if (request != kinshipTagsRequest || isDestroyed() || treeView == null) return;
                 java.util.Map<String, String> shown = new java.util.HashMap<>();
                 for (java.util.Map.Entry<String, String> entry : labels.entrySet()) {
-                    shown.put(entry.getKey(), tr(entry.getValue()));
+                    // A translated term is used as is; a Russian one gets the short tag form.
+                    String translated = tr(entry.getValue());
+                    shown.put(entry.getKey(), translated.equals(entry.getValue())
+                        ? KinshipCalculator.compactLabel(entry.getValue())
+                        : translated);
                 }
                 treeView.setKinshipTags(shown);
             });
@@ -4839,11 +4842,20 @@ public final class MainActivity extends Activity {
         String secondName = second == null || second.name.isEmpty() ? tr("Второй человек") : second.name;
         if (result != null && result.found) {
             // Both people are named on screen, so "name — role" reads unambiguously.
-            addKinshipStatusLine(firstName + " — " + tr(result.firstToSecond));
-            addKinshipStatusLine(secondName + " — " + tr(result.secondToFirst));
+            addKinshipStatusLine(firstName + " — " + kinshipWithTraditional(result.firstToSecond, result.firstToSecondTraditional));
+            addKinshipNote(result.firstToSecondLineage);
+            addKinshipStatusLine(secondName + " — " + kinshipWithTraditional(result.secondToFirst, result.secondToFirstTraditional));
+            addKinshipNote(result.secondToFirstLineage);
         } else {
             addKinshipStatusLine(firstName + " ↔ " + secondName);
         }
+        List<String> path = result != null && !result.pathIds.isEmpty()
+            ? result.pathIds
+            : first != null && second != null
+                ? PersonPathFinder.shortestPath(state, first.id, second.id)
+                : java.util.Collections.emptyList();
+        addKinshipChain(path);
+        treeView.highlightKinshipPath(path);
         kinshipStatusPanel.setLayoutParams(branchStatusParams());
         kinshipStatusPanel.setVisibility(View.VISIBLE);
         kinshipStatusPanel.bringToFront();
@@ -4856,6 +4868,65 @@ public final class MainActivity extends Activity {
         line.setTextSize(12); line.setTypeface(ui());
         line.setTextColor(uiColor(Color.rgb(28, 34, 38)));
         line.setPadding(0, 0, 0, dp(4));
+        kinshipStatusPanel.addView(line, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    /** "сестра бабушки (двоюродная бабушка)": the classic name only where it differs. */
+    private String kinshipWithTraditional(String label, String traditional) {
+        return traditional == null || traditional.isEmpty()
+            ? tr(label)
+            : tr(label) + " (" + tr(traditional) + ")";
+    }
+
+    /** The family side under a relationship line, quieter than the line itself. */
+    private void addKinshipNote(String lineage) {
+        if (lineage == null || lineage.isEmpty()) return;
+        TextView note = new LocalizedTextView(this);
+        LocalizedViews.setRaw(note, tr(lineage));
+        note.setTextSize(11); note.setTypeface(ui());
+        note.setTextColor(uiColor(Color.rgb(101, 113, 122)));
+        note.setPadding(dp(12), 0, 0, dp(4));
+        kinshipStatusPanel.addView(note, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    /**
+     * The people the relationship runs through, each name a link to its card. Two-person
+     * chains are left out: both names are already in the lines above.
+     */
+    private void addKinshipChain(List<String> path) {
+        if (path == null || path.size() < 3) return;
+        android.text.SpannableStringBuilder chain = new android.text.SpannableStringBuilder(tr("Цепочка") + ": ");
+        int linkColor = uiColor(Color.rgb(8, 122, 115));
+        for (int index = 0; index < path.size(); index++) {
+            String personId = path.get(index);
+            Person person = state.people.get(personId);
+            String name = person == null || person.name == null || person.name.trim().isEmpty()
+                ? tr("Без имени")
+                : person.name.trim();
+            if (index > 0) chain.append(" → ");
+            int start = chain.length();
+            chain.append(name);
+            chain.setSpan(new android.text.style.ClickableSpan() {
+                @Override public void onClick(View widget) {
+                    treeView.focusPerson(personId);
+                    treeView.highlightKinshipPath(path);
+                }
+
+                @Override public void updateDrawState(android.text.TextPaint paint) {
+                    paint.setColor(linkColor);
+                    paint.setUnderlineText(false);
+                }
+            }, start, chain.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        TextView line = new LocalizedTextView(this);
+        // Set before the text, so the raw text is stored as Spannable and the links take taps.
+        line.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+        LocalizedViews.setRaw(line, chain);
+        line.setTextSize(11); line.setTypeface(ui());
+        line.setTextColor(uiColor(Color.rgb(101, 113, 122)));
+        line.setHighlightColor(Color.TRANSPARENT);
+        line.setTag("canvas.kinshipChain");
+        line.setPadding(0, dp(2), 0, dp(2));
         kinshipStatusPanel.addView(line, new LinearLayout.LayoutParams(-1, -2));
     }
 

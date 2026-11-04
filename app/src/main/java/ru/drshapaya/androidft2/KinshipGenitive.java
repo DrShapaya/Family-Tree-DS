@@ -23,6 +23,8 @@ final class KinshipGenitive {
             {"тесть", "тестя"}, {"тёща", "тёщи"}, {"деверь", "деверя"}, {"золовка", "золовки"},
             {"шурин", "шурина"}, {"свояченица", "свояченицы"}, {"супруг", "супруга"}, {"супруга", "супруги"},
             {"жених", "жениха"}, {"невеста", "невесты"},
+            {"правнук", "правнука"}, {"правнучка", "правнучки"},
+            {"прадедушка", "прадедушки"}, {"прабабушка", "прабабушки"},
         };
         for (String[] pair : pairs) NOUNS.put(pair[0], pair[1]);
     }
@@ -36,12 +38,36 @@ final class KinshipGenitive {
         StringBuilder out = new StringBuilder();
         for (int i = 0; i < words.length; i++) {
             String word = words[i];
-            String declined = "или".equals(word) ? word : declineWord(word);
+            String declined;
+            if ("или".equals(word)) {
+                declined = word;
+            } else if (i > 0 && isAlreadyGenitive(word)) {
+                declined = word;
+            } else {
+                declined = declineWord(word);
+            }
             if (declined == null) return null;
             if (i > 0) out.append(' ');
             out.append(declined);
         }
         return out.toString();
+    }
+
+    private static boolean isAlreadyGenitive(String word) {
+        if (word == null) return false;
+        if (word.endsWith("ого") || word.endsWith("его") || word.endsWith("ой") || word.endsWith("ей")) {
+            return true;
+        }
+        String stem = word;
+        while (stem.startsWith("пра") && !NOUNS.containsValue(stem)) {
+            stem = stem.substring(3);
+        }
+        if (NOUNS.containsValue(stem)) return true;
+        if (word.matches("\\d+×прадедушки") || word.matches("\\d+×прабабушки")
+            || word.matches("\\d+×правнука") || word.matches("\\d+×правнучки")) {
+            return true;
+        }
+        return false;
     }
 
     private static String declineWord(String word) {
@@ -59,6 +85,10 @@ final class KinshipGenitive {
         if (word.endsWith("ий")) return word.substring(0, word.length() - 2) + "его";
         if (word.endsWith("ая")) return word.substring(0, word.length() - 2) + "ой";
         if (word.endsWith("яя")) return word.substring(0, word.length() - 2) + "ей";
+        if (word.matches("\\d+×прадедушка")) return word.replace("прадедушка", "прадедушки");
+        if (word.matches("\\d+×прабабушка")) return word.replace("прабабушка", "прабабушки");
+        if (word.matches("\\d+×правнук")) return word.replace("правнук", "правнука");
+        if (word.matches("\\d+×правнучка")) return word.replace("правнучка", "правнучки");
         return null;
     }
 }

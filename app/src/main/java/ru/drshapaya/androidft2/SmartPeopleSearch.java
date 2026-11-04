@@ -218,7 +218,7 @@ final class SmartPeopleSearch {
         query.kinshipFirstId = first.id;
         query.kinshipSecondId = second.id;
         query.kinshipSummary = displayName(first) + " и " + displayName(second) + ": "
-            + (result == null ? "родство не определено" : result.firstToSecond);
+            + (result == null ? "родство не определено" : result.firstToSecondSummary());
         query.parts.add(query.kinshipSummary);
     }
 

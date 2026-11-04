@@ -8,6 +8,8 @@ final class TreeRelationsIndex {
     final Map<String, Set<String>> children = new LinkedHashMap<>();
     final Map<String, Set<String>> parents = new LinkedHashMap<>();
     final Map<String, Set<String>> partners = new LinkedHashMap<>();
+    /** Explicit "sibling" links only; siblings through shared parents are not listed. */
+    final Map<String, Set<String>> siblings = new LinkedHashMap<>();
     final Set<String> linkedPeople = new HashSet<>();
     private final Map<String, Integer> ancestryComponents = new HashMap<>();
 
@@ -19,7 +21,7 @@ final class TreeRelationsIndex {
         for (String id : state.people.keySet()) {
             adjacent.put(id, new LinkedHashSet<>());
             children.put(id, new LinkedHashSet<>()); parents.put(id, new LinkedHashSet<>());
-            partners.put(id, new LinkedHashSet<>());
+            partners.put(id, new LinkedHashSet<>()); siblings.put(id, new LinkedHashSet<>());
         }
         for (Relation link : state.links) {
             if (adjacent.containsKey(link.from)) linkedPeople.add(link.from);
@@ -30,6 +32,8 @@ final class TreeRelationsIndex {
                 children.get(link.from).add(link.to); parents.get(link.to).add(link.from);
             } else if ("partner".equals(link.type) || "family".equals(link.type)) {
                 partners.get(link.from).add(link.to); partners.get(link.to).add(link.from);
+            } else if ("sibling".equals(link.type)) {
+                siblings.get(link.from).add(link.to); siblings.get(link.to).add(link.from);
             }
         }
         if (!cycles) return;

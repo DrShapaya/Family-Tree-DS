@@ -66,7 +66,8 @@ final class MainActivityPersonMenus {
         String kinshipDetail = person.id.equals(activity.state.rootId)
             ? "Это ваша карточка"
             : kinship != null && kinship.found
-                ? "Для вас: " + kinship.firstToSecond
+                // A one-line half-width tile: the short form; the side of the family is in the panel it opens.
+                ? "Для вас: " + KinshipCalculator.compactLabel(kinship.firstToSecond)
                 : "Родство пока не найдено";
         menu.addView(views.personMenuGridRow(
             views.personMenuGridTile(R.drawable.ic_menu_ancestors, "Предки", "", false, popup, () -> activity.showPersonBranch(person, "ancestors")),

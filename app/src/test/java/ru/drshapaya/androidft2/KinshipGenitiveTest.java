@@ -10,6 +10,12 @@ public class KinshipGenitiveTest {
         assertEquals("троюродного брата или сестры", KinshipGenitive.of("троюродный брат или сестра"));
         assertEquals("прапрадедушки", KinshipGenitive.of("прапрадедушка"));
         assertEquals("дочери", KinshipGenitive.of("дочь"));
+        assertEquals("сестры бабушки", KinshipGenitive.of("сестра бабушки"));
+        assertEquals("брата дедушки", KinshipGenitive.of("брат дедушки"));
+        assertEquals("внучки сестры", KinshipGenitive.of("внучка сестры"));
+        assertEquals("внука брата", KinshipGenitive.of("внук брата"));
+        assertEquals("двоюродной сестры бабушки", KinshipGenitive.of("двоюродная сестра бабушки"));
+        assertEquals("праправнука", KinshipGenitive.of("праправнук"));
         assertNull(KinshipGenitive.of("родственник в 5 поколении"));
     }
 
@@ -26,6 +32,25 @@ public class KinshipGenitiveTest {
         state.addRelation("partner", "uncle", "aunt");
         assertEquals("дядя", KinshipCalculator.calculate(state, "uncle", "me", true).firstToSecond);
         assertEquals("жена дяди", KinshipCalculator.calculate(state, "aunt", "me", true).firstToSecond);
+    }
+
+    @Test public void spouseOfGrandmotherSisterReadsAsHusbandOfGrandmotherSister() {
+        TreeState state = new TreeState();
+        person(state, "greatGrandpa", PersonGender.MALE);
+        person(state, "grandma", PersonGender.FEMALE);
+        person(state, "sisterOfGrandma", PersonGender.FEMALE);
+        person(state, "husbandOfSister", PersonGender.MALE);
+        person(state, "mother", PersonGender.FEMALE);
+        person(state, "me", PersonGender.MALE);
+
+        state.addRelation("parent", "greatGrandpa", "grandma");
+        state.addRelation("parent", "greatGrandpa", "sisterOfGrandma");
+        state.addRelation("parent", "grandma", "mother");
+        state.addRelation("parent", "mother", "me");
+        state.addRelation("partner", "sisterOfGrandma", "husbandOfSister");
+
+        assertEquals("сестра бабушки", KinshipCalculator.calculate(state, "sisterOfGrandma", "me", true).firstToSecond);
+        assertEquals("муж сестры бабушки", KinshipCalculator.calculate(state, "husbandOfSister", "me", true).firstToSecond);
     }
 
     private static void person(TreeState state, String id, String gender) {
